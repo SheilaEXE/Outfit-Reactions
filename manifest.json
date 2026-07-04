@@ -2,7 +2,7 @@
   "Name": "Outfit Reactions",
   "Author": "NatrollEXE",
   "Version": "1.0.1",
-  "Description": "Adds outfit reactions and AI/JSON outfit compliments for spouses and nearby NPCs when the farmer changes Fashion Sense outfits.",
+  "Description": "Now, NPCs will react to your appearance whenever you change outfits using the Fashion Sense mod.",
   "UniqueID": "NatrollEXE.OutfitReactions",
   "EntryDll": "OutfitReactions.dll",
   "MinimumApiVersion": "4.0.0",
