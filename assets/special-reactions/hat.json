@@ -1,0 +1,534 @@
+{
+  "FormatVersion": 1,
+  "Description": "Special hat reaction definitions for Outfit Reactions. These entries classify hats that should trigger more specific, strange, funny, critical, or context-aware NPC reactions instead of generic outfit praise.",
+  "DefaultLanguage": "en",
+  "GlobalRules": [
+    "If the current hat matches one of these entries, this is not a generic outfit compliment. The NPC should react to the hat specifically.",
+    "Use the NPC's personality, relationship level, location, and current context to decide whether the reaction is blunt, polite, fascinated, amused, horrified, confused, or approving.",
+    "Do not describe details that are not visible or not part of the detected hat.",
+    "Do not mechanically recite the saved outfit name. Use natural in-world language.",
+    "For Intensity 4 or 5 hats, avoid bland compliments unless the NPC has a clear reason to admire strange fashion."
+  ],
+  "Hats": {
+    "BlobfishMask": {
+      "DisplayName": "Blobfish Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de Peixe-Bolha"
+      },
+      "Category": "grotesque_mask",
+      "ReactionPriority": "VeryHigh",
+      "CoreDescription": "A deeply strange blobfish mask with a droopy, unpleasant, fish-like face. It is intentionally ugly, awkward, and comedic.",
+      "ReactionHint": "NPCs should not treat this as normal fashion. They should react as if the farmer were wearing something repulsive, hideous, ugly, and disgusting. Sometimes they might be startled, or they might not want to engage in conversation with the farmer."
+    },
+    "GarbageHat": {
+      "DisplayName": "Garbage Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Lixo"
+      },
+      "Category": "trash_hat",
+      "ReactionPriority": "High",
+      "CoreDescription": "A trash-can lid worn as a hat. It looks improvised, ridiculous, and questionably hygienic.",
+      "ReactionHint": "Most NPCs should notice the absurdity of wearing garbage as headwear. Reactions may be disgusted, amused, practical, or baffled."
+    },
+    "CopperPanHat": {
+      "DisplayName": "Copper Pan Hat",
+      "LocalizedNames": {
+        "pt-BR": "Peneira de Cobre"
+      },
+      "Category": "pan_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A copper pan worn on the head like an improvised helmet.",
+      "ReactionHint": "NPCs may joke about the farmer wearing kitchenware or mining equipment as fashion."
+    },
+    "SteelPanHat": {
+      "DisplayName": "Steel Pan Hat",
+      "LocalizedNames": {
+        "pt-BR": "Peneira de Aço"
+      },
+      "Category": "pan_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A steel pan worn on the head like a strange metal hat.",
+      "ReactionHint": "NPCs may react to it as practical, noisy, absurd, or not remotely fashionable."
+    },
+    "GoldPanHat": {
+      "DisplayName": "Gold Pan Hat",
+      "LocalizedNames": {
+        "pt-BR": "Peneira de Ouro"
+      },
+      "Category": "pan_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A gold pan worn on the head, flashy but still absurd.",
+      "ReactionHint": "NPCs may notice that it is shiny, expensive-looking, and still clearly a pan."
+    },
+    "IridiumPanHat": {
+      "DisplayName": "Iridium Pan Hat",
+      "LocalizedNames": {
+        "pt-BR": "Peneira de Irídio"
+      },
+      "Category": "pan_hat",
+      "ReactionPriority": "High",
+      "CoreDescription": "An iridium pan worn on the head, rare and absurdly overqualified as headwear.",
+      "ReactionHint": "NPCs may be impressed by the material while still confused that the farmer is wearing a pan."
+    },
+    "LivingHat": {
+      "DisplayName": "Living Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu Vivo"
+      },
+      "Category": "living_thing_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A living plant-like hat that looks like it may be growing directly on the farmer's head.",
+      "ReactionHint": "NPCs may wonder if it is alive, whether it needs watering, or whether it is attached to the farmer. Nature-loving NPCs may like it."
+    },
+    "FrogHat": {
+      "DisplayName": "Frog Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Sapo"
+      },
+      "Category": "animal_head_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A frog-themed hat that looks like a little frog friend sitting on the farmer's head.",
+      "ReactionHint": "NPCs may find it cute, sticky, funny, childish, or strange depending on personality."
+    },
+    "SquidHat": {
+      "DisplayName": "Squid Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Lula"
+      },
+      "Category": "sea_creature_hat",
+      "ReactionPriority": "High",
+      "CoreDescription": "A squid worn on the head, absurd and likely unpleasant-looking to many villagers.",
+      "ReactionHint": "NPCs should react to the fact that the farmer appears to be wearing a sea creature as a hat. Fishing NPCs may be more specific."
+    },
+    "QiMask": {
+      "DisplayName": "Qi Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara Qi"
+      },
+      "Category": "mysterious_mask",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A mysterious Qi-themed mask with an uncanny, secretive quality.",
+      "ReactionHint": "NPCs may find it cryptic, unsettling, oddly important, or suspiciously theatrical."
+    },
+    "QuestionMarkHat": {
+      "DisplayName": "???",
+      "LocalizedNames": {
+        "pt-BR": "???"
+      },
+      "Category": "cursed_or_mysterious_hat",
+      "ReactionPriority": "High",
+      "CoreDescription": "A mysterious and hard-to-explain hat that looks like it should not be ordinary clothing.",
+      "ReactionHint": "NPCs may struggle to describe it, treat it as strange or ominous, or react as if the farmer is wearing a question nobody asked."
+    },
+    "MummyMask": {
+      "DisplayName": "Mummy Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de Múmia"
+      },
+      "Category": "monster_mask",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A mummy-themed mask with a spooky costume-like look.",
+      "ReactionHint": "NPCs may connect it to monsters, the mines, Spirit's Eve, or looking like the farmer crawled out of a crypt."
+    },
+    "TotemMask": {
+      "DisplayName": "Totem Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de Totem"
+      },
+      "Category": "cursed_or_mysterious_hat",
+      "ReactionPriority": "High",
+      "CoreDescription": "A strange totem-like mask with a ritual or magical feeling.",
+      "ReactionHint": "Practical NPCs may be unsettled; mystical NPCs may interpret it as symbolic, magical, or ominous."
+    },
+    "GoblinMask": {
+      "DisplayName": "Goblin Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de duende"
+      },
+      "Category": "creepy_mask",
+      "ReactionPriority": "High",
+      "CoreDescription": "A creepy goblin mask that can look more disturbing than charming.",
+      "ReactionHint": "NPCs may find it creepy, ugly, mischievous, or startling. Blunt NPCs can be openly critical."
+    },
+    "SkeletonMask": {
+      "DisplayName": "Skeleton Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de esqueleto"
+      },
+      "Category": "monster_mask",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A skull or skeleton mask with a spooky costume look.",
+      "ReactionHint": "NPCs may react as if the farmer looks ready for Spirit's Eve, the mines, or a ghost story."
+    },
+    "PumpkinMask": {
+      "DisplayName": "Pumpkin Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de Abóbora"
+      },
+      "Category": "spooky_costume_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A pumpkin mask with a festive, spooky, costume-like appearance.",
+      "ReactionHint": "NPCs may connect it to Spirit's Eve, pumpkins, festivals, or looking like a walking decoration."
+    },
+    "DinosaurHat": {
+      "DisplayName": "Dinosaur Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Dinossauro"
+      },
+      "Category": "costume_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A dinosaur-themed hat that makes the farmer look playful, odd, or prehistoric.",
+      "ReactionHint": "NPCs may find it childish, funny, cute, theatrical, or ridiculous depending on personality."
+    },
+    "ChickenMask": {
+      "DisplayName": "Chicken Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de galinha"
+      },
+      "Category": "animal_head_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A chicken-themed headpiece that looks farm-themed, silly, and hard to take seriously.",
+      "ReactionHint": "NPCs may joke about chickens, farm chores, eggs, or the farmer looking like they belong in the coop."
+    },
+    "PropellerHat": {
+      "DisplayName": "Propeller Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Hélice"
+      },
+      "Category": "childish_silly_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A childish propeller hat that looks playful, goofy, and not very serious.",
+      "ReactionHint": "NPCs may tease the farmer for looking childish, playful, or ready to take off."
+    },
+    "JesterHat": {
+      "DisplayName": "Jester Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Bobo da Corte"
+      },
+      "Category": "theatrical_silly_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A jester hat that makes the farmer look theatrical, goofy, or deliberately ridiculous.",
+      "ReactionHint": "NPCs may react as if the farmer is making a spectacle, preparing for a performance, or inviting jokes."
+    },
+    "RadioactiveGoggles": {
+      "DisplayName": "Radioactive Goggles",
+      "LocalizedNames": {
+        "pt-BR": "Óculos Radioativos"
+      },
+      "Category": "hazard_goggles",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "Radioactive-looking goggles that suggest danger, experiments, or questionable protection.",
+      "ReactionHint": "NPCs may wonder if the farmer is handling something dangerous, glowing, experimental, or unsafe."
+    },
+    "SpaceHelmet": {
+      "DisplayName": "Space Helmet",
+      "LocalizedNames": {
+        "pt-BR": "Capacete Espacial"
+      },
+      "Category": "costume_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A space helmet that looks dramatic and out of place in rural Pelican Town.",
+      "ReactionHint": "NPCs may joke about the farmer preparing for space, the mines, or a very unusual errand."
+    },
+    "GovernorHat": {
+      "DisplayName": "Governor's Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu do Governador"
+      },
+      "Category": "authority_impersonation_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A hat associated with the Governor, making the farmer look like they are borrowing official authority.",
+      "ReactionHint": "NPCs may find it inappropriate, amusing, bold, or oddly formal. Lewis may be especially awkward about it."
+    },
+    "JojaCap": {
+      "DisplayName": "Joja Cap",
+      "LocalizedNames": {
+        "pt-BR": "Boné Joja"
+      },
+      "Category": "brand_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A Joja-branded cap that can carry social or political baggage in Pelican Town.",
+      "ReactionHint": "NPCs may react based on their feelings about Joja, Pierre's shop, Morris, work, money, or corporate branding."
+    },
+    "BridalVeil": {
+      "DisplayName": "Bridal Veil",
+      "LocalizedNames": {
+        "pt-BR": "Véu de Noiva"
+      },
+      "Category": "context_sensitive_ceremonial_hat",
+      "ReactionPriority": "ContextualHigh",
+      "CoreDescription": "A bridal veil that strongly suggests marriage, ceremony, or romantic drama even when worn casually.",
+      "ReactionHint": "NPCs may react with surprise, teasing, awkwardness, romance, confusion, or concern depending on relationship and context."
+    },
+    "WearableDwarfHelm": {
+      "DisplayName": "Wearable Dwarf Helm",
+      "LocalizedNames": {
+        "pt-BR": "Elmo de Anão Vestível"
+      },
+      "Category": "fantasy_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A dwarven-looking helmet that makes the farmer look ready for underground ruins or an expedition into the mines.",
+      "ReactionHint": "NPCs may react as if the farmer looks ready for the mines, old dwarf ruins, or some strange underground adventure."
+    },
+    "KnightHelmet": {
+      "DisplayName": "Knight Helmet",
+      "LocalizedNames": {
+        "pt-BR": "Elmo de Cavaleiro"
+      },
+      "Category": "knight_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A medieval knight-style helmet that makes the farmer look prepared for battle instead of farm work.",
+      "ReactionHint": "NPCs may react as if the farmer looks like a knight, guard, or someone preparing for a dramatic heroic quest."
+    },
+    "SquireHelmet": {
+      "DisplayName": "Squire Helmet",
+      "LocalizedNames": {
+        "pt-BR": "Elmo de Escudeiro"
+      },
+      "Category": "squire_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A simpler medieval helmet that suggests an apprentice knight or a beginner adventurer.",
+      "ReactionHint": "NPCs may tease that the farmer looks like an apprentice knight or someone practicing for a heroic quest."
+    },
+    "WarriorHelmet": {
+      "DisplayName": "Warrior Helmet",
+      "LocalizedNames": {
+        "pt-BR": "Capacete de Guerreiro"
+      },
+      "Category": "warrior_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A battle-ready helmet that makes the farmer look prepared for monsters, combat, or a dangerous trip.",
+      "ReactionHint": "NPCs may react as if the farmer looks ready for combat, monsters, or an unusually dangerous errand."
+    },
+    "GoldenHelmet": {
+      "DisplayName": "Golden Helmet",
+      "LocalizedNames": {
+        "pt-BR": "Capacete Dourado"
+      },
+      "Category": "golden_helmet",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A shiny golden helmet that looks flashy, excessive, and much more dramatic than ordinary farm wear.",
+      "ReactionHint": "NPCs may notice that it looks shiny, excessive, expensive, or strangely dramatic for everyday use."
+    },
+    "ArcaneHat": {
+      "DisplayName": "Arcane Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu Arcano"
+      },
+      "Category": "magic_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A magical-looking hat that makes the farmer seem scholarly, mysterious, or suspiciously connected to arcane things.",
+      "ReactionHint": "NPCs may react to the hat as magical, mysterious, scholarly, dramatic, or suspiciously wizard-like."
+    },
+    "WitchHat": {
+      "DisplayName": "Witch Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Bruxa"
+      },
+      "Category": "witch_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A pointed witch hat that feels magical, spooky, theatrical, and strongly tied to fantasy or Spirit’s Eve vibes.",
+      "ReactionHint": "NPCs may connect it to magic, Spirit’s Eve, potions, curses, or a theatrical witchy look."
+    },
+    "PirateHat": {
+      "DisplayName": "Pirate Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Pirata"
+      },
+      "Category": "pirate_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A pirate-style hat that makes the farmer look theatrical, sea-themed, and ready for an overly dramatic voyage.",
+      "ReactionHint": "NPCs may react as if the farmer looks ready to sail, plunder, tell sea stories, or make a dramatic entrance."
+    },
+    "DeluxePirateHat": {
+      "DisplayName": "Deluxe Pirate Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Pirata de Luxo"
+      },
+      "Category": "deluxe_pirate_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A fancier, more dramatic pirate hat that makes the farmer look especially theatrical and flashy.",
+      "ReactionHint": "NPCs may notice the pirate theme plus the extra dramatic or fancy look."
+    },
+    "TricornHat": {
+      "DisplayName": "Tricorn Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu Tricórnio"
+      },
+      "Category": "tricorn_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "An old-fashioned tricorn hat that feels nautical, historical, and oddly formal for everyday village life.",
+      "ReactionHint": "NPCs may see it as old-fashioned, theatrical, nautical, or strangely formal."
+    },
+    "SwordsmanHat": {
+      "DisplayName": "Swordsman Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Espadachim"
+      },
+      "Category": "swordsman_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A dramatic duelist-style hat that makes the farmer look elegant, theatrical, and a little challenge-ready.",
+      "ReactionHint": "NPCs may react as if the farmer looks like a duelist, performer, or someone about to challenge someone dramatically."
+    },
+    "GnomeHat": {
+      "DisplayName": "Gnome Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Gnomo"
+      },
+      "Category": "gnome_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A whimsical gnome-like hat that makes the farmer look like they belong in a flowerbed or a fairy-tale garden.",
+      "ReactionHint": "NPCs may find it whimsical, garden-like, childish, magical, or like the farmer belongs beside a flowerbed."
+    },
+    "LeprechaunHat": {
+      "DisplayName": "Leprechaun Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Duende"
+      },
+      "Category": "leprechaun_or_goblin_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A mischievous little fantasy hat that makes the farmer look like a trickster from a fairy tale.",
+      "ReactionHint": "NPCs may react to it as mischievous, fairy-tale-like, strange, or like the farmer is trying to look like a little trickster."
+    },
+    "JunimoHat": {
+      "DisplayName": "Junimo Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Junimo"
+      },
+      "Category": "junimo_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A Junimo-themed hat that feels magical, foresty, cute, and just a little uncanny to anyone unfamiliar with Junimos.",
+      "ReactionHint": "NPCs may find it cute, strange, forest-like, magical, or suspiciously connected to Junimos and the Community Center."
+    },
+    "TigerHat": {
+      "DisplayName": "Tiger Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Tigre"
+      },
+      "Category": "animal_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A tiger-themed hat that makes the farmer look playful, wild, and very visibly costumed.",
+      "ReactionHint": "NPCs may react to the farmer looking wild, playful, fierce, or like they are wearing an animal costume."
+    },
+    "PandaHat": {
+      "DisplayName": "Panda Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Panda"
+      },
+      "Category": "animal_hat",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A panda-themed hat that looks cute, soft, and noticeably costume-like.",
+      "ReactionHint": "NPCs may find it cute, soft-looking, childish, or oddly charming depending on personality."
+    },
+    "BlueBirdMask": {
+      "DisplayName": "Blue Bird Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara de Pássaro Azul"
+      },
+      "Category": "animal_mask",
+      "ReactionPriority": "Medium",
+      "CoreDescription": "A blue bird mask that makes the farmer look theatrical, costumed, and distinctly non-human.",
+      "ReactionHint": "NPCs may react to the farmer looking birdlike, masked, theatrical, or oddly cheerful."
+    },
+    "GoldenMask": {
+      "DisplayName": "Golden Mask",
+      "LocalizedNames": {
+        "pt-BR": "Máscara Dourada"
+      },
+      "Category": "golden_mask",
+      "ReactionPriority": "High",
+      "CoreDescription": "A golden mask that looks ancient, expensive, mysterious, and slightly eerie.",
+      "ReactionHint": "NPCs may find it mysterious, ancient-looking, expensive, eerie, or too dramatic for normal town life."
+    },
+    "RedPartyHat": {
+      "DisplayName": "Red Party Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Festa Vermelho"
+      },
+      "Category": "context_sensitive_party_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A bright red party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
+      "ReactionHint": "NPCs may react warmly during festivals or parties, but outside those contexts they may find it silly, oddly festive, childish, or amusingly out of place."
+    },
+    "BluePartyHat": {
+      "DisplayName": "Blue Party Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Festa Azul"
+      },
+      "Category": "context_sensitive_party_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A bright blue party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
+      "ReactionHint": "NPCs may react warmly during festivals or parties, but outside those contexts they may find it silly, oddly festive, childish, or amusingly out of place."
+    },
+    "GreenPartyHat": {
+      "DisplayName": "Green Party Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Festa Verde"
+      },
+      "Category": "context_sensitive_party_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A bright green party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
+      "ReactionHint": "NPCs may react warmly during festivals or parties, but outside those contexts they may find it silly, oddly festive, childish, or amusingly out of place."
+    },
+    "ChefHat": {
+      "DisplayName": "Chef Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Chefe de Cozinha"
+      },
+      "Category": "context_sensitive_profession_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A chef-style hat that suggests cooking, kitchen work, or showing up dressed for a restaurant instead of ordinary village life.",
+      "ReactionHint": "NPCs may connect it to cooking, kitchens, restaurants, or acting unusually formal about food. In ordinary situations it may feel oddly theatrical or occupational."
+    },
+    "MrQiHat": {
+      "DisplayName": "Mr. Qi Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu do Sr. Qi"
+      },
+      "Category": "context_sensitive_authority_hat",
+      "ReactionPriority": "ContextualHigh",
+      "CoreDescription": "A hat strongly associated with Mr. Qi, making the farmer look mysterious, unsettling, or like they are imitating someone unusual and powerful.",
+      "ReactionHint": "NPCs may react with confusion, suspicion, unease, fascination, or disbelief, especially if they know of Mr. Qi or find the look unsettling."
+    },
+    "SantaHat": {
+      "DisplayName": "Santa Hat",
+      "LocalizedNames": {
+        "pt-BR": "Gorro de Papai Noel"
+      },
+      "Category": "context_sensitive_seasonal_hat",
+      "ReactionPriority": "Contextual",
+      "CoreDescription": "A Santa hat that feels cheerful and seasonal in winter, but noticeably out of place at other times of year.",
+      "ReactionHint": "NPCs may find it festive and charming during winter or holiday moods, but oddly early, late, or silly outside the season."
+    },
+    "InfinityCrown": {
+      "DisplayName": "Infinity Crown",
+      "LocalizedNames": {
+        "pt-BR": "Coroa do Infinito"
+      },
+      "Category": "context_sensitive_mystic_crown",
+      "ReactionPriority": "ContextualHigh",
+      "CoreDescription": "A dramatic crown that suggests power, rarity, or mystical status far beyond normal farm life.",
+      "ReactionHint": "NPCs may react as if the farmer looks unusually grand, mystical, regal, or overly dramatic for the setting."
+    },
+    "MagicTurban": {
+      "DisplayName": "Magic Turban",
+      "LocalizedNames": {
+        "pt-BR": "Turbante Mágico"
+      },
+      "Category": "context_sensitive_magic_hat",
+      "ReactionPriority": "ContextualHigh",
+      "CoreDescription": "A magical-looking turban that feels mystical, ornate, and theatrical compared to everyday village clothes.",
+      "ReactionHint": "NPCs may react to it as magical, mysterious, theatrical, or unexpectedly grand depending on the setting and their personality."
+    },
+    "MagicCowboyHat": {
+      "DisplayName": "Magic Cowboy Hat",
+      "LocalizedNames": {
+        "pt-BR": "Chapéu de Vaqueiro Mágico"
+      },
+      "Category": "context_sensitive_magic_hat",
+      "ReactionPriority": "ContextualHigh",
+      "CoreDescription": "A cowboy hat with a magical or unusually dramatic flair, making the farmer look theatrical and a little larger than life.",
+      "ReactionHint": "NPCs may react as if the farmer looks part rancher, part magician, or like they are making a dramatic style statement."
+    }
+  }
+}
