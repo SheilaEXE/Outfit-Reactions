@@ -184,7 +184,13 @@ namespace OutfitReactions
                     return;
                 }
 
-                ResetClothesState(true);
+                // Any other change type (e.g. a general piece-level FS change with ChangedOutfit=false)
+                // falls through to here. This must NOT clear the shared changedClothes/
+                // lastFashionSenseChangeInfo state: those are read by HasNoticeableCurrentFashionSenseAppearance(),
+                // which gates every OTHER (non-spouse) NPC's ability to notice this same change. Sebastian
+                // being done with his own reaction doesn't mean nobody else has seen it yet — only his
+                // own per-NPC state (isReactingToClothes, clothesFirstNoticeDone, etc.) needs resetting here.
+                ResetClothesState(false);
                 return;
             }
 
@@ -267,7 +273,11 @@ namespace OutfitReactions
 
                 if (npc.currentLocation != Game1.player.currentLocation || distance > Config.OutfitCancelDistance)
                 {
-                    ResetClothesState(true);
+                    // Cancelling Sebastian's own in-progress reaction (player walked away) must not
+                    // wipe the shared changedClothes/lastFashionSenseChangeInfo state either — same
+                    // reasoning as the other ResetClothesState(true) call sites above: it would block
+                    // every other NPC from ever noticing this same outfit change.
+                    ResetClothesState(false);
                     return;
                 }
 
