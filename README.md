@@ -4,7 +4,7 @@ Um mod para **Stardew Valley** que faz NPCs comentarem sobre as roupas do seu pe
 
 Feito por **NatrollEXE**.
 
-\---
+---
 
 ## ✨ Funcionalidades
 
@@ -44,17 +44,10 @@ O mod pode ser configurado através do Generic Mod Config Menu, incluindo:
 
 Este mod é extensível via **Content Patcher**:
 
-* `assets/npc-characteristics/\\\*.json` — defina a personalidade/estilo de fala de NPCs para moldar como eles reagem.
-* `assets/special-reactions/\\\*.json` — defina itens especiais (roupas, chapéus, calças) com reações e segredos customizados.
+* `assets/npc-characteristics/*.json` — defina a personalidade/estilo de fala de NPCs para moldar como eles reagem.
+* `assets/special-reactions/*.json` — defina itens especiais (roupas, chapéus, calças) com reações e segredos customizados.
 * `assets/prompts/prompts.json` — ajuste as regras/instruções enviadas para o modelo de IA.
-
-
-
-```
 
 ## 📜 Licença
 
 Este projeto está licenciado sob a [Licença MIT](LICENSE) — sinta-se livre para usar, modificar e distribuir, mantendo os créditos.
-
-## 
-
