@@ -44,28 +44,17 @@ O mod pode ser configurado através do Generic Mod Config Menu, incluindo:
 
 Este mod é extensível via **Content Patcher**:
 
-* `assets/npc-characteristics/\*.json` — defina a personalidade/estilo de fala de NPCs para moldar como eles reagem.
-* `assets/special-reactions/\*.json` — defina itens especiais (roupas, chapéus, calças) com reações e segredos customizados.
+* `assets/npc-characteristics/\\\*.json` — defina a personalidade/estilo de fala de NPCs para moldar como eles reagem.
+* `assets/special-reactions/\\\*.json` — defina itens especiais (roupas, chapéus, calças) com reações e segredos customizados.
 * `assets/prompts/prompts.json` — ajuste as regras/instruções enviadas para o modelo de IA.
 
-## 📁 Estrutura do projeto
 
-```
-Ai/            Serviços de integração com IA, memória, prompts e visão
-Config/        Configuração do mod e menu do GMCM
-Core/          Lógica principal do mod (ModEntry e parciais)
-Integration/   Interfaces de integração com outros mods (Fashion Sense, GMCM)
-Reactions/     Sistemas de reação (NPCs próximos, chapéus especiais, voz)
-Shared/        Utilitários compartilhados
-assets/        Conteúdo customizável via Content Patcher
-i18n/          Traduções da interface
+
 ```
 
 ## 📜 Licença
 
 Este projeto está licenciado sob a [Licença MIT](LICENSE) — sinta-se livre para usar, modificar e distribuir, mantendo os créditos.
 
-## 💜 Créditos
-
-Desenvolvido por **mim mesma**.
+## 
 
