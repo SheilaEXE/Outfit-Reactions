@@ -413,10 +413,8 @@ namespace OutfitReactions
 
             configMenu.AddBoolOption(
                 mod: mod.ModManifest,
-                name: () => "Use Fashion Sense ID as theme hint",
-                tooltip: () => "When enabled, the readable version of Fashion Sense internal item IDs (outfit name, changed item) is sent to the AI as a theme/reference clue. "
-                    + "This works well when IDs are descriptive (e.g. \"CuteFairyOutfit\", \"PikachuEars\"), but may not help — or may confuse — when IDs are generic, numeric, or technical (e.g. \"Set04\", \"Hair03\"). "
-                    + "Disable if you notice the AI referencing outfit names incorrectly or describing themes that don't match the visual.",
+                name: () => T("gmcm.option.fs-id-hint.name"),
+                tooltip: () => T("gmcm.option.fs-id-hint.tooltip"),
                 getValue: () => mod.Config.UseFsInternalIdAsHint,
                 setValue: value => mod.Config.UseFsInternalIdAsHint = value
             );
@@ -424,15 +422,15 @@ namespace OutfitReactions
             // --- Voice samples (MVP) ---
             configMenu.AddBoolOption(
                 mod: mod.ModManifest,
-                name: () => "Use voice samples",
-                tooltip: () => "Inject a few of each NPC's real in-game lines into the prompt as a voice/tone reference, to make reactions sound more like that character. They are used as style reference only, never copied, and the NPC profile stays in charge.",
+                name: () => T("gmcm.option.voice-samples.name"),
+                tooltip: () => T("gmcm.option.voice-samples.tooltip"),
                 getValue: () => mod.Config.UseVoiceSamples,
                 setValue: value => mod.Config.UseVoiceSamples = value
             );
             configMenu.AddNumberOption(
                 mod: mod.ModManifest,
-                name: () => "Voice sample count",
-                tooltip: () => "How many real in-game lines to use as a voice reference (kept small so the prompt stays lean). Default 6.",
+                name: () => T("gmcm.option.voice-sample-count.name"),
+                tooltip: () => T("gmcm.option.voice-sample-count.tooltip"),
                 getValue: () => mod.Config.VoiceSampleCount,
                 setValue: value => mod.Config.VoiceSampleCount = value,
                 min: 1,
@@ -440,8 +438,8 @@ namespace OutfitReactions
             );
             configMenu.AddTextOption(
                 mod: mod.ModManifest,
-                name: () => "Voice sample: excluded NPCs",
-                tooltip: () => "Comma-separated NPC names to exclude from voice samples (e.g. a heavily customized character you want driven purely by its profile). Example: Sebastian, Abigail",
+                name: () => T("gmcm.option.voice-sample-excluded.name"),
+                tooltip: () => T("gmcm.option.voice-sample-excluded.tooltip"),
                 getValue: () => mod.Config.VoiceSampleExcludedNpcs,
                 setValue: value => mod.Config.VoiceSampleExcludedNpcs = value
             );
