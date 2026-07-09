@@ -51,8 +51,8 @@ namespace OutfitReactions
         private List<string> lastKnownVanillaPantsSpecialItemCandidates = new();
         // Dedupe set for [SPECIAL ITEM DEBUG] logs — cleared whenever a new change is detected.
         private readonly HashSet<string> loggedSpecialItemDebugKeys = new(StringComparer.Ordinal);
-        private bool vanillaHatTrackingInitialized;
-        private int vanillaHatPollTimer;
+        private bool vanillaClothingTrackingInitialized;
+        private int vanillaClothingPollTimer;
         private OutfitVisionService outfitVisionService;
         private FashionSenseVisualService fashionSenseVisualService;
         private SpecialHatReactionService specialHatReactionService;
@@ -477,7 +477,7 @@ namespace OutfitReactions
             specialItemReactionService?.ResetModRegistryCache();
             // Reset vanilla-hat tracking so the first poll on this save just sets the baseline
             // instead of firing a spurious "hat changed" on load.
-            vanillaHatTrackingInitialized = false;
+            vanillaClothingTrackingInitialized = false;
             lastKnownVanillaHatId = null;
             lastKnownVanillaPantsName = null;
             ResetClothesState(true);
@@ -708,7 +708,7 @@ namespace OutfitReactions
                     lastKnownVanillaHatId = after?.VanillaHat ?? "";
                     lastKnownVanillaPantsName = after?.VanillaPants ?? "";
                     lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(after?.VanillaPantsSpecialItemCandidates);
-                    vanillaHatTrackingInitialized = true;
+                    vanillaClothingTrackingInitialized = true;
 
                     if (changeInfo != null && changeInfo.CountChanges() > 0)
                     {
@@ -724,15 +724,15 @@ namespace OutfitReactions
         /// This is needed because vanilla hats can be equipped/removed from the inventory without
         /// ever opening the Fashion Sense menu, which is the only other place changes are detected.
         /// </summary>
-        private void PollVanillaHatChange()
+        private void PollVanillaHatAndPantsChange()
         {
             // Light throttle: check a few times per second, not every tick.
-            if (vanillaHatPollTimer > 0)
+            if (vanillaClothingPollTimer > 0)
             {
-                vanillaHatPollTimer--;
+                vanillaClothingPollTimer--;
                 return;
             }
-            vanillaHatPollTimer = 15;
+            vanillaClothingPollTimer = 15;
 
             // Don't poll while the Fashion Sense menu is open; that path handles changes on close.
             if (fashionSenseMenuOpen)
@@ -749,13 +749,13 @@ namespace OutfitReactions
                 : new List<string>();
 
             // First observation after load: just record the baseline, don't fire a reaction.
-            if (!vanillaHatTrackingInitialized)
+            if (!vanillaClothingTrackingInitialized)
             {
                 lastKnownVanillaHatId = currentHatId;
                 lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(currentHatSpecialItemCandidates);
                 lastKnownVanillaPantsName = currentPantsName ?? "";
                 lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(currentPantsSpecialItemCandidates);
-                vanillaHatTrackingInitialized = true;
+                vanillaClothingTrackingInitialized = true;
                 return;
             }
 
@@ -876,7 +876,7 @@ namespace OutfitReactions
                 spousePendingOutfitBubbleTimer--;
 
             RefreshCurrentSavedOutfitNoticeCandidate();
-            PollVanillaHatChange();
+            PollVanillaHatAndPantsChange();
 
             NPC spouse = GetSpouse();
             NPC datingNpc = GetDatingNpc();

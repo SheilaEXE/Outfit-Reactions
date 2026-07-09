@@ -95,6 +95,13 @@ namespace OutfitReactions
         private readonly Func<NPC, bool> canNpcReactToOutfit;
         private readonly Func<NPC, bool> hasNpcSeenCurrentVisualBefore;
         private readonly Random random = new();
+        // The discovery scan (foreach over every NPC in the location, checking distance/facing/
+        // line-of-sight for new notices) is the expensive part of Update(). It's throttled to run
+        // a few times a second instead of every tick — noticing an outfit doesn't need 60fps
+        // precision, and this is what scales with how many NPCs are in the location (e.g. the
+        // village once schedules start filling it up), unlike the cheap per-tick bookkeeping below.
+        private int discoveryScanTimer;
+        private const int DiscoveryScanIntervalTicks = 6; // ~10 scans/sec
 
         private const int FailedRollCooldownTicks = 900;
         private const int CancelledReactionCooldownTicks = 600;
@@ -206,6 +213,10 @@ namespace OutfitReactions
             rollCooldowns.Clear();
             spyingNpcs.Clear();
             ticksSinceLastMoving.Clear();
+            // Force the next Update() call to run the discovery scan immediately instead of
+            // waiting out the throttle interval on top of the 200ms delay already applied before
+            // this is called.
+            discoveryScanTimer = 0;
 
             // The current saved outfit remains eligible until each NPC actually reads its
             // outfit compliment for the current notice. No short notice window is needed anymore.
@@ -239,13 +250,23 @@ namespace OutfitReactions
             float noticeDistance = Math.Max(64f, config.OutfitNoticeDistance);
             float cancelDistance = Math.Max(noticeDistance, config.OutfitCancelDistance);
 
-            // Tick the peeping mechanic for all NPCs currently mid-spy.
+            // Tick the peeping mechanic for all NPCs currently mid-spy. This only touches NPCs
+            // already in spyingNpcs (a small set), so it stays smooth running every tick.
             UpdateSpyingNpcs(noticeDistance, cancelDistance);
 
             int newVisualChance = Math.Clamp(config.NpcOutfitReactionChance, 0, 100);
             int repeatedVisualChance = Math.Clamp(config.NpcRepeatedVisualNoticeChance, 0, 100);
             if (newVisualChance <= 0 && repeatedVisualChance <= 0)
                 return;
+
+            // Throttle the expensive discovery scan below — it walks every NPC in the location on
+            // every call, so running it 60x/sec cost scales directly with how many NPCs are around.
+            if (discoveryScanTimer > 0)
+            {
+                discoveryScanTimer--;
+                return;
+            }
+            discoveryScanTimer = DiscoveryScanIntervalTicks;
 
             foreach (NPC npc in Game1.currentLocation.characters.ToList())
             {
