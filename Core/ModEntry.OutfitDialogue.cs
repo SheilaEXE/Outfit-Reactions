@@ -906,7 +906,14 @@ namespace OutfitReactions
             }
 
             RestoreSpouseDialogueAfterOutfit(npc, restoreTalkState: true, clearCurrentDialogue: true);
-            ResetClothesState(true);
+            // clearChangeFlag is intentionally false here. changedClothes/lastFashionSenseChangeInfo
+            // are shared global state that HasNoticeableCurrentFashionSenseAppearance() (and therefore
+            // every OTHER npc's ability to notice this same outfit) also reads. Sebastian's own
+            // dedup against re-reacting to this outfit is already handled separately via
+            // HasNpcReactedToCurrentOutfitNotice/npcsReactedToCurrentNotice (see MarkCurrentOutfitAsNoticed
+            // above), so clearing the shared flag here isn't needed for his own correctness — it was
+            // only wiping out the notice for every NPC who hadn't seen the player yet.
+            ResetClothesState(false);
 
             if (sameLocation)
                 BeginSpousePostOutfitLinger(npc);
