@@ -795,8 +795,25 @@ namespace OutfitReactions
                     LogLevel.Info);
             }
 
+            // Delay applying the change by 200ms, mirroring the Fashion Sense menu-close path.
+            // ApplyDetectedClothesChange resets the per-NPC notice tracking, which makes every
+            // nearby NPC eligible again and triggers a burst of line-of-sight checks on the next
+            // Update() tick. Applying it immediately means that burst lands on the exact tick the
+            // player equips the hat, which is felt as a hitch right at the click. Delaying it
+            // decouples the cost from the click the same way the FS path already does, so it's
+            // no longer synchronized with (and therefore no longer noticeable at) the moment of
+            // interaction. All tracking fields above are already updated synchronously, so a
+            // fresh poll during the delay window won't re-detect the same change.
             if (changeInfo != null && changeCount > 0)
-                ApplyDetectedClothesChange(changeInfo);
+            {
+                DelayedAction.functionAfterDelay(() =>
+                {
+                    if (!Context.IsWorldReady || Game1.player == null)
+                        return;
+
+                    ApplyDetectedClothesChange(changeInfo);
+                }, 200);
+            }
         }
 
         /// <summary>

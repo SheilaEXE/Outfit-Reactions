@@ -279,12 +279,15 @@ namespace OutfitReactions
                 // stop to peek. Peeking IS the "notice" for a walking NPC: it arms the same
                 // pending reaction, so if the player goes over and clicks, the NPC reacts.
                 // Only movementPause is used — no controller/schedule interference.
+                // Cheap checks first, expensive line-of-sight raycast last: the ~0.3% roll fails
+                // the vast majority of ticks, so testing it before HasLineOfSightToPlayer avoids
+                // running the tile-by-tile raycast for every nearby walking NPC on every tick.
                 if (npcIsWalking
                     && !spyingNpcs.ContainsKey(npc.Name)
                     && !reactedNpcsThisOutfit.Contains(npc.Name)
                     && DistanceToPlayer(npc) <= noticeDistance
-                    && HasLineOfSightToPlayer(npc)
-                    && random.Next(1000) < 3)   // ~0.3% per tick ≈ one notice every ~5-7s nearby
+                    && random.Next(1000) < 3   // ~0.3% per tick ≈ one notice every ~5-7s nearby
+                    && HasLineOfSightToPlayer(npc))
                 {
                     spyingNpcs[npc.Name] = new SpyingState
                     {
@@ -335,10 +338,13 @@ namespace OutfitReactions
                 // sight — walls, closed doors, and solid tiles block the notice, so an NPC in a
                 // closed room of the same location (e.g. Penny in her room in the trailer) won't
                 // react even if they're within the notice distance.
-                if (!HasLineOfSightToPlayer(npc))
+                // Cheap facing check first: it eliminates every NPC facing away from the player
+                // without touching the map, so the tile-by-tile line-of-sight raycast only runs
+                // for NPCs that could plausibly notice.
+                if (!IsNpcFacingPlayer(npc))
                     continue;
 
-                if (!IsNpcFacingPlayer(npc))
+                if (!HasLineOfSightToPlayer(npc))
                     continue;
 
                 if (rollCooldowns.TryGetValue(npc.Name, out int cooldown) && cooldown > 0)
