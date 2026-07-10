@@ -82,6 +82,45 @@ namespace OutfitReactions
             public int MovementPause { get; set; }
             public int AddedSpeed { get; set; }
             public List<FarmerSprite.AnimationFrame> CurrentAnimation { get; set; }
+
+            // ── Fishing-pose fix fields ──────────────────────────────────────────
+            // Some end-of-route behaviors (fishing being the main one) call
+            // Character.extendSourceRect(...), which inflates/offsets the Sprite's sourceRect to
+            // cover two tilesheet rows at once (body + fishing rod) and sets
+            // ignoreSourceRectUpdates = true while doing it. Forcing CurrentFrame above without
+            // undoing this first leaves the stretched/offset two-row rectangle on screen (showing
+            // as two wrong, mismatched frame slices instead of a clean single-row idle pose).
+            // These fields let us reset those dimensions before forcing the idle frame, and
+            // restore them afterward so fishing resumes correctly. All of this is only ever
+            // populated when the NPC's end-of-route behavior genuinely contains "fish" (see
+            // CaptureNpcSpecialActionBeforeOutfit) — never for other special poses/animations.
+            public bool HasSavedSpriteDimensions { get; set; }
+            public bool SavedIgnoreSourceRectUpdates { get; set; }
+            public int SavedSpriteWidth { get; set; }
+            public int SavedTempSpriteHeight { get; set; }
+
+            // "doingEndOfRouteAnimation" is a NetBool, not a plain bool — writing it through a
+            // plain-field reflection setter silently fails, so vanilla keeps re-triggering the
+            // route-end intro animation on top of the forced idle frame every tick, corrupting the
+            // pose. These let us suppress it properly and hand it back afterward.
+            public bool? SavedDoingEndOfRouteAnimation { get; set; }
+            public bool? SavedCurrentlyDoingEndOfRouteAnimation { get; set; }
+
+            // The name of the end-of-route behavior (e.g. "Willy_fish") captured while holding the
+            // pose, used to manually re-invoke NPC.doMiddleAnimation after restoring so the NPC
+            // actually resumes fishing instead of standing frozen in the idle pose forever.
+            public string SavedStartedEndOfRouteBehavior { get; set; }
+
+            // The fishing rod is drawn as a separate layer, independent of the main sprite frame,
+            // driven by these two fields — clearing them is what actually stops the mismatched
+            // "ghost" rod during the hold, on top of the sourceRect fix above. "drawOffset" in
+            // particular shifts WHERE ON SCREEN the NPC is drawn (not which part of the tilesheet
+            // is sampled) — left in place, the correctly-cropped sprite can render shifted far
+            // enough to look torn/split against nearby scenery.
+            public bool HasSavedRodLayerFields { get; set; }
+            public float SavedYOffset { get; set; }
+            public string SavedLoadedEndOfRouteBehavior { get; set; }
+            public Vector2 SavedDrawOffset { get; set; }
         }
 
         private readonly IMonitor monitor;
@@ -1050,8 +1089,18 @@ namespace OutfitReactions
                 return;
             }
 
-            // Once released, don't keep forcing their facing direction. Their schedule/controller
-            // should be free to choose the walking direction again.
+            // Once released, restore whatever we forced (special action first, falling back to
+            // facing direction) right now instead of just letting go of the flag. Walking NPCs
+            // naturally reorient themselves once their controller/schedule resumes, but a plain
+            // standing NPC with no special animation has nothing else to turn them back — without
+            // an explicit restore here they're left facing the player indefinitely.
+            if (pending.WasLookingAtPlayer)
+            {
+                bool restoredSpecialAction = TryRestoreNpcSpecialActionAfterOutfit(npc, pending, force: true);
+                if (!restoredSpecialAction)
+                    FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
+            }
+
             pending.WasLookingAtPlayer = false;
         }
 
@@ -1088,6 +1137,21 @@ namespace OutfitReactions
         /// been fully read/closed (noticing, generating, or dialogue still open). Used to let other
         /// mods (e.g. the kiss mod) know an outfit reaction is active so they can hold off.
         /// </summary>
+        // Deliberately narrow — true only for an NPC currently held mid-outfit-reaction AND whose
+        // snapshot has a captured fishing end-of-route behavior name (i.e. genuinely a fishing
+        // NPC, not just any NPC with a special pose). Used only by the doMiddleAnimation Harmony
+        // patch in ModEntry, to suppress vanilla's own animation-rescheduling for these specific
+        // NPCs during the hold window, without touching anything else about how this system works.
+        public bool IsHeldForFishingSpecialAction(NPC npc)
+        {
+            if (npc == null)
+                return false;
+
+            return pendingPrompts.TryGetValue(npc.Name, out PendingPrompt pending)
+                && pending?.SpecialActionSnapshot != null
+                && !string.IsNullOrEmpty(pending.SpecialActionSnapshot.SavedStartedEndOfRouteBehavior);
+        }
+
         public bool HasAnyActivePendingReaction()
         {
             foreach (PendingPrompt pending in pendingPrompts.Values)
@@ -1430,9 +1494,59 @@ namespace OutfitReactions
             npc.Sprite.CurrentAnimation = null;
             npc.flip = false;
             npc.Sprite.CurrentFrame = GetNpcIdleFrameForDirection(npc.FacingDirection);
+
+            // FISHING FIX, SCOPED: only touch sprite dimensions / NetBool / behavior name when
+            // this NPC's end-of-route behavior genuinely contains "fish" (matches vanilla's own
+            // internal naming, e.g. Willy's is "Willy_fish" — not just the bare word "fish"), so
+            // every other special-pose NPC (sitting, reading, playing an instrument, etc.) keeps
+            // using exactly the plain restore path this system already used successfully before.
+            // Without this scoping, re-invoking doMiddleAnimation on a non-fishing NPC would
+            // reconstruct whatever behavior they're actually scheduled for elsewhere in the day
+            // (sleep, writing in a journal, etc.), completely unrelated to the pose they were
+            // interrupted from.
+            string endOfRouteBehaviorName = TryGetNetStringField(npc, "endOfRouteBehaviorName");
+            bool isFishingBehavior = !string.IsNullOrEmpty(endOfRouteBehaviorName)
+                && endOfRouteBehaviorName.IndexOf("fish", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (isFishingBehavior)
+            {
+                // extendSourceRect(...) inflates the sprite's sourceRect to cover two tilesheet
+                // rows (body + rod) and sets ignoreSourceRectUpdates = true while doing it. Reset
+                // these before the CurrentFrame set above takes effect visually, so
+                // UpdateSourceRect() actually recomputes with normal dimensions instead of
+                // silently no-op'ing (it early-returns while that flag is set).
+                pending.SpecialActionSnapshot.SavedIgnoreSourceRectUpdates = TryGetPrivateField(npc.Sprite, "ignoreSourceRectUpdates") as bool? ?? false;
+                pending.SpecialActionSnapshot.SavedSpriteWidth = TryGetPrivateField(npc.Sprite, "spriteWidth") as int? ?? npc.Sprite.SpriteWidth;
+                pending.SpecialActionSnapshot.SavedTempSpriteHeight = TryGetPrivateField(npc.Sprite, "tempSpriteHeight") as int? ?? -1;
+                pending.SpecialActionSnapshot.HasSavedSpriteDimensions = true;
+
+                TrySetSpritePrivateField(npc.Sprite, "ignoreSourceRectUpdates", false);
+                TrySetSpritePrivateField(npc.Sprite, "spriteWidth", 16);
+                TrySetSpritePrivateField(npc.Sprite, "tempSpriteHeight", -1); // vanilla's own sentinel for "use normal spriteHeight"
+
+                pending.SpecialActionSnapshot.SavedDoingEndOfRouteAnimation = TryGetNetBoolField(npc, "doingEndOfRouteAnimation");
+                pending.SpecialActionSnapshot.SavedCurrentlyDoingEndOfRouteAnimation = TryGetPrivateField(npc, "currentlyDoingEndOfRouteAnimation") as bool?;
+                pending.SpecialActionSnapshot.SavedStartedEndOfRouteBehavior = endOfRouteBehaviorName;
+
+                TrySetNetBoolField(npc, "doingEndOfRouteAnimation", false);
+                TrySetSpritePrivateField(npc, "currentlyDoingEndOfRouteAnimation", false);
+
+                // The fishing rod is drawn as a separate layer independent of the main sprite
+                // frame, and "drawOffset" shifts where on screen the NPC is drawn — clearing both
+                // is what stops the mismatched/shifted "ghost" during the hold.
+                pending.SpecialActionSnapshot.SavedYOffset = TryGetPrivateField(npc, "yOffset") as float? ?? 0f;
+                pending.SpecialActionSnapshot.SavedLoadedEndOfRouteBehavior = TryGetPrivateField(npc, "loadedEndOfRouteBehavior") as string;
+                pending.SpecialActionSnapshot.SavedDrawOffset = TryGetPrivateField(npc, "drawOffset") as Vector2? ?? Vector2.Zero;
+                pending.SpecialActionSnapshot.HasSavedRodLayerFields = true;
+
+                TrySetSpritePrivateField(npc, "yOffset", 0f);
+                TrySetSpritePrivateField(npc, "loadedEndOfRouteBehavior", null);
+                TrySetSpritePrivateField(npc, "drawOffset", Vector2.Zero);
+            }
+
             npc.Sprite.UpdateSourceRect();
 
-            if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Saved special animation for {npc.Name} before outfit reaction. frame={pending.SpecialActionSnapshot.CurrentFrame} anim={(animation != null ? animation.Count : 0)}", LogLevel.Info);
+            if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Saved special animation for {npc.Name} before outfit reaction. frame={pending.SpecialActionSnapshot.CurrentFrame} anim={(animation != null ? animation.Count : 0)} fishing={isFishingBehavior}", LogLevel.Info);
         }
 
         private bool TryRestoreNpcSpecialActionAfterOutfit(NPC npc, PendingPrompt pending, bool force = false)
@@ -1471,6 +1585,33 @@ namespace OutfitReactions
                 npc.movementPause = snapshot.MovementPause;
                 npc.addedSpeed = snapshot.AddedSpeed;
 
+                // FISHING FIX: restore the sprite dimensions and rod-layer fields BEFORE touching
+                // CurrentAnimation/CurrentFrame/UpdateSourceRect below — see the matching comment
+                // in CaptureNpcSpecialActionBeforeOutfit for the full explanation.
+                if (snapshot.HasSavedSpriteDimensions)
+                {
+                    TrySetSpritePrivateField(npc.Sprite, "spriteWidth", snapshot.SavedSpriteWidth);
+                    TrySetSpritePrivateField(npc.Sprite, "tempSpriteHeight", snapshot.SavedTempSpriteHeight);
+                    TrySetSpritePrivateField(npc.Sprite, "ignoreSourceRectUpdates", snapshot.SavedIgnoreSourceRectUpdates);
+                    snapshot.HasSavedSpriteDimensions = false;
+                }
+
+                if (snapshot.SavedDoingEndOfRouteAnimation.HasValue)
+                {
+                    TrySetNetBoolField(npc, "doingEndOfRouteAnimation", snapshot.SavedDoingEndOfRouteAnimation.Value);
+                    TrySetSpritePrivateField(npc, "currentlyDoingEndOfRouteAnimation", snapshot.SavedCurrentlyDoingEndOfRouteAnimation ?? false);
+                    snapshot.SavedDoingEndOfRouteAnimation = null;
+                    snapshot.SavedCurrentlyDoingEndOfRouteAnimation = null;
+                }
+
+                if (snapshot.HasSavedRodLayerFields)
+                {
+                    TrySetSpritePrivateField(npc, "yOffset", snapshot.SavedYOffset);
+                    TrySetSpritePrivateField(npc, "loadedEndOfRouteBehavior", snapshot.SavedLoadedEndOfRouteBehavior);
+                    TrySetSpritePrivateField(npc, "drawOffset", snapshot.SavedDrawOffset);
+                    snapshot.HasSavedRodLayerFields = false;
+                }
+
                 if (snapshot.CurrentAnimation != null && snapshot.CurrentAnimation.Count > 0)
                 {
                     npc.Sprite.CurrentAnimation = new List<FarmerSprite.AnimationFrame>(snapshot.CurrentAnimation);
@@ -1488,6 +1629,43 @@ namespace OutfitReactions
                 npc.Sprite.UpdateSourceRect();
 
                 if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Restored special animation for {npc.Name} after outfit reaction. frame={snapshot.CurrentFrame} anim={(snapshot.CurrentAnimation != null ? snapshot.CurrentAnimation.Count : 0)}", LogLevel.Info);
+
+                // FISHING FIX: resetting the sprite dimensions/NetBool/rod-layer fields above stops
+                // the mismatched-frame glitch, but doesn't make vanilla resume the actual fishing
+                // animation loop by itself — that's driven by NPC.doMiddleAnimation, a private
+                // method scheduled via a self-rescheduling Game1 DelayedAction chain that doesn't
+                // restart on its own once interrupted. Without this, the NPC is left standing in
+                // the idle pose forever instead of going back to actually fishing. Re-invoke it
+                // manually, a short delay after restoring above so vanilla's own movement/behavior
+                // systems have a moment to settle first.
+                if (!string.IsNullOrEmpty(snapshot.SavedStartedEndOfRouteBehavior))
+                {
+                    string behaviorName = snapshot.SavedStartedEndOfRouteBehavior;
+                    snapshot.SavedStartedEndOfRouteBehavior = null;
+                    NPC npcForDelay = npc;
+
+                    DelayedAction.functionAfterDelay(() =>
+                    {
+                        if (npcForDelay?.currentLocation == null || npcForDelay.Sprite == null)
+                            return;
+
+                        try
+                        {
+                            // doMiddleAnimation only re-runs startRouteBehavior (which sets up the
+                            // extended tempSpriteHeight/sourceRect) when "_startedEndOfRouteBehavior"
+                            // already holds the behavior name — set it back first.
+                            TrySetSpritePrivateField(npcForDelay, "_startedEndOfRouteBehavior", behaviorName);
+
+                            MethodInfo method = npcForDelay.GetType().GetMethod("doMiddleAnimation",
+                                BindingFlags.Instance | BindingFlags.NonPublic);
+                            method?.Invoke(npcForDelay, new object[] { null });
+                        }
+                        catch (Exception ex)
+                        {
+                            monitor?.Log($"[NPC OUTFIT] Failed to re-run doMiddleAnimation for {npcForDelay.Name}: {ex}", LogLevel.Warn);
+                        }
+                    }, 150);
+                }
 
                 pending.SpecialActionSnapshot = null;
                 return true;
@@ -1514,6 +1692,93 @@ namespace OutfitReactions
             catch
             {
                 // Optional internal field.
+            }
+        }
+
+        private object TryGetPrivateField(object target, string fieldName)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(fieldName))
+                return null;
+
+            try
+            {
+                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return field?.GetValue(target);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // "doingEndOfRouteAnimation" (and similar) are NetBool fields — a synced netcode field
+        // wrapping the real value in its own ".Value" property. Every read/write of it goes
+        // through get_Value()/set_Value(), never the field directly, so a plain
+        // TrySetSpritePrivateField silently fails on it. Use these NetField-aware helpers instead.
+        private void TrySetNetBoolField(object target, string fieldName, bool value)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(fieldName))
+                return;
+
+            try
+            {
+                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object netField = field?.GetValue(target);
+                if (netField == null)
+                    return;
+
+                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
+                if (valueProp != null && valueProp.CanWrite)
+                    valueProp.SetValue(netField, value);
+            }
+            catch
+            {
+                // Optional internal field.
+            }
+        }
+
+        private bool? TryGetNetBoolField(object target, string fieldName)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(fieldName))
+                return null;
+
+            try
+            {
+                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object netField = field?.GetValue(target);
+                if (netField == null)
+                    return null;
+
+                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
+                return valueProp?.GetValue(netField) as bool?;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Same NetField unwrapping as above, but for NetString fields (e.g.
+        // "endOfRouteBehaviorName") — used to identify whether the NPC's current special pose is
+        // genuinely fishing, and to recover the behavior name to resume it after restoring.
+        private string TryGetNetStringField(object target, string fieldName)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(fieldName))
+                return null;
+
+            try
+            {
+                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object netField = field?.GetValue(target);
+                if (netField == null)
+                    return null;
+
+                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
+                return valueProp?.GetValue(netField) as string;
+            }
+            catch
+            {
+                return null;
             }
         }
 

@@ -393,6 +393,38 @@ namespace OutfitReactions
                 return true;
             }
         }
+
+        // ── Suppresses NPC.doMiddleAnimation (the private method vanilla's own
+        // reallyDoAnimationAtEndOfScheduleRoute schedules itself into via a self-rescheduling
+        // Game1 DelayedAction chain — completely separate from NPC.update, so this system's own
+        // per-tick pose-forcing code can "win" most ticks but still loses on whichever tick this
+        // callback independently fires) for an NPC currently held mid-outfit-reaction while
+        // genuinely fishing. Without this, vanilla can re-run the fishing pose's extended
+        // sourceRect setup on top of the forced idle frame mid-hold, showing the wrong tilesheet
+        // row. Scoped as narrowly as possible via IsHeldForFishingSpecialAction — never touches
+        // any other NPC or pose.
+        [HarmonyPatch(typeof(NPC), "doMiddleAnimation")]
+        private static class NPCDoMiddleAnimationPatch
+        {
+            private static bool Prefix(NPC __instance)
+            {
+                try
+                {
+                    if (__instance == null || Instance?.otherNpcClothesReactionSystem == null)
+                        return true;
+
+                    if (!Instance.otherNpcClothesReactionSystem.IsHeldForFishingSpecialAction(__instance))
+                        return true; // not a held fishing NPC — run normally
+
+                    return false; // skip — this NPC's pose is being held for an outfit reaction
+                }
+                catch (Exception ex)
+                {
+                    Instance?.Monitor?.Log($"[NPC OUTFIT] Error suppressing doMiddleAnimation: {ex}", LogLevel.Warn);
+                    return true;
+                }
+            }
+        }
         internal bool PrioritizeOutfitDialogueBeforeNpcCheckAction(NPC npc)
         {
             if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
