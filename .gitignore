@@ -31,3 +31,6 @@ Thumbs.db
 
 # Local secrets/config that should never be committed
 *.local.json
+OutfitReactions.local.props
+.tools/
+.recovered-dll/

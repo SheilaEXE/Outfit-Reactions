@@ -1,5 +1,6 @@
 using StardewModdingAPI;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -24,7 +25,10 @@ namespace OutfitReactions.Ai
         // Cache of cleaned (dialogueKey, line) pairs per NPC. Cleaning does not depend on
         // context, so it's cached once; the context-aware scoring/selection runs per reaction.
         // In-memory only: rebuilt each game session.
-        private readonly Dictionary<string, List<(string Key, string Line)>> voiceSampleCache = new(StringComparer.OrdinalIgnoreCase);
+        // This cache is read by background AI work and populated by the game thread before that
+        // work starts. ConcurrentDictionary keeps those reads/writes safe without ever allowing a
+        // worker to touch SMAPI's GameContent API.
+        private readonly ConcurrentDictionary<string, List<(string Key, string Line)>> voiceSampleCache = new(StringComparer.OrdinalIgnoreCase);
 
         public VoiceSampleService(IModHelper helper, IMonitor monitor)
         {
@@ -138,7 +142,7 @@ namespace OutfitReactions.Ai
                     return;
 
                 int count = Math.Clamp(config.VoiceSampleCount, 1, 20);
-                List<string> samples = GetSamplesForNpc(context.NpcName, count, context?.Season);
+                List<string> samples = GetCachedSamplesForNpc(context.NpcName, count, context?.Season);
                 if (samples == null || samples.Count == 0)
                     return;
 
@@ -180,24 +184,41 @@ namespace OutfitReactions.Ai
             return false;
         }
 
-        private List<string> GetSamplesForNpc(string npcName, int count, string season)
+        /// <summary>
+        /// Loads one NPC's dialogue pool while running on the game thread. This must be called
+        /// before any background AI generation that may use voice samples for that NPC.
+        /// </summary>
+        public void PrepareSamplesForNpc(string npcName, ModConfig config)
         {
-            // Build the full cleaned pool once per NPC (context-independent), then score & pick.
-            if (!voiceSampleCache.TryGetValue(npcName, out List<(string Key, string Line)> pool))
+            if (config == null || !config.UseVoiceSamples
+                || string.IsNullOrWhiteSpace(npcName)
+                || IsExcluded(npcName, config.VoiceSampleExcludedNpcs)
+                || voiceSampleCache.ContainsKey(npcName))
             {
-                pool = LoadAndCleanDialogueLines(npcName);
-                voiceSampleCache[npcName] = pool;
-
-                // Diagnostic log: fires once per NPC (cache prevents spam).
-                if (pool.Count > 0)
-                {
-                    if (ModEntry.DebugLog) monitor?.Log($"[VoiceSamples] {npcName}: {pool.Count} usable line(s) found (will pick the best {count}).", LogLevel.Info);
-                }
-                else
-                {
-                    monitor?.Log($"[VoiceSamples] {npcName}: NO usable lines found. This NPC will rely on its profile only (no voice samples). If this NPC is from a mod, its internal name may differ from the profile's NpcName, or it may not use the standard dialogue file.", LogLevel.Warn);
-                }
+                return;
             }
+
+            // GameContent is deliberately accessed only here, on the SMAPI/game thread.
+            List<(string Key, string Line)> pool = LoadAndCleanDialogueLines(npcName);
+            if (!voiceSampleCache.TryAdd(npcName, pool))
+                return;
+
+            if (pool.Count > 0)
+            {
+                if (ModEntry.DebugLog) monitor?.Log($"[VoiceSamples] {npcName}: {pool.Count} usable line(s) found (will pick the configured amount).", LogLevel.Info);
+            }
+            else
+            {
+                monitor?.Log($"[VoiceSamples] {npcName}: NO usable lines found. This NPC will rely on its profile only (no voice samples). If this NPC is from a mod, its internal name may differ from the profile's NpcName, or it may not use the standard dialogue file.", LogLevel.Warn);
+            }
+        }
+
+        private List<string> GetCachedSamplesForNpc(string npcName, int count, string season)
+        {
+            // Never load GameContent from the Task.Run generation path. If a caller did not
+            // prepare the cache on the game thread, simply omit this optional prompt enhancement.
+            if (!voiceSampleCache.TryGetValue(npcName, out List<(string Key, string Line)> pool))
+                return new List<string>();
 
             if (pool.Count == 0)
                 return new List<string>();

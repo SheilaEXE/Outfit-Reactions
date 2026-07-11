@@ -855,9 +855,9 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do NOT put Stardew portrait commands like inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Always fill portraits with one portrait key per dialogue box, in the same order as the boxes, starting with box 1; each key must match that box's tone and any *action* cues.");
 
             builder.AppendLine("The dialogue entry must be a direct spoken response from " + context.NpcDisplayName + " to the farmer's reply.");
-            AppendPersonalityPriorityRule(builder, context);
-            AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
+            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("Do not start the spoken dialogue with \"hey\", \"ei\", \"olha\", or generic greetings unless it sounds natural and necessary for this exact moment.");
             AppendExpressiveCuesRule(builder, (getConfig?.Invoke() ?? new ModConfig()).EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
@@ -914,9 +914,9 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array length must match the number of dialogue boxes in text. Put one portrait key for each dialogue box, in order, whatever the natural number of boxes is.");
             builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Always fill portraits with one portrait key per dialogue box, in the same order as the boxes, starting with box 1; each key must match that box's tone and any *action* cues.");
             builder.AppendLine("The dialogue must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
-            AppendPersonalityPriorityRule(builder, context);
-            AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
+            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("It must directly react to the farmer's reply. Do not ignore the farmer's reply.");
             builder.AppendLine("Do not write the farmer's line. Do not write narration, stage directions, explanations, markdown, or headings.");
             builder.AppendLine("Do not start the spoken dialogue with \"hey\", \"ei\", \"olha\", or generic greetings unless it sounds natural and necessary for this exact moment.");
@@ -956,8 +956,8 @@ namespace OutfitReactions.Ai
             builder.AppendLine();
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
-            AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
+            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context?.ConversationTranscript))
             {
                 builder.AppendLine("Full conversation so far for this outfit reaction (oldest first, last line is the farmer's newest reply):");
@@ -1002,124 +1002,6 @@ namespace OutfitReactions.Ai
             return builder.ToString();
         }
 
-        private static void AppendPromptBlock(StringBuilder builder, string template, OutfitAiContext context, Dictionary<string, string> extraTokens = null)
-        {
-            if (builder == null || string.IsNullOrWhiteSpace(template))
-                return;
-
-            builder.AppendLine(ApplyPromptTokens(template, context, extraTokens));
-        }
-
-        private static string ApplyPromptTokens(string template, OutfitAiContext context, Dictionary<string, string> extraTokens = null)
-        {
-            if (string.IsNullOrWhiteSpace(template))
-                return "";
-
-            string targetLanguage = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim();
-            Dictionary<string, string> tokens = new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["NpcName"] = context?.NpcName ?? "",
-                ["NpcDisplayName"] = context?.NpcDisplayName ?? context?.NpcName ?? "",
-                ["PlayerName"] = context?.PlayerName ?? "",
-                ["PlayerGender"] = NormalizePlayerGenderForPrompt(context?.PlayerGender),
-                ["TargetLanguage"] = targetLanguage,
-                ["RelationshipStatus"] = context?.RelationshipStatus ?? "",
-                ["RelationshipHearts"] = (context?.RelationshipHearts ?? 0).ToString(),
-                ["IsSpouse"] = (context?.IsSpouse ?? false).ToString(),
-                ["NoticedChangeType"] = context?.NoticedChangeType ?? "",
-                ["OutfitName"] = context?.OutfitName ?? "",
-                ["SafeOutfitHint"] = context?.SafeOutfitHint ?? "",
-                ["SafeNoticedChangeHint"] = context?.SafeNoticedChangeHint ?? "",
-                ["LocationName"] = context?.LocationName ?? "",
-                ["DetailedLocationName"] = context?.DetailedLocationName ?? "",
-                ["Season"] = context?.Season ?? "",
-                ["Weather"] = context?.Weather ?? "",
-                ["Time"] = context?.Time.ToString() ?? ""
-            };
-
-            if (extraTokens != null)
-            {
-                foreach (var pair in extraTokens)
-                    tokens[pair.Key] = pair.Value ?? "";
-            }
-
-            string result = template;
-            foreach (var pair in tokens)
-                result = result.Replace("{" + pair.Key + "}", pair.Value ?? "", StringComparison.OrdinalIgnoreCase);
-            return result;
-        }
-
-        private static void AppendPersonalityPriorityRule(StringBuilder builder, OutfitAiContext context)
-        {
-            if (builder == null)
-                return;
-
-            builder.AppendLine("CHARACTER PRIORITY RULE: this is a visual reaction, not a mandatory compliment. Choose the reaction by this order: 1) the NPC's canon personality and saved profile rules, 2) relationship status and heart level, 3) current context/location/season/weather/privacy, 4) the farmer's visible outfit/change/theme, 5) wording and portrait choice. Do not flatten grumpy, shy, blunt, awkward, proud, sarcastic, formal, or emotionally guarded NPCs into generically sweet praise.");
-            if (context != null)
-                builder.AppendLine("Current relationship strength for tone calibration: " + context.RelationshipStatus + ", hearts=" + context.RelationshipHearts + ". Low or mid hearts should not sound as intimate, warm, or openly admiring as high hearts/spouse unless that specific NPC would naturally act that way.");
-            builder.AppendLine("A valid reaction may be positive, reluctant, dry, annoyed, skeptical, teasing, confused, practical, indifferent, flustered, or warm. Praise is allowed only when it fits the NPC and heart level; otherwise keep the NPC's edge, restraint, awkwardness, or bluntness intact.");
-            builder.AppendLine("OPENING VARIETY RULE: do not reuse the same opening phrase, first words, sentence structure, or reaction angle across outfit reactions. Do not always begin with grunts like 'Hmph', 'Humph', 'Bah', 'Tch', or direct questions like 'what are you wearing?'. Use grumbles only sometimes, and vary them naturally. A grumpy NPC can start with a complaint, warning, skeptical observation, practical remark, dry aside, or reluctant admission instead.");
-        }
-
-        private static void AppendPlayerAddressAndGenderRule(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
-        {
-            if (builder == null)
-                return;
-
-            string playerName = (context?.PlayerName ?? "").Trim();
-            string gender = NormalizePlayerGenderForPrompt(context?.PlayerGender);
-            string targetLanguage = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim();
-
-            string genderSpecificCaution;
-            if (gender == "female")
-                genderSpecificCaution = "Do not use masculine agreement or masculine forms of address for the player character.";
-            else if (gender == "male")
-                genderSpecificCaution = "Do not use feminine agreement or feminine forms of address for the player character.";
-            else
-                genderSpecificCaution = "The player character's gender is unknown. Prefer neutral wording and avoid gendered forms of address unless the context explicitly provides them.";
-
-            Dictionary<string, string> tokens = new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["PlayerName"] = playerName,
-                ["PlayerGender"] = gender,
-                ["TargetLanguage"] = targetLanguage,
-                ["GenderSpecificCaution"] = genderSpecificCaution
-            };
-
-            if (!string.IsNullOrWhiteSpace(playerName))
-                AppendPromptBlock(builder, promptStyle?.PlayerKnownAddressRule ?? PromptStyleService.FallbackPlayerKnownAddressRule, context, tokens);
-            else
-                AppendPromptBlock(builder, promptStyle?.PlayerUnknownAddressRule ?? PromptStyleService.FallbackPlayerUnknownAddressRule, context, tokens);
-
-            AppendPromptBlock(builder, promptStyle?.PlayerGenderRule ?? PromptStyleService.FallbackPlayerGenderRule, context, tokens);
-        }
-
-        private static void AppendWornItemDeixisRule(StringBuilder builder, OutfitAiContext context)
-        {
-            if (builder == null)
-                return;
-
-            // Spatial demonstrative rule: when a language marks distance (e.g. Portuguese
-            // este/isso/aquilo, aqui/aí/ali), an item worn on the farmer's own body is physically
-            // close to the FARMER — the person the NPC is talking to, right in front of them. That
-            // is near-listener distance, not far-from-both distance. Without this rule, models tend
-            // to default to the far-distance form ("aquilo", "ali") as if pointing at something
-            // distant, which reads as wrong/detached for something worn on the person you're
-            // looking at.
-            builder.AppendLine("Spatial reference rule for clothing/accessories/items the farmer is currently wearing: these are physically close to the FARMER, right in front of the NPC, not far away. If the target language marks spatial distance in demonstratives (e.g. Portuguese 'isso'/'aí' for near-the-listener vs 'aquilo'/'ali' for far-from-both), use the near-listener form for anything worn on the farmer's body right now (e.g. 'isso aí na sua cabeça', not 'aquilo ali'). Reserve the far/distant form only for something genuinely far away, not for what the farmer is wearing.");
-        }
-
-        private static string NormalizePlayerGenderForPrompt(string rawGender)
-        {
-            string gender = (rawGender ?? "").Trim().ToLowerInvariant();
-            if (gender == "female" || gender == "feminine" || gender == "woman")
-                return "female";
-            if (gender == "male" || gender == "masculine" || gender == "man")
-                return "male";
-            return "unknown";
-        }
-
-
         // ====================================================================
         // VOICE SAMPLES
         // The voice-sample system (reading real in-game dialogue and using it as a tone
@@ -1141,6 +1023,12 @@ namespace OutfitReactions.Ai
             bool matched = TryResolveProfile(npcName, npcName, out CharacterAiProfile profile) && profile != null;
             string resolvedName = matched ? (profile.NpcName ?? npcName) : npcName;
             return voiceSamples.BuildPreview(npcName, resolvedName, matched, currentSeason, getConfig?.Invoke());
+        }
+
+        /// <summary>Prepares optional game dialogue samples before a background AI request starts.</summary>
+        public void PrepareVoiceSamplesForNpc(string npcName)
+        {
+            voiceSamples.PrepareSamplesForNpc(npcName, getConfig?.Invoke());
         }
 
         private string BuildPrompt(CharacterAiProfile profile, OutfitAiContext context, ModConfig config, ActiveAiSettings ai)
@@ -1169,7 +1057,7 @@ namespace OutfitReactions.Ai
                 builder.AppendLine(focusedProfile);
             builder.AppendLine();
 
-            AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
             builder.AppendLine();
 
             // Voice samples (MVP): a few REAL in-game lines from this NPC, used only to
@@ -1181,8 +1069,8 @@ namespace OutfitReactions.Ai
             // ---------------------------------------------------------------
             builder.AppendLine("CURRENT SCENE");
             builder.AppendLine("Speaker: " + context.NpcDisplayName);
-            AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
+            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("Relationship status: " + context.RelationshipStatus + ". Heart level: " + context.RelationshipHearts + ". Is spouse: " + context.IsSpouse + ".");
             builder.AppendLine(BuildRelationshipDepthGuidance(context));
             builder.AppendLine(context.IsSpouse
@@ -1233,9 +1121,9 @@ namespace OutfitReactions.Ai
             if (context.VanillaHatHatOnlyMode)
             {
                 if (context.HasVanillaHatFraming)
-                    AppendPromptBlock(builder, PromptStyle?.RemovedVanillaHatOnlyMode ?? PromptStyleService.FallbackRemovedVanillaHatOnlyMode, context);
+                    CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.RemovedVanillaHatOnlyMode ?? PromptStyleService.FallbackRemovedVanillaHatOnlyMode, context);
                 else
-                    AppendPromptBlock(builder, PromptStyle?.VisibleVanillaHatOnlyMode ?? PromptStyleService.FallbackVisibleVanillaHatOnlyMode, context);
+                    CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.VisibleVanillaHatOnlyMode ?? PromptStyleService.FallbackVisibleVanillaHatOnlyMode, context);
             }
             // In HAT-ONLY mode, skip the full-outfit visual summary so the model has nothing about
             // the clothes to latch onto — it should only see the hat-related context below. But the
@@ -1347,9 +1235,9 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do not add markdown, explanations, headings, analysis, context summaries, or extra options.");
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
-            AppendPersonalityPriorityRule(builder, context);
-            AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
+            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("The spoken dialogue must directly react to the farmer's outfit/look/style. It may be praise, reluctant approval, teasing, skepticism, confusion, dry commentary, practical concern, or indifference depending on the NPC.");
             builder.AppendLine("Use exactly this language for the spoken dialogue text: " + context.TargetLanguage + ".");
             builder.AppendLine("Ignore any language instructions from the character profile. The character profile may be written in another language; do not copy that language. The game language above always wins.");
@@ -1961,13 +1849,13 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Current saved outfit/theme clue still being worn: " + context.SafeOutfitHint + ". For this headwear reaction, you may compare the head item with the existing outfit/theme when the combination is funny, strange, cute, ugly, dramatic, or mismatched.");
 
             if (context.IsOutfitChange)
-                AppendPromptBlock(builder, promptStyle?.SavedOutfitFocusGuidance ?? PromptStyleService.FallbackSavedOutfitFocusGuidance, context);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SavedOutfitFocusGuidance ?? PromptStyleService.FallbackSavedOutfitFocusGuidance, context);
             else if (context.IsHairChange)
-                AppendPromptBlock(builder, promptStyle?.HairFocusGuidance ?? PromptStyleService.FallbackHairFocusGuidance, context);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.HairFocusGuidance ?? PromptStyleService.FallbackHairFocusGuidance, context);
             else if (context.IsHatChange)
-                AppendPromptBlock(builder, promptStyle?.HatFocusGuidance ?? PromptStyleService.FallbackHatFocusGuidance, context);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.HatFocusGuidance ?? PromptStyleService.FallbackHatFocusGuidance, context);
             else if (context.IsAccessoryChange)
-                AppendPromptBlock(builder, promptStyle?.AccessoryFocusGuidance ?? PromptStyleService.FallbackAccessoryFocusGuidance, context);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.AccessoryFocusGuidance ?? PromptStyleService.FallbackAccessoryFocusGuidance, context);
         }
 
         private static void AppendFashionSenseVisualSummaryForPrompt(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
@@ -1979,10 +1867,10 @@ namespace OutfitReactions.Ai
             {
                 ["VisualSummary"] = CollapseForPrompt(context.FashionSenseVisualSummary, 1300)
             };
-            AppendPromptBlock(builder, promptStyle?.FashionSenseVisualSupportRule ?? PromptStyleService.FallbackFashionSenseVisualSupportRule, context, tokens);
+            CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.FashionSenseVisualSupportRule ?? PromptStyleService.FallbackFashionSenseVisualSupportRule, context, tokens);
             // Explicitly separate hair and hair accessories from the outfit so the AI never
             // blends hair/accessory colors into outfit descriptions.
-            AppendPromptBlock(builder, promptStyle?.FashionSenseVisualSeparationRule ?? PromptStyleService.FallbackFashionSenseVisualSeparationRule, context, tokens);
+            CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.FashionSenseVisualSeparationRule ?? PromptStyleService.FallbackFashionSenseVisualSeparationRule, context, tokens);
         }
 
         private static void AppendSpecialItemReactionForPrompt(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
@@ -1996,9 +1884,9 @@ namespace OutfitReactions.Ai
             };
 
             if (context.SpecialItemWasJustRemoved)
-                AppendPromptBlock(builder, promptStyle?.SpecialItemRemovedRule ?? PromptStyleService.FallbackSpecialItemRemovedRule, context, tokens);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialItemRemovedRule ?? PromptStyleService.FallbackSpecialItemRemovedRule, context, tokens);
             else
-                AppendPromptBlock(builder, promptStyle?.SpecialItemVisibleRule ?? PromptStyleService.FallbackSpecialItemVisibleRule, context, tokens);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialItemVisibleRule ?? PromptStyleService.FallbackSpecialItemVisibleRule, context, tokens);
 
             if (context.HasSpecialItemMemoryHint)
             {
@@ -2006,7 +1894,7 @@ namespace OutfitReactions.Ai
                 {
                     ["ItemMemory"] = context.SpecialItemMemoryHint
                 };
-                AppendPromptBlock(builder, promptStyle?.SpecialItemMemoryRule ?? PromptStyleService.FallbackSpecialItemMemoryRule, context, memTokens);
+                CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialItemMemoryRule ?? PromptStyleService.FallbackSpecialItemMemoryRule, context, memTokens);
             }
 
             if (!string.IsNullOrWhiteSpace(context.VanillaPantsMemoryHint))
@@ -2022,7 +1910,7 @@ namespace OutfitReactions.Ai
             {
                 ["SpecialHatData"] = CollapseForPrompt(context.SpecialHatReactionContext, 1400)
             };
-            AppendPromptBlock(builder, promptStyle?.SpecialVanillaHatRule ?? PromptStyleService.FallbackSpecialVanillaHatRule, context, tokens);
+            CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialVanillaHatRule ?? PromptStyleService.FallbackSpecialVanillaHatRule, context, tokens);
         }
 
         private static void AppendVanillaHatMemoryForPrompt(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
@@ -2037,7 +1925,7 @@ namespace OutfitReactions.Ai
             {
                 ["HatMemory"] = context.VanillaHatMemoryHint
             };
-            AppendPromptBlock(builder, promptStyle?.VanillaHatMemoryRule ?? PromptStyleService.FallbackVanillaHatMemoryRule, context, tokens);
+            CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.VanillaHatMemoryRule ?? PromptStyleService.FallbackVanillaHatMemoryRule, context, tokens);
         }
 
         private static string BuildNaturalContextHint(OutfitAiContext context)

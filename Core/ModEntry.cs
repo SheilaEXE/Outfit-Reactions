@@ -65,8 +65,6 @@ namespace OutfitReactions
         // call clears reactedNpcsThisOutfit, which would let NPCs re-notice the same look every tick
         // (e.g. peeking NPCs noticing again right after, without the player changing anything).
         private string lastEligibleSavedOutfitId = "";
-        private bool isReactingToClothes = false;
-
         // modData key written on the Farmer so OTHER mods (e.g. the kiss mod) can tell when an
         // Outfit Reactions reaction is in progress and hold off. Value is "1" while active, removed
         // otherwise. Kept in modData (not a cross-mod API) so it works regardless of mod load order.
@@ -106,20 +104,6 @@ namespace OutfitReactions
             else if (!active && hasFlag)
                 Game1.player.modData.Remove(ReactionActiveModDataKey);
         }
-        private int clothesInteractionCooldown = 0;
-        private bool clothesPathStarted = false;
-        private bool clothesComplimentReady = false;
-        private Point clothesPreferredOffset = Point.Zero;
-        private Point clothesLastPlayerTile = Point.Zero;
-        private Point clothesLastTargetTile = Point.Zero;
-        private bool clothesFirstNoticeDone = false;
-        private bool clothesEmoteFired = false; // true after the one-shot ellipsis emote has played
-        private int clothesNoticePauseTimer = 0;
-        private bool playerWasInClothesNoticeRange = false;
-        private int clothesSecondNoticeCooldown = 0;
-        private int clothesChaseTimer = 0;
-        private NPC clothesReactingNpc = null;
-        private bool outfitSequenceActive = false;
         private FashionSenseSnapshot fsSnapshotBefore = null;
         private bool fashionSenseMenuOpen = false;
         private FashionSenseChangeInfo lastFashionSenseChangeInfo = null;
@@ -127,145 +111,8 @@ namespace OutfitReactions
         // once without wiping the change for everyone else (fixes the 2nd NPC losing the dialogue).
         private readonly HashSet<string> npcsReactedToCurrentNotice = new(StringComparer.OrdinalIgnoreCase);
 
-        private List<Dialogue> spouseDialogueBackupBeforeOutfit = null;
-        private string spouseDialogueBackupNpcName = "";
-        private bool spouseFriendshipStateCaptured = false;
-        private bool spouseOriginalTalkedToToday = false;
-        private bool spouseForcedTalkedToToday = false;
-
-        // Destination captured the moment the outfit sequence first interrupts the NPC.
-        // We save only the final tile of the route (last point in the pathToEndPoint stack)
-        // plus the end behavior, then recompute the path from the NPC's actual position
-        // when the dialogue ends. This way the NPC walks straight to where it was going
-        // from wherever it currently is — no detours, no replaying old steps.
-        private Point? spouseFinalDestinationBackup = null;
-        private PathFindController.endBehavior spouseEndBehaviorBackup = null;
-        private int spouseFinalFacingBackup = -1;
-        private SchedulePathDescription spouseDirectionsBackup = null;
-
-        // After the spouse outfit compliment, keep them paused near the farmer for a
-        // short affectionate beat, matching the kiss mod behavior: they resume when
-        // the farmer walks far enough away or after a short timeout. This uses
-        // movementPause only and does NOT delete the NPC controller.
-        private bool spousePostOutfitLingerActive = false;
-        private NPC spousePostOutfitLingerNpc = null;
-        private int spousePostOutfitLingerTimer = 0;
-        private const int SpousePostOutfitLingerDelayTicks = 360; // ~6 seconds
-        private const float SpousePostOutfitLingerDistance = 600f;
-        // During a pending outfit notice, do not steal the spouse/NPC controller.
-        // They only pause if they naturally get very close to the farmer, then resume
-        // once the farmer walks far enough away. This mirrors the kiss mod's safe
-        // movementPause-only behavior.
-        private const float SpouseOutfitNoticePauseDistance = 96f;   // roughly one tile / adjacent interaction distance
-        private const float SpouseOutfitNoticeReleaseDistance = 300f;
-        private bool spouseOutfitNoticePauseActive = false;
-        private int spousePendingOutfitBubbleTimer = 0;
-
-        private sealed class NpcOutfitSpecialActionSnapshot
-        {
-            public NPC Npc { get; set; }
-            public GameLocation Location { get; set; }
-            public int FacingDirection { get; set; }
-            public int CurrentFrame { get; set; }
-            public bool Flip { get; set; }
-            public int MovementPause { get; set; }
-            public int AddedSpeed { get; set; }
-            public List<FarmerSprite.AnimationFrame> CurrentAnimation { get; set; }
-        }
-
-        private NpcOutfitSpecialActionSnapshot spouseOutfitSpecialActionSnapshot = null;
-        private const float OutfitSpecialActionRestoreDistance = 300f;
-
-        private sealed class OwnAiPendingGeneration
-        {
-            public string NpcName { get; set; } = "";
-            public bool IsSpouseDialogue { get; set; }
-            public bool ClearExistingDialogue { get; set; }
-            public Task<string> Task { get; set; }
-            public CancellationTokenSource Cancellation { get; set; }
-            public bool CompletionHandled { get; set; }
-            public int WaitingDotCount { get; set; } = 1;
-            public int WaitingDotTimer { get; set; } = 30;
-            public int SafetyTimer { get; set; } = 7200;
-        }
-
-        private sealed class OwnAiPendingPlayerReplyGeneration
-        {
-            public string NpcName { get; set; } = "";
-            public bool IsSpouseDialogue { get; set; }
-            public string NpcCompliment { get; set; } = "";
-            public string PlayerReply { get; set; } = "";
-            public Task<string> Task { get; set; }
-            public CancellationTokenSource Cancellation { get; set; }
-            public bool CompletionHandled { get; set; }
-            public int WaitingDotCount { get; set; } = 1;
-            public int WaitingDotTimer { get; set; } = 30;
-            public int SafetyTimer { get; set; } = 7200;
-            public Action OnFinished { get; set; }
-        }
-
-        private readonly Dictionary<string, OwnAiPendingGeneration> pendingOwnAiGenerations = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, OwnAiPendingPlayerReplyGeneration> pendingOwnAiPlayerReplyGenerations = new(StringComparer.OrdinalIgnoreCase);
-
-        // Full back-and-forth history for the CURRENT outfit-reaction conversation with each NPC.
-        // Each entry is (speaker, text), oldest first. Cleared whenever the conversation truly ends
-        // (farmer chooses "Leave"/cancels, or the dialogue closes for any other reason) so the next
-        // conversation starts fresh. Kept separate from the per-round "pending" objects, which are
-        // recreated every time a new AI request starts.
-        private readonly Dictionary<string, List<(string Speaker, string Text)>> activeOutfitReplyConversations = new(StringComparer.OrdinalIgnoreCase);
-
-        private void ResetOutfitReplyConversation(string npcName)
-        {
-            if (string.IsNullOrWhiteSpace(npcName))
-                return;
-            activeOutfitReplyConversations.Remove(npcName);
-        }
-
-        private void StartOutfitReplyConversation(string npcName, string npcOpeningLine)
-        {
-            if (string.IsNullOrWhiteSpace(npcName))
-                return;
-
-            List<(string Speaker, string Text)> history = new();
-            if (!string.IsNullOrWhiteSpace(npcOpeningLine))
-                history.Add(("NPC", npcOpeningLine));
-            activeOutfitReplyConversations[npcName] = history;
-        }
-
-        private void AppendToOutfitReplyConversation(string npcName, string speaker, string text)
-        {
-            if (string.IsNullOrWhiteSpace(npcName) || string.IsNullOrWhiteSpace(text))
-                return;
-
-            if (!activeOutfitReplyConversations.TryGetValue(npcName, out List<(string Speaker, string Text)> history))
-            {
-                history = new();
-                activeOutfitReplyConversations[npcName] = history;
-            }
-            history.Add((speaker, text));
-        }
-
-        private string BuildOutfitReplyConversationTranscript(string npcName, int maxChars = 2500)
-        {
-            if (string.IsNullOrWhiteSpace(npcName) || !activeOutfitReplyConversations.TryGetValue(npcName, out List<(string Speaker, string Text)> history) || history.Count == 0)
-                return "";
-
-            StringBuilder sb = new();
-            foreach ((string speaker, string text) in history)
-            {
-                string label = speaker == "NPC" ? "NPC" : "Farmer";
-                sb.Append(label).Append(": ").Append(text.Trim()).Append('\n');
-            }
-
-            string transcript = sb.ToString().Trim();
-            if (transcript.Length > maxChars)
-            {
-                // Keep the most recent part of the conversation; trimming from the start preserves
-                // what just happened, which matters most for staying on-topic.
-                transcript = "...(earlier conversation trimmed)...\n" + transcript.Substring(transcript.Length - maxChars);
-            }
-            return transcript;
-        }
+        private readonly AiGenerationCoordinator aiGenerationCoordinator = new();
+        private readonly OutfitReplyConversationHistory outfitReplyConversationHistory = new();
 
         private const string AssetPrefix = "Mods/NatrollEXE.OutfitReactions/Clothes";
 
@@ -542,7 +389,7 @@ namespace OutfitReactions
             if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
                 return;
 
-            foreach (OwnAiPendingGeneration pending in pendingOwnAiGenerations.Values.ToList())
+            foreach (PendingAiGeneration pending in aiGenerationCoordinator.GetOutfitSnapshot())
             {
                 if (pending == null || pending.Task == null || pending.Task.IsCompleted)
                     continue;
@@ -555,7 +402,7 @@ namespace OutfitReactions
                 return;
             }
 
-            foreach (OwnAiPendingPlayerReplyGeneration pending in pendingOwnAiPlayerReplyGenerations.Values.ToList())
+            foreach (PendingAiPlayerReplyGeneration pending in aiGenerationCoordinator.GetReplySnapshot())
             {
                 if (pending == null || pending.Task == null || pending.Task.IsCompleted)
                     continue;
@@ -648,7 +495,7 @@ namespace OutfitReactions
             if (!CanNpcNoticeCurrentOutfitNotice(npc))
                 return false;
 
-            if (string.IsNullOrWhiteSpace(spouseDialogueBackupNpcName))
+            if (string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
                 CaptureSpouseDialogueBeforeOutfit(npc);
             else
                 TemporarilySkipSpouseFirstDailyDialogue(npc);
@@ -893,7 +740,7 @@ namespace OutfitReactions
 
         private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
-            if (!Context.IsWorldReady || !e.IsMultipleOf(1) || !Config.Enabled)
+            if (!Context.IsWorldReady || !Config.Enabled)
                 return;
 
             UpdateReactionActiveModDataFlag();
@@ -910,8 +757,8 @@ namespace OutfitReactions
             if (clothesInteractionCooldown > 0)
                 clothesInteractionCooldown--;
 
-            if (spousePendingOutfitBubbleTimer > 0)
-                spousePendingOutfitBubbleTimer--;
+            if (spouseProximityState.PendingBubbleTimer > 0)
+                spouseProximityState.PendingBubbleTimer--;
 
             RefreshCurrentSavedOutfitNoticeCandidate();
             PollVanillaHatAndPantsChange();

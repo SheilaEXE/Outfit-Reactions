@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Local machine settings stay outside version control. See OutfitReactions.local.props.example. -->
+  <Import Project="OutfitReactions.local.props" Condition="Exists('OutfitReactions.local.props')" />
+
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>OutfitReactions</AssemblyName>
@@ -10,9 +13,9 @@
     <EnableModDeploy>false</EnableModDeploy>
     <EnableModZip>false</EnableModZip>
 
-    <!-- Troque este caminho se seu Stardew estiver em outra pasta. -->
-    <GameModsPath>C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley\Mods</GameModsPath>
-    <DeployRoot>$(GameModsPath)\Outfit Reactions</DeployRoot>
+    <!-- Disabled by default for a fresh clone; the local props file enables it for this computer. -->
+    <EnableOutfitReactionsDeploy Condition="'$(EnableOutfitReactionsDeploy)' == ''">false</EnableOutfitReactionsDeploy>
+    <DeployRoot Condition="'$(DeployRoot)' == '' and '$(GameModsPath)' != ''">$(GameModsPath)\Outfit Reactions</DeployRoot>
 
     <!-- O Content Pack fica separado na pasta Mods e não é copiado pelo Visual Studio. -->
   </PropertyGroup>
@@ -22,11 +25,12 @@
     <PackageReference Include="Lib.Harmony" Version="2.3.3" PrivateAssets="All" />
   </ItemGroup>
 
-  <Target Name="DeployOutfitReactionsNested" AfterTargets="Build">
+  <Target Name="DeployOutfitReactionsNested" AfterTargets="Build" Condition="'$(EnableOutfitReactionsDeploy)' == 'true' and '$(DeployRoot)' != ''">
     <PropertyGroup>
       <DllModDir>$(DeployRoot)</DllModDir>
     </PropertyGroup>
 
+    <Message Text="Deploying Outfit Reactions to $(DllModDir)." Importance="high" />
     <MakeDir Directories="$(DllModDir)" />
     <MakeDir Directories="$(DllModDir)\i18n" />
     <ItemGroup>

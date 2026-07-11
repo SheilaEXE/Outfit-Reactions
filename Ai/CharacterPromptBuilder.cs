@@ -626,5 +626,109 @@ namespace OutfitReactions.Ai
 
             return text.Substring(0, Math.Max(0, maxChars - 1)).TrimEnd() + "…";
         }
+
+        public static void AppendPromptBlock(StringBuilder builder, string template, OutfitAiContext context, Dictionary<string, string> extraTokens = null)
+        {
+            if (builder == null || string.IsNullOrWhiteSpace(template))
+                return;
+
+            builder.AppendLine(ApplyPromptTokens(template, context, extraTokens));
+        }
+
+        public static void AppendPersonalityPriorityRule(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null)
+                return;
+
+            builder.AppendLine("CHARACTER PRIORITY RULE: this is a visual reaction, not a mandatory compliment. Choose the reaction by this order: 1) the NPC's canon personality and saved profile rules, 2) relationship status and heart level, 3) current context/location/season/weather/privacy, 4) the farmer's visible outfit/change/theme, 5) wording and portrait choice. Do not flatten grumpy, shy, blunt, awkward, proud, sarcastic, formal, or emotionally guarded NPCs into generically sweet praise.");
+            if (context != null)
+                builder.AppendLine("Current relationship strength for tone calibration: " + context.RelationshipStatus + ", hearts=" + context.RelationshipHearts + ". Low or mid hearts should not sound as intimate, warm, or openly admiring as high hearts/spouse unless that specific NPC would naturally act that way.");
+            builder.AppendLine("A valid reaction may be positive, reluctant, dry, annoyed, skeptical, teasing, confused, practical, indifferent, flustered, or warm. Praise is allowed only when it fits the NPC and heart level; otherwise keep the NPC's edge, restraint, awkwardness, or bluntness intact.");
+            builder.AppendLine("OPENING VARIETY RULE: do not reuse the same opening phrase, first words, sentence structure, or reaction angle across outfit reactions. Do not always begin with grunts like 'Hmph', 'Humph', 'Bah', 'Tch', or direct questions like 'what are you wearing?'. Use grumbles only sometimes, and vary them naturally. A grumpy NPC can start with a complaint, warning, skeptical observation, practical remark, dry aside, or reluctant admission instead.");
+        }
+
+        public static void AppendPlayerAddressAndGenderRule(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
+        {
+            if (builder == null)
+                return;
+
+            string playerName = (context?.PlayerName ?? "").Trim();
+            string gender = NormalizePlayerGenderForPrompt(context?.PlayerGender);
+            string targetLanguage = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim();
+            string genderSpecificCaution = gender == "female"
+                ? "Do not use masculine agreement or masculine forms of address for the player character."
+                : gender == "male"
+                    ? "Do not use feminine agreement or feminine forms of address for the player character."
+                    : "The player character's gender is unknown. Prefer neutral wording and avoid gendered forms of address unless the context explicitly provides them.";
+
+            Dictionary<string, string> tokens = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PlayerName"] = playerName,
+                ["PlayerGender"] = gender,
+                ["TargetLanguage"] = targetLanguage,
+                ["GenderSpecificCaution"] = genderSpecificCaution
+            };
+
+            AppendPromptBlock(builder, !string.IsNullOrWhiteSpace(playerName)
+                ? promptStyle?.PlayerKnownAddressRule ?? PromptStyleService.FallbackPlayerKnownAddressRule
+                : promptStyle?.PlayerUnknownAddressRule ?? PromptStyleService.FallbackPlayerUnknownAddressRule, context, tokens);
+            AppendPromptBlock(builder, promptStyle?.PlayerGenderRule ?? PromptStyleService.FallbackPlayerGenderRule, context, tokens);
+        }
+
+        public static void AppendWornItemDeixisRule(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null)
+                return;
+
+            builder.AppendLine("Spatial reference rule for clothing/accessories/items the farmer is currently wearing: these are physically close to the FARMER, right in front of the NPC, not far away. If the target language marks spatial distance in demonstratives (e.g. Portuguese 'isso'/'aí' for near-the-listener vs 'aquilo'/'ali' for far-from-both), use the near-listener form for anything worn on the farmer's body right now (e.g. 'isso aí na sua cabeça', not 'aquilo ali'). Reserve the far/distant form only for something genuinely far away, not for what the farmer is wearing.");
+        }
+
+        private static string ApplyPromptTokens(string template, OutfitAiContext context, Dictionary<string, string> extraTokens)
+        {
+            if (string.IsNullOrWhiteSpace(template))
+                return "";
+
+            Dictionary<string, string> tokens = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["NpcName"] = context?.NpcName ?? "",
+                ["NpcDisplayName"] = context?.NpcDisplayName ?? context?.NpcName ?? "",
+                ["PlayerName"] = context?.PlayerName ?? "",
+                ["PlayerGender"] = NormalizePlayerGenderForPrompt(context?.PlayerGender),
+                ["TargetLanguage"] = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim(),
+                ["RelationshipStatus"] = context?.RelationshipStatus ?? "",
+                ["RelationshipHearts"] = (context?.RelationshipHearts ?? 0).ToString(),
+                ["IsSpouse"] = (context?.IsSpouse ?? false).ToString(),
+                ["NoticedChangeType"] = context?.NoticedChangeType ?? "",
+                ["OutfitName"] = context?.OutfitName ?? "",
+                ["SafeOutfitHint"] = context?.SafeOutfitHint ?? "",
+                ["SafeNoticedChangeHint"] = context?.SafeNoticedChangeHint ?? "",
+                ["LocationName"] = context?.LocationName ?? "",
+                ["DetailedLocationName"] = context?.DetailedLocationName ?? "",
+                ["Season"] = context?.Season ?? "",
+                ["Weather"] = context?.Weather ?? "",
+                ["Time"] = context?.Time.ToString() ?? ""
+            };
+
+            if (extraTokens != null)
+            {
+                foreach (var pair in extraTokens)
+                    tokens[pair.Key] = pair.Value ?? "";
+            }
+
+            string result = template;
+            foreach (var pair in tokens)
+                result = result.Replace("{" + pair.Key + "}", pair.Value ?? "", StringComparison.OrdinalIgnoreCase);
+            return result;
+        }
+
+        private static string NormalizePlayerGenderForPrompt(string rawGender)
+        {
+            string gender = (rawGender ?? "").Trim().ToLowerInvariant();
+            if (gender == "female" || gender == "feminine" || gender == "woman")
+                return "female";
+            if (gender == "male" || gender == "masculine" || gender == "man")
+                return "male";
+            return "unknown";
+        }
     }
 }

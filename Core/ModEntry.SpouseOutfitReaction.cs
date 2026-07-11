@@ -663,7 +663,7 @@ namespace OutfitReactions
                     Utility.getGameLocationOfCharacter(npc),
                     destination,
                     spouseFinalFacingBackup,
-                    false);
+                    spouseEndBehaviorBackup);
 
                 if (restoredController.pathToEndPoint != null && restoredController.pathToEndPoint.Count > 0)
                 {

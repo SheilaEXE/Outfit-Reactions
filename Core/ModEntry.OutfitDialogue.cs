@@ -539,6 +539,10 @@ namespace OutfitReactions
             if (context == null)
                 return false;
 
+            // This handler runs on the game thread. Prime the optional voice-reference cache here
+            // so the Task.Run request below never calls GameContent.Load from a worker thread.
+            outfitAiService.PrepareVoiceSamplesForNpc(npc.Name);
+
             if (clearExistingDialogue)
                 npc.CurrentDialogue.Clear();
 
@@ -548,9 +552,9 @@ namespace OutfitReactions
             Game1.activeClickableMenu = null;
             Game1.afterDialogues = null;
 
-            if (!pendingOwnAiGenerations.TryGetValue(npc.Name, out OwnAiPendingGeneration pending) || pending == null || pending.Task == null || pending.Task.IsCompleted)
+            if (!aiGenerationCoordinator.TryGetOutfit(npc.Name, out PendingAiGeneration pending) || pending == null || pending.Task == null || pending.Task.IsCompleted)
             {
-                pending = new OwnAiPendingGeneration
+                pending = new PendingAiGeneration
                 {
                     NpcName = npc.Name,
                     IsSpouseDialogue = isSpouseDialogue,
@@ -561,11 +565,11 @@ namespace OutfitReactions
                     Cancellation = new CancellationTokenSource()
                 };
 
-                pending.Task = Task.Run(() =>
+                aiGenerationCoordinator.StartOutfit(pending, cancellationToken =>
                 {
                     try
                     {
-                        return outfitAiService.TryGenerateCompliment(context, out string aiLine, pending.Cancellation.Token) ? aiLine : null;
+                        return outfitAiService.TryGenerateCompliment(context, out string aiLine, cancellationToken) ? aiLine : null;
                     }
                     catch (OperationCanceledException)
                     {
@@ -577,9 +581,6 @@ namespace OutfitReactions
                         return null;
                     }
                 });
-                _ = pending.Task.ContinueWith(_ => pending.Cancellation?.Dispose(), TaskScheduler.Default);
-
-                pendingOwnAiGenerations[npc.Name] = pending;
                 if (DebugLog) Monitor.Log($" Started background outfit compliment generation for {npc.Name}. HUD waiting message is active.", LogLevel.Info);
             }
             else
@@ -610,7 +611,7 @@ namespace OutfitReactions
         private bool IsOwnAiWaitingStateActiveFor(NPC npc)
         {
             return npc != null
-                && pendingOwnAiGenerations.TryGetValue(npc.Name, out OwnAiPendingGeneration pending)
+                && aiGenerationCoordinator.TryGetOutfit(npc.Name, out PendingAiGeneration pending)
                 && pending != null
                 && pending.Task != null
                 && !pending.Task.IsCompleted;
@@ -622,9 +623,7 @@ namespace OutfitReactions
             string suffix = new string('.', dots);
             string npcName = !string.IsNullOrWhiteSpace(npc?.displayName) ? npc.displayName : (npc?.Name ?? "NPC");
 
-            return LocalizedContentManager.CurrentLanguageCode == LocalizedContentManager.LanguageCode.pt
-                ? npcName + " está observando o seu visual" + suffix
-                : npcName + " is taking in your look" + suffix;
+            return Helper.Translation.Get("hud.npc-noticing", new { name = npcName }).ToString() + suffix;
         }
 
         private string GetOwnAiReplyWaitingDialogueText(NPC npc, int dotCount)
@@ -633,9 +632,7 @@ namespace OutfitReactions
             string suffix = new string('.', dots);
             string npcName = !string.IsNullOrWhiteSpace(npc?.displayName) ? npc.displayName : (npc?.Name ?? "NPC");
 
-            return LocalizedContentManager.CurrentLanguageCode == LocalizedContentManager.LanguageCode.pt
-                ? npcName + " está pensando na sua resposta" + suffix
-                : npcName + " is thinking about your reply" + suffix;
+            return Helper.Translation.Get("hud.npc-thinking", new { name = npcName }).ToString() + suffix;
         }
 
         private void DrawOwnAiWaitingHudMessage(SpriteBatch spriteBatch, NPC npc, string text)
@@ -660,21 +657,23 @@ namespace OutfitReactions
 
         private void UpdatePendingOwnAiGenerations()
         {
-            if (pendingOwnAiGenerations.Count <= 0)
+            if (!aiGenerationCoordinator.HasOutfitGenerations)
                 return;
 
-            foreach (string npcName in pendingOwnAiGenerations.Keys.ToList())
+            foreach (string npcName in aiGenerationCoordinator.GetOutfitNpcNames())
             {
-                OwnAiPendingGeneration pending = pendingOwnAiGenerations[npcName];
+                if (!aiGenerationCoordinator.TryGetOutfit(npcName, out PendingAiGeneration pending))
+                    continue;
                 NPC npc = Game1.getCharacterFromName(npcName);
 
                 if (pending == null || npc == null || pending.Task == null)
                 {
-                    pendingOwnAiGenerations.Remove(npcName);
+                    aiGenerationCoordinator.RemoveOutfit(npcName);
                     continue;
                 }
 
-                if (pending.Task.IsCompleted)
+                AiGenerationLifecycleState lifecycleState = AiDialogueLifecycle.Advance(pending);
+                if (lifecycleState == AiGenerationLifecycleState.Completed)
                 {
                     if (!pending.CompletionHandled)
                     {
@@ -694,30 +693,28 @@ namespace OutfitReactions
                         OpenGeneratedOrFallbackOutfitDialogue(npc, pending, generated);
                     }
 
-                    pendingOwnAiGenerations.Remove(npcName);
+                    aiGenerationCoordinator.RemoveOutfit(npcName);
                     continue;
                 }
 
-                if (pending.SafetyTimer > 0)
-                    pending.SafetyTimer--;
-                else
+                if (lifecycleState == AiGenerationLifecycleState.TimedOut)
                 {
                     Monitor.Log($" Background generation for {npcName} exceeded the safety timer. Removing pending waiting state.", LogLevel.Warn);
-                    CancelPendingAiRequest(pending.Cancellation);
+                    AiRequestLifecycle.Cancel(pending.Cancellation);
 
                     if (pending.IsSpouseDialogue && npc != null)
                     {
                         ResetClothesState(clearChangeFlag: false);
-                        pendingOwnAiGenerations.Remove(npcName);
+                        aiGenerationCoordinator.RemoveOutfit(npcName);
                     }
                     else if (npc != null)
                     {
                         otherNpcClothesReactionSystem?.CancelPendingOwnAiGeneration(npc);
-                        pendingOwnAiGenerations.Remove(npcName);
+                        aiGenerationCoordinator.RemoveOutfit(npcName);
                     }
                     else
                     {
-                        pendingOwnAiGenerations.Remove(npcName);
+                        aiGenerationCoordinator.RemoveOutfit(npcName);
                     }
 
                     continue;
@@ -727,7 +724,7 @@ namespace OutfitReactions
             }
         }
 
-        private void UpdateOwnAiWaitingVisual(NPC npc, OwnAiPendingGeneration pending)
+        private void UpdateOwnAiWaitingVisual(NPC npc, PendingAiGeneration pending)
         {
             if (npc == null || pending == null || Game1.player == null)
                 return;
@@ -750,7 +747,7 @@ namespace OutfitReactions
             // Do not use showTextAboveHead here; it can interfere with the final dialogue handoff.
         }
 
-        private void OpenGeneratedOrFallbackOutfitDialogue(NPC npc, OwnAiPendingGeneration pending, string generated)
+        private void OpenGeneratedOrFallbackOutfitDialogue(NPC npc, PendingAiGeneration pending, string generated)
         {
             if (npc == null || pending == null)
                 return;
@@ -903,7 +900,7 @@ namespace OutfitReactions
                 // If the spouse was interrupted inside the farmhouse and we captured a
                 // simple local route, restore it before pausing. Outside the farmhouse
                 // there should be no backup because we never stopped the controller.
-                if (spouseFinalDestinationBackup != null)
+                if (spouseRouteSnapshot.FinalDestination != null)
                     RestoreSpouseControllerAfterOutfit(npc);
                 else
                     ClearSpouseControllerBackup();
@@ -935,9 +932,9 @@ namespace OutfitReactions
                 return;
             }
 
-            spousePostOutfitLingerActive = true;
-            spousePostOutfitLingerNpc = npc;
-            spousePostOutfitLingerTimer = SpousePostOutfitLingerDelayTicks;
+            spouseProximityState.LingerActive = true;
+            spouseProximityState.LingerNpc = npc;
+            spouseProximityState.LingerTimer = SpouseProximityState.PostOutfitLingerDelayTicks;
 
             CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
 
@@ -947,15 +944,15 @@ namespace OutfitReactions
             npc.Sprite?.StopAnimation();
             npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
 
-            if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] {npc.Name} will linger after the outfit compliment until distance >= {SpousePostOutfitLingerDistance:F0} or {SpousePostOutfitLingerDelayTicks} ticks.", LogLevel.Info);
+            if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] {npc.Name} will linger after the outfit compliment until distance >= {SpouseProximityState.PostOutfitLingerDistance:F0} or {SpouseProximityState.PostOutfitLingerDelayTicks} ticks.", LogLevel.Info);
         }
 
         private void UpdateSpousePostOutfitLinger()
         {
-            if (!spousePostOutfitLingerActive)
+            if (!spouseProximityState.LingerActive)
                 return;
 
-            NPC npc = spousePostOutfitLingerNpc;
+            NPC npc = spouseProximityState.LingerNpc;
             if (npc == null || Game1.player == null || !Context.IsWorldReady)
             {
                 ClearSpousePostOutfitLinger();
@@ -963,15 +960,15 @@ namespace OutfitReactions
             }
 
             bool sameLocation = npc.currentLocation == Game1.player.currentLocation;
-            float distance = sameLocation ? DistanceToPlayer(npc) : SpousePostOutfitLingerDistance;
-            bool hasCapturedSpecialAction = spouseOutfitSpecialActionSnapshot != null && spouseOutfitSpecialActionSnapshot.Npc == npc;
+            float distance = sameLocation ? DistanceToPlayer(npc) : SpouseProximityState.PostOutfitLingerDistance;
+            bool hasCapturedSpecialAction = spouseSpecialActionController.HasSnapshotFor(npc);
 
-            if (spousePostOutfitLingerTimer > 0)
-                spousePostOutfitLingerTimer--;
+            if (spouseProximityState.LingerTimer > 0)
+                spouseProximityState.LingerTimer--;
 
             bool shouldResume = hasCapturedSpecialAction
                 ? (!sameLocation || distance >= OutfitSpecialActionRestoreDistance)
-                : (!sameLocation || distance >= SpousePostOutfitLingerDistance || spousePostOutfitLingerTimer <= 0);
+                : (!sameLocation || distance >= SpouseProximityState.PostOutfitLingerDistance || spouseProximityState.LingerTimer <= 0);
 
             if (!shouldResume)
             {
@@ -994,14 +991,12 @@ namespace OutfitReactions
 
         private void ClearSpousePostOutfitLinger()
         {
-            spousePostOutfitLingerActive = false;
-            spousePostOutfitLingerNpc = null;
-            spousePostOutfitLingerTimer = 0;
+            spouseProximityState.ClearLinger();
         }
 
         private void InstallPlayerReplyMenuAfterOutfitDialogue(NPC npc, bool isSpouseDialogue, string npcCompliment, Action onFinished)
         {
-            StartOutfitReplyConversation(npc?.Name, npcCompliment);
+            outfitReplyConversationHistory.Start(npc?.Name, npcCompliment);
             Game1.afterDialogues = () => ShowPlayerReplyChoiceMenu(npc, isSpouseDialogue, npcCompliment, onFinished);
         }
 
@@ -1144,7 +1139,7 @@ namespace OutfitReactions
                         return;
                     }
 
-                    AppendToOutfitReplyConversation(npc?.Name, "Player", cleanedReply);
+                    outfitReplyConversationHistory.Append(npc?.Name, "Player", cleanedReply);
                     StartPlayerReplyFollowUpGeneration(npc, isSpouseDialogue, npcCompliment, cleanedReply, onFinished);
                 },
                 cancel: () =>
@@ -1186,12 +1181,12 @@ namespace OutfitReactions
             // If a prebuilt context was passed (e.g. from the secret reveal flow), the transcript
             // is already set by the caller. Otherwise build it from the conversation history.
             if (prebuiltContext == null)
-                context.ConversationTranscript = BuildOutfitReplyConversationTranscript(npc.Name);
+                context.ConversationTranscript = outfitReplyConversationHistory.BuildTranscript(npc.Name);
 
             Game1.activeClickableMenu = null;
             Game1.afterDialogues = null;
 
-            OwnAiPendingPlayerReplyGeneration pending = new()
+            PendingAiPlayerReplyGeneration pending = new()
             {
                 NpcName = npc.Name,
                 IsSpouseDialogue = isSpouseDialogue,
@@ -1204,11 +1199,11 @@ namespace OutfitReactions
                 OnFinished = onFinished
             };
 
-            pending.Task = Task.Run(() =>
+            aiGenerationCoordinator.StartReply(pending, cancellationToken =>
             {
                 try
                 {
-                    return outfitAiService.TryGenerateFollowUp(context, pending.NpcCompliment, pending.PlayerReply, out string followUp, pending.Cancellation.Token) ? followUp : null;
+                    return outfitAiService.TryGenerateFollowUp(context, pending.NpcCompliment, pending.PlayerReply, out string followUp, cancellationToken) ? followUp : null;
                 }
                 catch (OperationCanceledException)
                 {
@@ -1220,30 +1215,29 @@ namespace OutfitReactions
                     return null;
                 }
             });
-            _ = pending.Task.ContinueWith(_ => pending.Cancellation?.Dispose(), TaskScheduler.Default);
-
-            pendingOwnAiPlayerReplyGenerations[npc.Name] = pending;
             if (DebugLog) Monitor.Log($" Started background player-reply follow-up generation for {npc.Name}.", LogLevel.Info);
         }
 
         private void UpdatePendingOwnAiPlayerReplyGenerations()
         {
-            if (pendingOwnAiPlayerReplyGenerations.Count <= 0)
+            if (!aiGenerationCoordinator.HasReplyGenerations)
                 return;
 
-            foreach (string npcName in pendingOwnAiPlayerReplyGenerations.Keys.ToList())
+            foreach (string npcName in aiGenerationCoordinator.GetReplyNpcNames())
             {
-                OwnAiPendingPlayerReplyGeneration pending = pendingOwnAiPlayerReplyGenerations[npcName];
+                if (!aiGenerationCoordinator.TryGetReply(npcName, out PendingAiPlayerReplyGeneration pending))
+                    continue;
                 NPC npc = Game1.getCharacterFromName(npcName);
 
                 if (pending == null || npc == null || pending.Task == null)
                 {
                     FinishPlayerReplyInteraction(pending?.OnFinished, pending?.NpcName);
-                    pendingOwnAiPlayerReplyGenerations.Remove(npcName);
+                    aiGenerationCoordinator.RemoveReply(npcName);
                     continue;
                 }
 
-                if (pending.Task.IsCompleted)
+                AiGenerationLifecycleState lifecycleState = AiDialogueLifecycle.Advance(pending);
+                if (lifecycleState == AiGenerationLifecycleState.Completed)
                 {
                     if (!pending.CompletionHandled)
                     {
@@ -1263,18 +1257,16 @@ namespace OutfitReactions
                         OpenGeneratedPlayerReplyFollowUp(npc, pending, generated);
                     }
 
-                    pendingOwnAiPlayerReplyGenerations.Remove(npcName);
+                    aiGenerationCoordinator.RemoveReply(npcName);
                     continue;
                 }
 
-                if (pending.SafetyTimer > 0)
-                    pending.SafetyTimer--;
-                else
+                if (lifecycleState == AiGenerationLifecycleState.TimedOut)
                 {
                     Monitor.Log($" Player-reply follow-up generation for {npcName} exceeded the safety timer.", LogLevel.Warn);
-                    CancelPendingAiRequest(pending.Cancellation);
+                    AiRequestLifecycle.Cancel(pending.Cancellation);
                     FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName);
-                    pendingOwnAiPlayerReplyGenerations.Remove(npcName);
+                    aiGenerationCoordinator.RemoveReply(npcName);
                     continue;
                 }
 
@@ -1282,7 +1274,7 @@ namespace OutfitReactions
             }
         }
 
-        private void UpdateOwnAiPlayerReplyWaitingVisual(OwnAiPendingPlayerReplyGeneration pending)
+        private void UpdateOwnAiPlayerReplyWaitingVisual(PendingAiPlayerReplyGeneration pending)
         {
             if (pending == null)
                 return;
@@ -1299,7 +1291,7 @@ namespace OutfitReactions
                 pending.WaitingDotCount = 1;
         }
 
-        private void OpenGeneratedPlayerReplyFollowUp(NPC npc, OwnAiPendingPlayerReplyGeneration pending, string generated)
+        private void OpenGeneratedPlayerReplyFollowUp(NPC npc, PendingAiPlayerReplyGeneration pending, string generated)
         {
             if (npc == null || pending == null)
             {
@@ -1328,27 +1320,12 @@ namespace OutfitReactions
                 : "OutfitReactions_GlobalPlayerReplyFollowUp";
             npc.CurrentDialogue.Push(new Dialogue(npc, dialogueId, generated));
 
-            AppendToOutfitReplyConversation(pending.NpcName, "NPC", generated);
+            outfitReplyConversationHistory.Append(pending.NpcName, "NPC", generated);
 
             Game1.activeClickableMenu = null;
             Game1.afterDialogues = () => ShowPlayerReplyChoiceMenu(npc, pending.IsSpouseDialogue, generated, pending.OnFinished);
             npc.faceGeneralDirection(Game1.player.getStandingPosition());
             Game1.drawDialogue(npc);
-        }
-
-        private static void CancelPendingAiRequest(CancellationTokenSource cancellation)
-        {
-            if (cancellation == null)
-                return;
-
-            try
-            {
-                cancellation.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                // The request already completed and disposed its token source.
-            }
         }
 
         /// <summary>
@@ -1358,25 +1335,17 @@ namespace OutfitReactions
         /// </summary>
         private void CancelAllPendingOwnAiGenerations()
         {
-            List<OwnAiPendingPlayerReplyGeneration> replyGenerations = pendingOwnAiPlayerReplyGenerations.Values.ToList();
-
-            foreach (OwnAiPendingGeneration pending in pendingOwnAiGenerations.Values)
-                CancelPendingAiRequest(pending?.Cancellation);
-            foreach (OwnAiPendingPlayerReplyGeneration pending in replyGenerations)
-                CancelPendingAiRequest(pending?.Cancellation);
-
-            pendingOwnAiGenerations.Clear();
-            pendingOwnAiPlayerReplyGenerations.Clear();
+            IReadOnlyList<PendingAiPlayerReplyGeneration> replyGenerations = aiGenerationCoordinator.CancelAll();
 
             // A canceled reply must still finish its menu callback; otherwise the NPC can stay in
             // the temporary reply state after the farmer leaves the area.
-            foreach (OwnAiPendingPlayerReplyGeneration pending in replyGenerations)
+            foreach (PendingAiPlayerReplyGeneration pending in replyGenerations)
                 FinishPlayerReplyInteraction(pending?.OnFinished, pending?.NpcName);
         }
 
         private void FinishPlayerReplyInteraction(Action onFinished, string npcName = null)
         {
-            ResetOutfitReplyConversation(npcName);
+            outfitReplyConversationHistory.Reset(npcName);
             Game1.activeClickableMenu = null;
             Game1.afterDialogues = null;
             onFinished?.Invoke();
