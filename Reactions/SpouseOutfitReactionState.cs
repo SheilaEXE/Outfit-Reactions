@@ -34,6 +34,87 @@ namespace OutfitReactions
         public bool HasSnapshotFor(NPC npc) => Current != null && Current.Npc == npc;
         public void Capture(SpouseOutfitSpecialActionSnapshot snapshot) => Current = snapshot;
         public void Clear() => Current = null;
+
+        public bool TryRestore(
+            bool force,
+            Farmer player,
+            bool menuOpen,
+            bool dialogueUp,
+            Func<NPC, float> distanceToPlayer,
+            float restoreDistance,
+            IMonitor monitor,
+            bool debugLog)
+        {
+            SpouseOutfitSpecialActionSnapshot snapshot = Current;
+            if (snapshot == null || snapshot.Npc == null)
+                return false;
+
+            NPC npc = snapshot.Npc;
+            if (npc.Sprite == null || npc.currentLocation == null || npc.currentLocation != snapshot.Location)
+            {
+                Clear();
+                return false;
+            }
+
+            if (!force)
+            {
+                if (menuOpen || dialogueUp)
+                    return false;
+
+                if (player != null && npc.currentLocation == player.currentLocation && distanceToPlayer(npc) < restoreDistance)
+                    return false;
+            }
+
+            try
+            {
+                npc.FacingDirection = snapshot.FacingDirection;
+                npc.flip = snapshot.Flip;
+                npc.movementPause = snapshot.MovementPause;
+                npc.addedSpeed = snapshot.AddedSpeed;
+
+                if (snapshot.CurrentAnimation != null && snapshot.CurrentAnimation.Count > 0)
+                {
+                    npc.Sprite.CurrentAnimation = new List<FarmerSprite.AnimationFrame>(snapshot.CurrentAnimation);
+                    TrySetSpritePrivateField(npc.Sprite, "currentAnimationIndex", 0);
+                    TrySetSpritePrivateField(npc.Sprite, "timer", 0);
+                }
+                else
+                {
+                    npc.Sprite.StopAnimation();
+                    npc.Sprite.ClearAnimation();
+                    npc.Sprite.CurrentAnimation = null;
+                }
+
+                npc.Sprite.CurrentFrame = snapshot.CurrentFrame;
+                npc.Sprite.UpdateSourceRect();
+
+                if (debugLog) monitor.Log($"[CLOTHES SPOUSE] Restored special animation for {npc.Name} after outfit reaction. frame={snapshot.CurrentFrame} anim={(snapshot.CurrentAnimation != null ? snapshot.CurrentAnimation.Count : 0)}", LogLevel.Info);
+                Clear();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                monitor.Log($"[CLOTHES SPOUSE] Could not restore special animation for {npc?.Name ?? "null"}: {ex.Message}", LogLevel.Warn);
+                Clear();
+                return false;
+            }
+        }
+
+        private static void TrySetSpritePrivateField(object target, string fieldName, object value)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(fieldName))
+                return;
+
+            try
+            {
+                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                field?.SetValue(target, value);
+            }
+            catch
+            {
+                // Optional internal field.
+            }
+        }
     }
 
     /// <summary>Temporary route data captured while an outfit reaction pauses a spouse.</summary>

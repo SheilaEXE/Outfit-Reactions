@@ -27,7 +27,6 @@ namespace OutfitReactions
         private bool outfitSequenceActive;
 
         private readonly SpouseDialogueController spouseDialogueController = new();
-        private SpouseDialogueSnapshot spouseDialogueSnapshot => spouseDialogueController.Snapshot;
 
         // Captures the original route's destination, then recalculates a path after dialogue.
         // This preserves the NPC's schedule without replaying obsolete path steps.

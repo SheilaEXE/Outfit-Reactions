@@ -903,11 +903,11 @@ namespace OutfitReactions
                 if (spouseRouteController.HasRoute)
                     spouseRouteController.Restore(npc, Monitor, DebugLog);
                 else
-                    ClearSpouseControllerBackup();
+                    spouseRouteController.Clear();
             }
             else
             {
-                ClearSpouseControllerBackup();
+                spouseRouteController.Clear();
             }
 
             spouseDialogueController.Restore(npc, Game1.player, restoreTalkState: true, clearCurrentDialogue: true, monitor: Monitor, debugLog: DebugLog);
@@ -970,7 +970,15 @@ namespace OutfitReactions
                 return;
             }
 
-            bool restoredSpecialAction = TryRestoreSpouseOutfitSpecialAction(force: true);
+            bool restoredSpecialAction = spouseSpecialActionController.TryRestore(
+                force: true,
+                player: Game1.player,
+                menuOpen: Game1.activeClickableMenu != null,
+                dialogueUp: Game1.dialogueUp,
+                distanceToPlayer: DistanceToPlayer,
+                restoreDistance: OutfitSpecialActionRestoreDistance,
+                monitor: Monitor,
+                debugLog: DebugLog);
             if (!restoredSpecialAction)
                 npc.movementPause = 0;
 

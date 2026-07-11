@@ -483,108 +483,20 @@ namespace OutfitReactions
             return false;
         }
 
-        private void CaptureSpouseDialogueBeforeOutfit(NPC npc)
-        {
-            ClearSpouseDialogueBackupOnly();
-
-            if (npc == null)
-                return;
-
-            // Stack<T> enumerates from top to bottom. Keep that order, then restore
-            // by pushing bottom-to-top later so the previous top dialogue stays on top.
-            spouseDialogueSnapshot.DialogueQueue = npc.CurrentDialogue?.ToList() ?? new List<Dialogue>();
-            spouseDialogueSnapshot.NpcName = npc.Name;
-
-            TemporarilySkipSpouseFirstDailyDialogue(npc);
-        }
-
-        private void TemporarilySkipSpouseFirstDailyDialogue(NPC npc)
-        {
-            if (npc == null || Game1.player == null)
-                return;
-
-            try
-            {
-                if (!Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship friendship) || friendship == null)
-                    return;
-
-                spouseDialogueSnapshot.FriendshipStateCaptured = true;
-                spouseDialogueSnapshot.OriginalTalkedToToday = friendship.TalkedToToday;
-
-                if (!friendship.TalkedToToday)
-                {
-                    friendship.TalkedToToday = true;
-                    spouseDialogueSnapshot.ForcedTalkedToToday = true;
-                    if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Temporarily skipped first daily dialogue for {npc.Name} so the outfit compliment can play first.", LogLevel.Info);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Could not temporarily skip first daily dialogue for {npc.Name}: {ex.Message}", LogLevel.Info);
-            }
-        }
-
-        private void RestoreSpouseDialogueAfterOutfit(NPC npc, bool restoreTalkState, bool clearCurrentDialogue)
-        {
-            if (npc == null || string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
-                return;
-
-            if (!npc.Name.Equals(spouseDialogueSnapshot.NpcName, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            if (clearCurrentDialogue)
-                npc.CurrentDialogue.Clear();
-
-            if (spouseDialogueSnapshot.DialogueQueue != null && spouseDialogueSnapshot.DialogueQueue.Count > 0)
-            {
-                for (int i = spouseDialogueSnapshot.DialogueQueue.Count - 1; i >= 0; i--)
-                    npc.CurrentDialogue.Push(spouseDialogueSnapshot.DialogueQueue[i]);
-            }
-
-            if (restoreTalkState)
-                RestoreSpouseTalkedToTodayIfNeeded(npc);
-
-            ClearSpouseDialogueBackupOnly();
-        }
-
-        private void RestoreSpouseTalkedToTodayIfNeeded(NPC npc)
-        {
-            if (npc == null || Game1.player == null)
-                return;
-
-            if (!spouseDialogueSnapshot.FriendshipStateCaptured || !spouseDialogueSnapshot.ForcedTalkedToToday)
-                return;
-
-            try
-            {
-                if (Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship friendship) && friendship != null)
-                    friendship.TalkedToToday = spouseDialogueSnapshot.OriginalTalkedToToday;
-            }
-            catch (Exception ex)
-            {
-                if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Could not restore first daily dialogue state for {npc.Name}: {ex.Message}", LogLevel.Info);
-            }
-        }
-
         private void RestoreSpouseDialogueBackupIfPending()
         {
-            if (string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
+            if (!spouseDialogueController.HasBackup)
                 return;
 
-            NPC npc = Game1.getCharacterFromName(spouseDialogueSnapshot.NpcName);
+            NPC npc = Game1.getCharacterFromName(spouseDialogueController.Snapshot.NpcName);
             if (npc == null)
             {
-                ClearSpouseDialogueBackupOnly();
+                spouseDialogueController.Clear();
                 return;
             }
 
             ClearOutfitPrompt(npc);
-            RestoreSpouseDialogueAfterOutfit(npc, restoreTalkState: true, clearCurrentDialogue: true);
-        }
-
-        private void ClearSpouseDialogueBackupOnly()
-        {
-            spouseDialogueSnapshot.Clear();
+            spouseDialogueController.Restore(npc, Game1.player, restoreTalkState: true, clearCurrentDialogue: true, monitor: Monitor, debugLog: DebugLog);
         }
 
         // Kept temporarily while the inactive legacy route block is removed in a later cleanup.
@@ -641,18 +553,13 @@ namespace OutfitReactions
             npc.Sprite.StopAnimation();
         }
 
-        private void ClearSpouseControllerBackup()
-        {
-            spouseRouteController.Clear();
-        }
-
         private void RestoreSpouseControllerAfterOutfit(NPC npc)
         {
             if (npc == null || spouseRouteController.Snapshot.FinalDestination == null)
             {
                 // Nothing to restore — let the schedule decide what to do next.
                 npc?.checkSchedule(Game1.timeOfDay);
-                ClearSpouseControllerBackup();
+                spouseRouteController.Clear();
                 return;
             }
 
@@ -696,7 +603,7 @@ namespace OutfitReactions
             }
             finally
             {
-                ClearSpouseControllerBackup();
+                spouseRouteController.Clear();
             }
         }
 
@@ -878,7 +785,7 @@ namespace OutfitReactions
 
         private void ResetClothesReactionState()
         {
-            TryRestoreSpouseOutfitSpecialAction(force: true);
+            spouseSpecialActionController.TryRestore(true, Game1.player, Game1.activeClickableMenu != null, Game1.dialogueUp, DistanceToPlayer, OutfitSpecialActionRestoreDistance, Monitor, DebugLog);
 
             isReactingToClothes = false;
             clothesPathStarted = false;
@@ -899,8 +806,8 @@ namespace OutfitReactions
         private void ResetClothesState(bool clearChangeFlag = false)
         {
             RestoreSpouseDialogueBackupIfPending();
-            ClearSpouseControllerBackup();
-            TryRestoreSpouseOutfitSpecialAction(force: true);
+            spouseRouteController.Clear();
+            spouseSpecialActionController.TryRestore(true, Game1.player, Game1.activeClickableMenu != null, Game1.dialogueUp, DistanceToPlayer, OutfitSpecialActionRestoreDistance, Monitor, DebugLog);
             ClearSpousePostOutfitLinger();
 
             isReactingToClothes = false;
