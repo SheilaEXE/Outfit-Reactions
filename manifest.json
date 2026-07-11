@@ -9,10 +9,6 @@
   "UpdateKeys": [],
   "Dependencies": [
     {
-      "UniqueID": "Pathoschild.ContentPatcher",
-      "IsRequired": true
-    },
-    {
       "UniqueID": "PeacefulEnd.FashionSense",
       "IsRequired": true
     },

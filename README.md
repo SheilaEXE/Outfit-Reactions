@@ -13,13 +13,12 @@ Feito por **NatrollEXE**.
 * **Itens especiais com segredo**: sistema de itens especiais (`assets/special-reactions`) que permite criar reações específicas para peças marcantes (Atualmente tem apenas do Short Roxo da Sorte).
 * **Memória de outfit**: NPCs lembram outfits e itens especiais que já viram antes, reagindo com familiaridade em vez de repetir a mesma reação de "primeira vez".
 * **Compatibilidade com clima e localização**: as reações levam em conta se o NPC está em ambiente interno ou externo, se está sol ou se está chovendo, horário do dia e datas festivas.
-* **É compatível com Content Patcher** para expandir/customizar características de NPCs (`assets/npc-characteristics`).
+* **Content packs próprios** podem expandir/customizar características de NPCs (`assets/npc-characteristics`) sem exigir Content Patcher.
 * **Configurável via Generic Mod Config Menu** (opcional) — vários modos de reação (combinado ou focado no item especial), múltiplos perfis de IA, etc.
 
 ## 📋 Requisitos
 
 * [SMAPI](https://smapi.io/) 4.0.0+
-* [Content Patcher](https://www.nexusmods.com/stardewvalley/mods/1915) (opcional)
 * [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/1382) (obrigatório)
 * [Generic Mod Config Menu](https://www.nexusmods.com/stardewvalley/mods/5098) (opcional, recomendado para configurar facilmente)
 * Uma chave de API de algum provedor de IA compatível (ex: [OpenRouter](https://openrouter.ai/), Google Gemini) para gerar as reações.
@@ -27,7 +26,7 @@ Feito por **NatrollEXE**.
 ## 🔧 Instalação
 
 1. Instale o [SMAPI](https://smapi.io/).
-2. Baixe e instale o Content Patcher e o Fashion Sense.
+2. Baixe e instale o Fashion Sense.
 3. Baixe a última release do Outfit Reactions e extraia a pasta na sua pasta `Mods`.
 4. Configure sua chave de API de IA pelo Generic Mod Config Menu (ou editando o `config.json` gerado após a primeira execução).
 
@@ -40,9 +39,9 @@ O mod pode ser configurado através do Generic Mod Config Menu, incluindo:
 * Ativação de análise visual (vision) para os modelos que suportam.
 * Diversos outros ajustes de comportamento e frequência de reações.
 
-## 🧩 Criando conteúdo customizado (Content Packs)
+## 🧩 Criando conteúdo customizado (Content Packs próprios)
 
-Este mod é extensível via **Content Patcher**:
+Este mod é extensível por content packs próprios:
 
 * `assets/npc-characteristics/*.json` — defina a personalidade/estilo de fala de NPCs para moldar como eles reagem.
 * `assets/special-reactions/*.json` — defina itens especiais (roupas, chapéus, calças) com reações e segredos customizados.

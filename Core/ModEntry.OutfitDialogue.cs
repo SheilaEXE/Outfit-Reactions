@@ -11,6 +11,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using OutfitReactions.Ai;
 
@@ -556,14 +557,19 @@ namespace OutfitReactions
                     ClearExistingDialogue = clearExistingDialogue,
                     WaitingDotCount = 1,
                     WaitingDotTimer = 30,
-                    SafetyTimer = Math.Max(600, GetActiveAiTimeoutSecondsForSafety() * 120)
+                    SafetyTimer = Math.Max(600, GetActiveAiTimeoutSecondsForSafety() * 120),
+                    Cancellation = new CancellationTokenSource()
                 };
 
                 pending.Task = Task.Run(() =>
                 {
                     try
                     {
-                        return outfitAiService.TryGenerateCompliment(context, out string aiLine) ? aiLine : null;
+                        return outfitAiService.TryGenerateCompliment(context, out string aiLine, pending.Cancellation.Token) ? aiLine : null;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return null;
                     }
                     catch (Exception ex)
                     {
@@ -571,6 +577,7 @@ namespace OutfitReactions
                         return null;
                     }
                 });
+                _ = pending.Task.ContinueWith(_ => pending.Cancellation?.Dispose(), TaskScheduler.Default);
 
                 pendingOwnAiGenerations[npc.Name] = pending;
                 if (DebugLog) Monitor.Log($" Started background outfit compliment generation for {npc.Name}. HUD waiting message is active.", LogLevel.Info);
@@ -696,15 +703,16 @@ namespace OutfitReactions
                 else
                 {
                     Monitor.Log($" Background generation for {npcName} exceeded the safety timer. Removing pending waiting state.", LogLevel.Warn);
+                    CancelPendingAiRequest(pending.Cancellation);
 
                     if (pending.IsSpouseDialogue && npc != null)
                     {
-                        KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "background AI generation exceeded the safety timer.");
+                        ResetClothesState(clearChangeFlag: false);
                         pendingOwnAiGenerations.Remove(npcName);
                     }
                     else if (npc != null)
                     {
-                        otherNpcClothesReactionSystem?.NotifyOwnAiFinalDialogueFailed(npc);
+                        otherNpcClothesReactionSystem?.CancelPendingOwnAiGeneration(npc);
                         pendingOwnAiGenerations.Remove(npcName);
                     }
                     else
@@ -1192,6 +1200,7 @@ namespace OutfitReactions
                 WaitingDotCount = 1,
                 WaitingDotTimer = 30,
                 SafetyTimer = Math.Max(600, GetActiveAiTimeoutSecondsForSafety() * 120),
+                Cancellation = new CancellationTokenSource(),
                 OnFinished = onFinished
             };
 
@@ -1199,7 +1208,11 @@ namespace OutfitReactions
             {
                 try
                 {
-                    return outfitAiService.TryGenerateFollowUp(context, pending.NpcCompliment, pending.PlayerReply, out string followUp) ? followUp : null;
+                    return outfitAiService.TryGenerateFollowUp(context, pending.NpcCompliment, pending.PlayerReply, out string followUp, pending.Cancellation.Token) ? followUp : null;
+                }
+                catch (OperationCanceledException)
+                {
+                    return null;
                 }
                 catch (Exception ex)
                 {
@@ -1207,6 +1220,7 @@ namespace OutfitReactions
                     return null;
                 }
             });
+            _ = pending.Task.ContinueWith(_ => pending.Cancellation?.Dispose(), TaskScheduler.Default);
 
             pendingOwnAiPlayerReplyGenerations[npc.Name] = pending;
             if (DebugLog) Monitor.Log($" Started background player-reply follow-up generation for {npc.Name}.", LogLevel.Info);
@@ -1258,6 +1272,7 @@ namespace OutfitReactions
                 else
                 {
                     Monitor.Log($" Player-reply follow-up generation for {npcName} exceeded the safety timer.", LogLevel.Warn);
+                    CancelPendingAiRequest(pending.Cancellation);
                     FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName);
                     pendingOwnAiPlayerReplyGenerations.Remove(npcName);
                     continue;
@@ -1319,6 +1334,44 @@ namespace OutfitReactions
             Game1.afterDialogues = () => ShowPlayerReplyChoiceMenu(npc, pending.IsSpouseDialogue, generated, pending.OnFinished);
             npc.faceGeneralDirection(Game1.player.getStandingPosition());
             Game1.drawDialogue(npc);
+        }
+
+        private static void CancelPendingAiRequest(CancellationTokenSource cancellation)
+        {
+            if (cancellation == null)
+                return;
+
+            try
+            {
+                cancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The request already completed and disposed its token source.
+            }
+        }
+
+        /// <summary>
+        /// Stop every background request which belongs to the current game state. This is called
+        /// when that state is abandoned (warp, title screen, reset), so no old request can later
+        /// deliver dialogue or consume provider time after it stopped being relevant.
+        /// </summary>
+        private void CancelAllPendingOwnAiGenerations()
+        {
+            List<OwnAiPendingPlayerReplyGeneration> replyGenerations = pendingOwnAiPlayerReplyGenerations.Values.ToList();
+
+            foreach (OwnAiPendingGeneration pending in pendingOwnAiGenerations.Values)
+                CancelPendingAiRequest(pending?.Cancellation);
+            foreach (OwnAiPendingPlayerReplyGeneration pending in replyGenerations)
+                CancelPendingAiRequest(pending?.Cancellation);
+
+            pendingOwnAiGenerations.Clear();
+            pendingOwnAiPlayerReplyGenerations.Clear();
+
+            // A canceled reply must still finish its menu callback; otherwise the NPC can stay in
+            // the temporary reply state after the farmer leaves the area.
+            foreach (OwnAiPendingPlayerReplyGeneration pending in replyGenerations)
+                FinishPlayerReplyInteraction(pending?.OnFinished, pending?.NpcName);
         }
 
         private void FinishPlayerReplyInteraction(Action onFinished, string npcName = null)

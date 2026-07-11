@@ -916,8 +916,7 @@ namespace OutfitReactions
             spousePendingOutfitBubbleTimer = 0;
             fashionSenseMenuOpen = false;
             fsSnapshotBefore = null;
-            pendingOwnAiGenerations.Clear();
-            pendingOwnAiPlayerReplyGenerations.Clear();
+            CancelAllPendingOwnAiGenerations();
 
             if (clearChangeFlag)
             {

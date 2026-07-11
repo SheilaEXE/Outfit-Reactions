@@ -27,10 +27,11 @@ namespace OutfitReactions.Ai
             this.monitor = monitor;
         }
 
-        public async Task<string> GenerateRawAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, OutfitVisionImage visionImage = null)
+        public async Task<string> GenerateRawAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, OutfitVisionImage visionImage = null, CancellationToken cancellationToken = default)
         {
             string provider = (ai.Provider ?? "DeepSeek").Trim();
-            using CancellationTokenSourceCompat timeout = new(TimeSpan.FromSeconds(Math.Clamp(ai.TimeoutSeconds, 3, 120)));
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(ai.TimeoutSeconds, 3, 120)));
 
             try
             {
@@ -637,15 +638,5 @@ namespace OutfitReactions.Ai
             return text.Length <= 500 ? text : text.Substring(0, 500) + "...";
         }
 
-        private sealed class CancellationTokenSourceCompat : IDisposable
-        {
-            private readonly CancellationTokenSource source;
-            public CancellationToken Token => source.Token;
-            public CancellationTokenSourceCompat(TimeSpan timeout)
-            {
-                source = new CancellationTokenSource(timeout);
-            }
-            public void Dispose() => source.Dispose();
-        }
     }
 }

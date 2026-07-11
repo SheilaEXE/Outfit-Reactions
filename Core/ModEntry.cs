@@ -17,6 +17,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using OutfitReactions.Ai;
 
@@ -181,6 +182,7 @@ namespace OutfitReactions
             public bool IsSpouseDialogue { get; set; }
             public bool ClearExistingDialogue { get; set; }
             public Task<string> Task { get; set; }
+            public CancellationTokenSource Cancellation { get; set; }
             public bool CompletionHandled { get; set; }
             public int WaitingDotCount { get; set; } = 1;
             public int WaitingDotTimer { get; set; } = 30;
@@ -194,6 +196,7 @@ namespace OutfitReactions
             public string NpcCompliment { get; set; } = "";
             public string PlayerReply { get; set; } = "";
             public Task<string> Task { get; set; }
+            public CancellationTokenSource Cancellation { get; set; }
             public bool CompletionHandled { get; set; }
             public int WaitingDotCount { get; set; } = 1;
             public int WaitingDotTimer { get; set; } = 30;
@@ -529,6 +532,7 @@ namespace OutfitReactions
 
         private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
         {
+            CancelAllPendingOwnAiGenerations();
             ResetClothesState(true);
             otherNpcClothesReactionSystem?.Reset();
         }
@@ -662,6 +666,8 @@ namespace OutfitReactions
         {
             if (!Context.IsWorldReady || e == null || !e.IsLocalPlayer)
                 return;
+
+            CancelAllPendingOwnAiGenerations();
 
             if (isReactingToClothes || outfitSequenceActive)
                 ResetClothesReactionState();

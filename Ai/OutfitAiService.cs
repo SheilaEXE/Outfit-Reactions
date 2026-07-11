@@ -1,11 +1,13 @@
 using StardewModdingAPI;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using OutfitReactions;
 
@@ -21,8 +23,11 @@ namespace OutfitReactions.Ai
         private readonly Func<ModConfig> getConfig;
         private readonly VoiceSampleService voiceSamples;
         private readonly AiProviderClient aiClient;
-        private readonly Dictionary<string, CharacterAiProfile> profiles = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> memoryCache = new(StringComparer.OrdinalIgnoreCase);
+        // AI generations run on background tasks while profiles can reload on the game thread.
+        // Publish whole, fully-normalized dictionaries instead of mutating a dictionary that a
+        // generation may be reading. Each reader keeps a stable snapshot for its lookup.
+        private volatile Dictionary<string, CharacterAiProfile> profiles = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, string> memoryCache = new(StringComparer.OrdinalIgnoreCase);
         private bool warnedMultipleAiProfilesThisSession;
         internal readonly PromptStyleService PromptStyle;
 
@@ -46,7 +51,10 @@ namespace OutfitReactions.Ai
 
         public void LoadProfiles(bool quiet = false)
         {
-            profiles.Clear();
+            // Keep the original behavior of clearing profiles before a failed reload, but do it
+            // atomically so in-flight AI tasks see either the old complete snapshot or this empty
+            // one -- never a Dictionary being changed underneath them.
+            profiles = new Dictionary<string, CharacterAiProfile>(StringComparer.OrdinalIgnoreCase);
             PromptStyle.Load(quiet);
 
             // Only log the load summary the first time per game session. Later reloads
@@ -77,6 +85,7 @@ namespace OutfitReactions.Ai
                 return;
             }
 
+            Dictionary<string, CharacterAiProfile> normalizedProfiles = new(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in loaded)
             {
                 CharacterAiProfile profile = pair.Value;
@@ -85,16 +94,20 @@ namespace OutfitReactions.Ai
                 if (profile == null || string.IsNullOrWhiteSpace(profile.NpcName) || !profile.Enabled)
                     continue;
 
-                profiles[profile.NpcName] = profile;
+                normalizedProfiles[profile.NpcName] = profile;
                 if (logThisLoad)
                     monitor.Log($" Loaded NPC characteristics for {profile.NpcName} with {profile.Portraits?.Count ?? 0} portrait descriptions.", LogLevel.Debug);
             }
 
             if (logThisLoad)
             {
-                monitor.Log($" Loaded {profiles.Count} usable NPC characteristic profile(s).", LogLevel.Debug);
+                monitor.Log($" Loaded {normalizedProfiles.Count} usable NPC characteristic profile(s).", LogLevel.Debug);
                 hasLoggedProfileLoad = true;
             }
+
+            // Atomic reference replacement: background generations can safely finish with the
+            // snapshot they started with, while future calls use the newly loaded profiles.
+            profiles = normalizedProfiles;
         }
 
         public Dictionary<string, CharacterAiProfile> LoadDefaultProfilesFromFiles()
@@ -272,22 +285,23 @@ namespace OutfitReactions.Ai
         public bool TryResolveProfile(string internalName, string displayName, out CharacterAiProfile profile)
         {
             profile = null;
+            Dictionary<string, CharacterAiProfile> profileSnapshot = profiles;
 
             // 1) Direct match on the internal name.
             if (!string.IsNullOrWhiteSpace(internalName)
-                && profiles.TryGetValue(internalName, out profile) && profile != null && profile.Enabled)
+                && profileSnapshot.TryGetValue(internalName, out profile) && profile != null && profile.Enabled)
                 return true;
 
             // 2) Direct match on the display name.
             if (!string.IsNullOrWhiteSpace(displayName)
-                && profiles.TryGetValue(displayName, out profile) && profile != null && profile.Enabled)
+                && profileSnapshot.TryGetValue(displayName, out profile) && profile != null && profile.Enabled)
                 return true;
 
             // 3) Reverse alias: a profile may be stored under a display name whose alias
             //    points to this internal name (e.g. profile "Victoria" -> alias ToriLK).
             if (!string.IsNullOrWhiteSpace(internalName)
                 && voiceSamples.TryReverseAlias(internalName, out string aliasDisplayName)
-                && profiles.TryGetValue(aliasDisplayName, out profile) && profile != null && profile.Enabled)
+                && profileSnapshot.TryGetValue(aliasDisplayName, out profile) && profile != null && profile.Enabled)
                 return true;
 
             profile = null;
@@ -359,7 +373,7 @@ namespace OutfitReactions.Ai
             });
         }
 
-        public bool TryGenerateCompliment(OutfitAiContext context, out string dialogue)
+        public bool TryGenerateCompliment(OutfitAiContext context, out string dialogue, CancellationToken cancellationToken = default)
         {
             dialogue = null;
 
@@ -396,7 +410,7 @@ namespace OutfitReactions.Ai
             {
                 if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" Sending outfit compliment request for {context.NpcName} using {ai.Provider}/{ai.Model}.", LogLevel.Info);
 
-                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage).GetAwaiter().GetResult();
+                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage, cancellationToken).GetAwaiter().GetResult();
                 if (string.IsNullOrWhiteSpace(raw))
                 {
                     monitor.Log(" Provider returned an empty response. Using fallback.", LogLevel.Warn);
@@ -425,6 +439,8 @@ namespace OutfitReactions.Ai
             }
             catch (TaskCanceledException)
             {
+                if (cancellationToken.IsCancellationRequested)
+                    return false;
                 int seconds = GetActiveSettings(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate outfit compliment: request timed out/canceled after {seconds}s. Try increasing the AI timeout or using a faster model.", LogLevel.Warn);
                 return false;
@@ -438,7 +454,7 @@ namespace OutfitReactions.Ai
 
 
 
-        public bool TryGenerateFollowUp(OutfitAiContext context, string npcCompliment, string playerReply, out string dialogue)
+        public bool TryGenerateFollowUp(OutfitAiContext context, string npcCompliment, string playerReply, out string dialogue, CancellationToken cancellationToken = default)
         {
             dialogue = null;
 
@@ -469,7 +485,7 @@ namespace OutfitReactions.Ai
             {
                 monitor.Log($" Sending player-reply follow-up request for {context.NpcName} using {ai.Provider}/{ai.Model}.", LogLevel.Debug);
 
-                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage).GetAwaiter().GetResult();
+                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage, cancellationToken).GetAwaiter().GetResult();
                 if (string.IsNullOrWhiteSpace(raw))
                 {
                     monitor.Log(" Provider returned an empty follow-up response.", LogLevel.Warn);
@@ -502,7 +518,7 @@ namespace OutfitReactions.Ai
                             monitor.Log($" Follow-up attempt {attempt}/{maxRetries} failed ({lastIssue}). Retrying with corrective prompt. Raw: " + TrimForLog(lastRaw), LogLevel.Warn);
 
                             string retryPrompt = BuildFollowUpRetryPrompt(profile, context, ai, npcCompliment, playerReply, lastRaw, lastIssue);
-                            string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), null).GetAwaiter().GetResult();
+                            string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), null, cancellationToken).GetAwaiter().GetResult();
 
                             if (string.IsNullOrWhiteSpace(retryRaw))
                             {
@@ -551,6 +567,8 @@ namespace OutfitReactions.Ai
             }
             catch (TaskCanceledException)
             {
+                if (cancellationToken.IsCancellationRequested)
+                    return false;
                 int seconds = GetActiveSettings(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate player-reply follow-up: request timed out/canceled after {seconds}s.", LogLevel.Warn);
                 return false;
@@ -1113,7 +1131,7 @@ namespace OutfitReactions.Ai
 
         public string BuildVoiceSampleReport()
         {
-            return voiceSamples.BuildReport(profiles.Keys, getConfig?.Invoke());
+            return voiceSamples.BuildReport(profiles.Keys.ToArray(), getConfig?.Invoke());
         }
 
         public string BuildVoiceSamplePreview(string npcName, string currentSeason)

@@ -989,6 +989,19 @@ namespace OutfitReactions
             if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] AI outfit dialogue failed for {npc.Name}; restored previous dialogue (outfit NOT marked read) and reopened it for a click retry.", LogLevel.Info);
         }
 
+        /// <summary>Cancel a no-longer-relevant AI request and return this NPC to the normal chance roll flow.</summary>
+        public void CancelPendingOwnAiGeneration(NPC npc)
+        {
+            if (npc == null || !pendingPrompts.TryGetValue(npc.Name, out PendingPrompt pending) || pending == null)
+                return;
+
+            CancelPendingPrompt(npc, pending);
+            pendingPrompts.Remove(npc.Name);
+            // Cancellation is not a failed chance roll. When the farmer approaches again, let the
+            // configured notice probability decide normally instead of preserving a cooldown.
+            rollCooldowns.Remove(npc.Name);
+        }
+
 
         private void UpdatePostDialogueRestore(NPC npc, PendingPrompt pending)
         {
