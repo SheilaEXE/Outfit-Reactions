@@ -228,6 +228,7 @@ namespace OutfitReactions
                             npc.faceGeneralDirection(Game1.player.getStandingPosition());
 
                             isReactingToClothes = true;
+                            clothesPathStarted = false;
                             clothesComplimentReady = false;
                             clothesInteractionCooldown = 180;
                             clothesPreferredOffset = Point.Zero;
@@ -243,6 +244,7 @@ namespace OutfitReactions
                             // like a prioritized dialogue, while they keep their normal route.
 
                             isReactingToClothes = true;
+                            clothesPathStarted = false;
                             clothesComplimentReady = true;
                             clothesInteractionCooldown = 180;
                             clothesPreferredOffset = Point.Zero;
@@ -291,6 +293,7 @@ namespace OutfitReactions
                     {
                         if (TryStartSpouseApproachPath(npc))
                         {
+                            clothesPathStarted = true;
                         }
                         else
                         {
@@ -399,6 +402,7 @@ namespace OutfitReactions
             }
 
             isReactingToClothes = true;
+            clothesPathStarted = true;
             clothesComplimentReady = true;
             clothesChaseTimer = 0;
             clothesReactingNpc = npc;
@@ -428,6 +432,7 @@ namespace OutfitReactions
             outfitSequenceActive = true;
             isReactingToClothes = true;
             clothesComplimentReady = true;
+            clothesPathStarted = false;
             clothesFirstNoticeDone = true;
             clothesNoticePauseTimer = 0;
             clothesSecondNoticeCooldown = Math.Max(clothesSecondNoticeCooldown, 300);
@@ -870,6 +875,7 @@ namespace OutfitReactions
             TryRestoreSpouseOutfitSpecialAction(force: true);
 
             isReactingToClothes = false;
+            clothesPathStarted = false;
             clothesComplimentReady = false;
             clothesPreferredOffset = Point.Zero;
             clothesLastPlayerTile = Point.Zero;
@@ -893,6 +899,7 @@ namespace OutfitReactions
             ClearSpousePostOutfitLinger();
 
             isReactingToClothes = false;
+            clothesPathStarted = false;
             clothesComplimentReady = false;
             clothesFirstNoticeDone = false;
             clothesEmoteFired = false;

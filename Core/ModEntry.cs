@@ -71,16 +71,15 @@ namespace OutfitReactions
         internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
 
         /// <summary>
-        /// True only while an outfit reaction is actively generating a response or an NPC system has
-        /// an active dialogue-generation state. A passive spouse notice deliberately does not count:
-        /// other mods may still start their own interactions (such as an automatic kiss) until the
-        /// player explicitly clicks the spouse to open the outfit dialogue.
+        /// True whenever any outfit reaction is pending, generating, or open. Other interaction
+        /// mods use this cross-mod flag to avoid simulating NPC.checkAction during the pending
+        /// outfit-dialogue window, which would otherwise steal the click via the Harmony priority patch.
         /// </summary>
         internal bool IsAnyOutfitReactionActive()
         {
-            // The spouse notice/ready state is intentionally excluded. It remains clickable through
-            // the Harmony priority path, but must not lock automatic partner interactions.
-            if (aiGenerationCoordinator.HasOutfitGenerations || aiGenerationCoordinator.HasReplyGenerations)
+            if (isReactingToClothes || outfitSequenceActive)
+                return true;
+            if (clothesComplimentReady || clothesPathStarted)
                 return true;
             if (otherNpcClothesReactionSystem?.HasAnyActivePendingReaction() == true)
                 return true;

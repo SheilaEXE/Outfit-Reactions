@@ -12,6 +12,7 @@ namespace OutfitReactions
     {
         private bool isReactingToClothes;
         private int clothesInteractionCooldown;
+        private bool clothesPathStarted;
         private bool clothesComplimentReady;
         private Point clothesPreferredOffset = Point.Zero;
         private Point clothesLastPlayerTile = Point.Zero;
