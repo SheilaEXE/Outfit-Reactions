@@ -920,8 +920,10 @@ namespace OutfitReactions
             // only wiping out the notice for every NPC who hadn't seen the player yet.
             ResetClothesState(false);
 
-            if (sameLocation)
-                BeginSpousePostOutfitLinger(npc);
+            // Do not start the post-dialogue linger here. Keeping movementPause/animation ownership
+            // after the outfit line closes prevented partner-interaction mods from starting their
+            // kiss animation immediately. The route and special-action state were already restored
+            // by ResetClothesState above.
         }
 
         private void BeginSpousePostOutfitLinger(NPC npc)

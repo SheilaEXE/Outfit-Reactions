@@ -71,20 +71,16 @@ namespace OutfitReactions
         internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
 
         /// <summary>
-        /// True whenever ANY outfit reaction is in progress and not yet fully read/closed — the spouse
-        /// reaction sequence, the immediate "reacting to clothes" state, an unread saved-outfit notice,
-        /// or any non-spouse NPC with a pending reaction. Used to block kiss interactions during the
-        /// whole reaction (noticing + generating + dialogue open) until the dialogue ends.
+        /// True only while an outfit reaction is actively generating a response or an NPC system has
+        /// an active dialogue-generation state. A passive spouse notice deliberately does not count:
+        /// other mods may still start their own interactions (such as an automatic kiss) until the
+        /// player explicitly clicks the spouse to open the outfit dialogue.
         /// </summary>
         internal bool IsAnyOutfitReactionActive()
         {
-            // NOTE: changedClothes is intentionally NOT checked here. It only means "the outfit
-            // changed recently", not "a reaction is happening right now" — and the spouse flow ends
-            // via ResetClothesReactionState(), which does not clear changedClothes, so including it
-            // here left the cross-mod flag (and thus kisses) stuck after every spouse reaction.
-            if (isReactingToClothes || outfitSequenceActive)
-                return true;
-            if (clothesComplimentReady || clothesPathStarted)
+            // The spouse notice/ready state is intentionally excluded. It remains clickable through
+            // the Harmony priority path, but must not lock automatic partner interactions.
+            if (aiGenerationCoordinator.HasOutfitGenerations || aiGenerationCoordinator.HasReplyGenerations)
                 return true;
             if (otherNpcClothesReactionSystem?.HasAnyActivePendingReaction() == true)
                 return true;
