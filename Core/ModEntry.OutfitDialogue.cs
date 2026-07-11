@@ -943,6 +943,7 @@ namespace OutfitReactions
 
             npc.Sprite?.StopAnimation();
             npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+            spouseProximityState.LingerPoseApplied = true;
 
             if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] {npc.Name} will linger after the outfit compliment until distance >= {SpouseProximityState.PostOutfitLingerDistance:F0} or {SpouseProximityState.PostOutfitLingerDelayTicks} ticks.", LogLevel.Info);
         }
@@ -972,13 +973,21 @@ namespace OutfitReactions
 
             if (!shouldResume)
             {
-                // Match the kiss mod behavior: pause movement without deleting the
-                // controller, and keep the spouse visually focused on the farmer.
+                // Match the kiss mod behavior: pause movement without deleting the controller.
                 if (npc.movementPause < 6)
                     npc.movementPause = 6;
 
-                npc.Sprite?.StopAnimation();
-                npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+                // Apply the "looking at the farmer" pose only once per linger session (see the
+                // same reasoning in UpdateSpouseOutfitNoticeHold above). Re-forcing StopAnimation()/
+                // faceGeneralDirection() every tick here is what made the partner appear frozen
+                // instead of playing a kiss animation: any animation another mod applied on this
+                // same NPC was cancelled back to idle on the very next tick.
+                if (!spouseProximityState.LingerPoseApplied)
+                {
+                    npc.Sprite?.StopAnimation();
+                    npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+                    spouseProximityState.LingerPoseApplied = true;
+                }
                 return;
             }
 

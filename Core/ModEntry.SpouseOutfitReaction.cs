@@ -322,6 +322,7 @@ namespace OutfitReactions
             if (npc == null || Game1.player == null || npc.currentLocation != Game1.player.currentLocation)
             {
                 spouseOutfitNoticePauseActive = false;
+                spouseProximityState.NoticeHoldPoseApplied = false;
                 return;
             }
 
@@ -334,15 +335,27 @@ namespace OutfitReactions
                 spouseOutfitNoticePauseActive = false;
 
             if (!spouseOutfitNoticePauseActive)
+            {
+                spouseProximityState.NoticeHoldPoseApplied = false;
                 return;
+            }
 
             CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
 
             if (npc.movementPause < 6)
                 npc.movementPause = 6;
 
-            npc.Sprite?.StopAnimation();
-            npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+            // Only strike the "looking at the farmer" pose once, on the tick the hold starts —
+            // not every tick. Other mods (e.g. a kiss mod) may animate this same NPC while the
+            // hold is active; re-applying StopAnimation()/faceGeneralDirection() every tick would
+            // immediately cancel that animation back to idle right after it's set, making the NPC
+            // appear frozen during, say, a kiss. movementPause alone is enough to keep them in place.
+            if (!spouseProximityState.NoticeHoldPoseApplied)
+            {
+                npc.Sprite?.StopAnimation();
+                npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+                spouseProximityState.NoticeHoldPoseApplied = true;
+            }
         }
 
         private void ShowSpousePendingOutfitBubbleIfNeeded(NPC npc, bool force = false)
@@ -888,6 +901,7 @@ namespace OutfitReactions
             clothesReactingNpc = null;
             outfitSequenceActive = false;
             spouseOutfitNoticePauseActive = false;
+            spouseProximityState.NoticeHoldPoseApplied = false;
             spousePendingOutfitBubbleTimer = 0;
         }
 
@@ -913,6 +927,7 @@ namespace OutfitReactions
             clothesReactingNpc = null;
             outfitSequenceActive = false;
             spouseOutfitNoticePauseActive = false;
+            spouseProximityState.NoticeHoldPoseApplied = false;
             spousePendingOutfitBubbleTimer = 0;
             fashionSenseMenuOpen = false;
             fsSnapshotBefore = null;

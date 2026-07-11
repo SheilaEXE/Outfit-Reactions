@@ -79,7 +79,9 @@ namespace OutfitReactions
         public bool LingerActive { get; set; }
         public NPC LingerNpc { get; set; }
         public int LingerTimer { get; set; }
+        public bool LingerPoseApplied { get; set; }
         public bool NoticePauseActive { get; set; }
+        public bool NoticeHoldPoseApplied { get; set; }
         public int PendingBubbleTimer { get; set; }
 
         public void ClearLinger()
@@ -87,11 +89,13 @@ namespace OutfitReactions
             LingerActive = false;
             LingerNpc = null;
             LingerTimer = 0;
+            LingerPoseApplied = false;
         }
 
         public void ClearNotice()
         {
             NoticePauseActive = false;
+            NoticeHoldPoseApplied = false;
             PendingBubbleTimer = 0;
         }
     }
