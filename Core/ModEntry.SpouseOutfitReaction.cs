@@ -209,7 +209,7 @@ namespace OutfitReactions
                     clothesNoticePauseTimer = 90;
 
                     if (spouseCanApproachPlayer)
-                        StopNpcForClothesReaction(npc);
+                        spouseRouteController.Stop(npc, Monitor, DebugLog);
                     // Show that an outfit compliment is pending, but do not force-stop the route
                     // unless the spouse is actually close enough for the kiss-style pause.
                     ShowSpousePendingOutfitBubbleIfNeeded(npc, force: true);
@@ -224,7 +224,7 @@ namespace OutfitReactions
 
                         if (spouseCanApproachPlayer)
                         {
-                            StopNpcForClothesReaction(npc);
+                            spouseRouteController.Stop(npc, Monitor, DebugLog);
                             npc.faceGeneralDirection(Game1.player.getStandingPosition());
 
                             isReactingToClothes = true;
@@ -321,20 +321,19 @@ namespace OutfitReactions
         {
             if (npc == null || Game1.player == null || npc.currentLocation != Game1.player.currentLocation)
             {
-                spouseOutfitNoticePauseActive = false;
-                spouseProximityState.NoticeHoldPoseApplied = false;
+                spouseProximityState.ClearNotice();
                 return;
             }
 
             // Start the hold only when the spouse naturally gets very close (about one tile).
             // Once held, keep the soft pause until the farmer backs away enough. We never touch
             // npc.controller here, so schedules/pathfinding keep their original route alive.
-            if (distance <= SpouseOutfitNoticePauseDistance)
-                spouseOutfitNoticePauseActive = true;
-            else if (distance >= SpouseOutfitNoticeReleaseDistance)
-                spouseOutfitNoticePauseActive = false;
+            spouseProximityState.NoticePauseActive = SpouseOutfitReactionController.ResolveNoticePause(
+                spouseProximityState.NoticePauseActive,
+                isSameLocation: true,
+                distance);
 
-            if (!spouseOutfitNoticePauseActive)
+            if (!spouseProximityState.NoticePauseActive)
             {
                 spouseProximityState.NoticeHoldPoseApplied = false;
                 return;
@@ -373,17 +372,17 @@ namespace OutfitReactions
             // Fire the ellipsis emote only ONCE per outfit notice.
             // It re-fires only if the player left the notice range and came back
             // (clothesEmoteFired is reset in ResetClothesState/ResetClothesReactionState).
-            if (!force && clothesEmoteFired)
-                return;
-
-            if (!force && spousePendingOutfitBubbleTimer > 0)
+            if (!SpouseOutfitReactionController.CanShowPendingBubble(
+                force,
+                clothesEmoteFired,
+                spouseProximityState.PendingBubbleTimer))
                 return;
 
             // 40 = ellipsis bubble. This reads as "I noticed something / talk to me" without
             // interrupting the NPC's current route.
             npc.doEmote(40);
             clothesEmoteFired = true;
-            spousePendingOutfitBubbleTimer = force ? 180 : 240;
+            spouseProximityState.PendingBubbleTimer = SpouseOutfitReactionController.GetPendingBubbleCooldown(force);
         }
 
         private void ShowOutfitCompliment(NPC npc, bool inClothesNoticeRange)
@@ -396,7 +395,7 @@ namespace OutfitReactions
             CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
             npc.faceGeneralDirection(Game1.player.getStandingPosition());
 
-            CaptureSpouseDialogueBeforeOutfit(npc);
+            spouseDialogueController.Capture(npc, Game1.player, Monitor, DebugLog);
 
             bool deferOwnAiUntilClick = ShouldUseDeferredOwnAiForNpc(npc);
             if (!deferOwnAiUntilClick)
@@ -430,7 +429,7 @@ namespace OutfitReactions
             try
             {
                 ClearOutfitPrompt(npc);
-                RestoreSpouseDialogueAfterOutfit(npc, restoreTalkState: true, clearCurrentDialogue: false);
+                spouseDialogueController.Restore(npc, Game1.player, restoreTalkState: true, clearCurrentDialogue: false, monitor: Monitor, debugLog: DebugLog);
             }
             catch (Exception ex)
             {
@@ -493,8 +492,8 @@ namespace OutfitReactions
 
             // Stack<T> enumerates from top to bottom. Keep that order, then restore
             // by pushing bottom-to-top later so the previous top dialogue stays on top.
-            spouseDialogueBackupBeforeOutfit = npc.CurrentDialogue?.ToList() ?? new List<Dialogue>();
-            spouseDialogueBackupNpcName = npc.Name;
+            spouseDialogueSnapshot.DialogueQueue = npc.CurrentDialogue?.ToList() ?? new List<Dialogue>();
+            spouseDialogueSnapshot.NpcName = npc.Name;
 
             TemporarilySkipSpouseFirstDailyDialogue(npc);
         }
@@ -509,13 +508,13 @@ namespace OutfitReactions
                 if (!Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship friendship) || friendship == null)
                     return;
 
-                spouseFriendshipStateCaptured = true;
-                spouseOriginalTalkedToToday = friendship.TalkedToToday;
+                spouseDialogueSnapshot.FriendshipStateCaptured = true;
+                spouseDialogueSnapshot.OriginalTalkedToToday = friendship.TalkedToToday;
 
                 if (!friendship.TalkedToToday)
                 {
                     friendship.TalkedToToday = true;
-                    spouseForcedTalkedToToday = true;
+                    spouseDialogueSnapshot.ForcedTalkedToToday = true;
                     if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Temporarily skipped first daily dialogue for {npc.Name} so the outfit compliment can play first.", LogLevel.Info);
                 }
             }
@@ -527,19 +526,19 @@ namespace OutfitReactions
 
         private void RestoreSpouseDialogueAfterOutfit(NPC npc, bool restoreTalkState, bool clearCurrentDialogue)
         {
-            if (npc == null || string.IsNullOrWhiteSpace(spouseDialogueBackupNpcName))
+            if (npc == null || string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
                 return;
 
-            if (!npc.Name.Equals(spouseDialogueBackupNpcName, StringComparison.OrdinalIgnoreCase))
+            if (!npc.Name.Equals(spouseDialogueSnapshot.NpcName, StringComparison.OrdinalIgnoreCase))
                 return;
 
             if (clearCurrentDialogue)
                 npc.CurrentDialogue.Clear();
 
-            if (spouseDialogueBackupBeforeOutfit != null && spouseDialogueBackupBeforeOutfit.Count > 0)
+            if (spouseDialogueSnapshot.DialogueQueue != null && spouseDialogueSnapshot.DialogueQueue.Count > 0)
             {
-                for (int i = spouseDialogueBackupBeforeOutfit.Count - 1; i >= 0; i--)
-                    npc.CurrentDialogue.Push(spouseDialogueBackupBeforeOutfit[i]);
+                for (int i = spouseDialogueSnapshot.DialogueQueue.Count - 1; i >= 0; i--)
+                    npc.CurrentDialogue.Push(spouseDialogueSnapshot.DialogueQueue[i]);
             }
 
             if (restoreTalkState)
@@ -553,13 +552,13 @@ namespace OutfitReactions
             if (npc == null || Game1.player == null)
                 return;
 
-            if (!spouseFriendshipStateCaptured || !spouseForcedTalkedToToday)
+            if (!spouseDialogueSnapshot.FriendshipStateCaptured || !spouseDialogueSnapshot.ForcedTalkedToToday)
                 return;
 
             try
             {
                 if (Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship friendship) && friendship != null)
-                    friendship.TalkedToToday = spouseOriginalTalkedToToday;
+                    friendship.TalkedToToday = spouseDialogueSnapshot.OriginalTalkedToToday;
             }
             catch (Exception ex)
             {
@@ -569,10 +568,10 @@ namespace OutfitReactions
 
         private void RestoreSpouseDialogueBackupIfPending()
         {
-            if (string.IsNullOrWhiteSpace(spouseDialogueBackupNpcName))
+            if (string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
                 return;
 
-            NPC npc = Game1.getCharacterFromName(spouseDialogueBackupNpcName);
+            NPC npc = Game1.getCharacterFromName(spouseDialogueSnapshot.NpcName);
             if (npc == null)
             {
                 ClearSpouseDialogueBackupOnly();
@@ -585,13 +584,10 @@ namespace OutfitReactions
 
         private void ClearSpouseDialogueBackupOnly()
         {
-            spouseDialogueBackupBeforeOutfit = null;
-            spouseDialogueBackupNpcName = "";
-            spouseFriendshipStateCaptured = false;
-            spouseOriginalTalkedToToday = false;
-            spouseForcedTalkedToToday = false;
+            spouseDialogueSnapshot.Clear();
         }
 
+        // Kept temporarily while the inactive legacy route block is removed in a later cleanup.
         private SchedulePathDescription GetNpcDirections(NPC npc)
         {
             try { return _directionsToNewLocationField?.GetValue(npc) as SchedulePathDescription; }
@@ -614,7 +610,7 @@ namespace OutfitReactions
             // behavior. On restore we recompute a fresh path from the NPC's CURRENT position
             // to that destination, so it walks straight there from wherever it ends up after
             // the dialogue — no replaying old tiles, no detours to the previous position.
-            if (spouseFinalDestinationBackup == null)
+            if (spouseRouteController.Snapshot.FinalDestination == null)
             {
                 try
                 {
@@ -626,10 +622,10 @@ namespace OutfitReactions
                             // The bottom of the stack is the final tile of the path on this map.
                             // (Stack enumeration goes top-to-bottom, so Last() = bottom = final.)
                             Point finalTile = path.Last();
-                            spouseFinalDestinationBackup = finalTile;
-                            spouseEndBehaviorBackup = npc.controller.endBehaviorFunction;
-                            spouseFinalFacingBackup = npc.controller.finalFacingDirection;
-                            spouseDirectionsBackup = GetNpcDirections(npc);
+                            spouseRouteController.Snapshot.FinalDestination = finalTile;
+                            spouseRouteController.Snapshot.EndBehavior = npc.controller.endBehaviorFunction;
+                            spouseRouteController.Snapshot.FinalFacingDirection = npc.controller.finalFacingDirection;
+                            spouseRouteController.Snapshot.Directions = GetNpcDirections(npc);
                             if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Captured destination {finalTile} for {npc.Name}.", LogLevel.Info);
                         }
                     }
@@ -647,15 +643,12 @@ namespace OutfitReactions
 
         private void ClearSpouseControllerBackup()
         {
-            spouseFinalDestinationBackup = null;
-            spouseEndBehaviorBackup = null;
-            spouseFinalFacingBackup = -1;
-            spouseDirectionsBackup = null;
+            spouseRouteController.Clear();
         }
 
         private void RestoreSpouseControllerAfterOutfit(NPC npc)
         {
-            if (npc == null || spouseFinalDestinationBackup == null)
+            if (npc == null || spouseRouteController.Snapshot.FinalDestination == null)
             {
                 // Nothing to restore — let the schedule decide what to do next.
                 npc?.checkSchedule(Game1.timeOfDay);
@@ -665,7 +658,7 @@ namespace OutfitReactions
 
             try
             {
-                Point destination = spouseFinalDestinationBackup.Value;
+                Point destination = spouseRouteController.Snapshot.FinalDestination.Value;
 
                 // Recompute a fresh path from the NPC's CURRENT position to the saved destination.
                 // This is the key: we don't replay the old stack of tiles (which would make the NPC
@@ -675,17 +668,17 @@ namespace OutfitReactions
                     npc,
                     Utility.getGameLocationOfCharacter(npc),
                     destination,
-                    spouseFinalFacingBackup,
-                    spouseEndBehaviorBackup);
+                    spouseRouteController.Snapshot.FinalFacingDirection,
+                    spouseRouteController.Snapshot.EndBehavior);
 
                 if (restoredController.pathToEndPoint != null && restoredController.pathToEndPoint.Count > 0)
                 {
-                    restoredController.endBehaviorFunction = spouseEndBehaviorBackup;
+                    restoredController.endBehaviorFunction = spouseRouteController.Snapshot.EndBehavior;
                     npc.controller = restoredController;
 
                     // Keep directionsToNewLocation in sync so cross-map warp logic still works.
-                    if (spouseDirectionsBackup != null)
-                        SetNpcDirections(npc, spouseDirectionsBackup);
+                    if (spouseRouteController.Snapshot.Directions != null)
+                        SetNpcDirections(npc, spouseRouteController.Snapshot.Directions);
 
                     if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Restored {npc.Name}'s path to {destination} ({restoredController.pathToEndPoint.Count} steps).", LogLevel.Info);
                 }
@@ -748,7 +741,7 @@ namespace OutfitReactions
             if (npc == null || npc.Sprite == null || npc.currentLocation == null)
                 return;
 
-            if (spouseOutfitSpecialActionSnapshot != null && spouseOutfitSpecialActionSnapshot.Npc == npc)
+            if (spouseSpecialActionController.HasSnapshotFor(npc))
                 return;
 
             if (npc.isMoving())
@@ -764,7 +757,7 @@ namespace OutfitReactions
             if (!hasSpecialAnimation && !hasSpecialStaticFrame)
                 return;
 
-            spouseOutfitSpecialActionSnapshot = new NpcOutfitSpecialActionSnapshot
+            spouseSpecialActionController.Capture(new SpouseOutfitSpecialActionSnapshot
             {
                 Npc = npc,
                 Location = npc.currentLocation,
@@ -774,7 +767,7 @@ namespace OutfitReactions
                 MovementPause = (int)npc.movementPause,
                 AddedSpeed = (int)npc.addedSpeed,
                 CurrentAnimation = animation
-            };
+            });
 
             npc.Sprite.StopAnimation();
             npc.Sprite.ClearAnimation();
@@ -783,19 +776,19 @@ namespace OutfitReactions
             npc.Sprite.CurrentFrame = GetNpcIdleFrameForDirection(npc.FacingDirection);
             npc.Sprite.UpdateSourceRect();
 
-            if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Saved special animation for {npc.Name} before outfit reaction. frame={spouseOutfitSpecialActionSnapshot.CurrentFrame} anim={(animation != null ? animation.Count : 0)}", LogLevel.Info);
+            if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Saved special animation for {npc.Name} before outfit reaction. frame={spouseSpecialActionController.Current.CurrentFrame} anim={(animation != null ? animation.Count : 0)}", LogLevel.Info);
         }
 
         private bool TryRestoreSpouseOutfitSpecialAction(bool force = false)
         {
-            NpcOutfitSpecialActionSnapshot snapshot = spouseOutfitSpecialActionSnapshot;
+            SpouseOutfitSpecialActionSnapshot snapshot = spouseSpecialActionController.Current;
             if (snapshot == null || snapshot.Npc == null)
                 return false;
 
             NPC npc = snapshot.Npc;
             if (npc.Sprite == null || npc.currentLocation == null || npc.currentLocation != snapshot.Location)
             {
-                spouseOutfitSpecialActionSnapshot = null;
+                spouseSpecialActionController.Clear();
                 return false;
             }
 
@@ -833,13 +826,13 @@ namespace OutfitReactions
 
                 if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Restored special animation for {npc.Name} after outfit reaction. frame={snapshot.CurrentFrame} anim={(snapshot.CurrentAnimation != null ? snapshot.CurrentAnimation.Count : 0)}", LogLevel.Info);
 
-                spouseOutfitSpecialActionSnapshot = null;
+                spouseSpecialActionController.Clear();
                 return true;
             }
             catch (Exception ex)
             {
                 Monitor.Log($"[CLOTHES SPOUSE] Could not restore special animation for {npc?.Name ?? "null"}: {ex.Message}", LogLevel.Warn);
-                spouseOutfitSpecialActionSnapshot = null;
+                spouseSpecialActionController.Clear();
                 return false;
             }
         }
@@ -900,9 +893,7 @@ namespace OutfitReactions
             clothesChaseTimer = 0;
             clothesReactingNpc = null;
             outfitSequenceActive = false;
-            spouseOutfitNoticePauseActive = false;
-            spouseProximityState.NoticeHoldPoseApplied = false;
-            spousePendingOutfitBubbleTimer = 0;
+            spouseProximityState.ClearNotice();
         }
 
         private void ResetClothesState(bool clearChangeFlag = false)
@@ -926,9 +917,7 @@ namespace OutfitReactions
             clothesLastTargetTile = Point.Zero;
             clothesReactingNpc = null;
             outfitSequenceActive = false;
-            spouseOutfitNoticePauseActive = false;
-            spouseProximityState.NoticeHoldPoseApplied = false;
-            spousePendingOutfitBubbleTimer = 0;
+            spouseProximityState.ClearNotice();
             fashionSenseMenuOpen = false;
             fsSnapshotBefore = null;
             CancelAllPendingOwnAiGenerations();

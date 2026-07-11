@@ -70,6 +70,11 @@ namespace OutfitReactions
         // otherwise. Kept in modData (not a cross-mod API) so it works regardless of mod load order.
         internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
 
+        // Read-side of the cross-mod handshake: written by the Lots of Kisses mod (NatrollEXE.LotsOfKisses)
+        // into the Farmer's modData for the exact duration of a simulated checkAction click it uses
+        // to play the vanilla kiss animation. See TryHandleOutfitDialogueOrBlockNpcInteraction.
+        private const string AutoKissClickActiveModDataKey = "NatrollEXE.LotsOfKisses/AutoKissClickActive";
+
         /// <summary>
         /// True whenever any outfit reaction is pending, generating, or open. Other interaction
         /// mods use this cross-mod flag to avoid simulating NPC.checkAction during the pending
@@ -298,6 +303,14 @@ namespace OutfitReactions
             if (Game1.eventUp)
                 return false;
 
+            // Cross-mod signal: Lots of Kisses sets this in the Farmer's modData for the exact
+            // duration of a simulated checkAction click it uses to trigger the vanilla kiss
+            // animation (bump kiss, multi-kiss, etc.) — not a real player click on the NPC. Step
+            // aside and let checkAction run normally so the kiss plays; the outfit dialogue stays
+            // pending and will still open the next time the player actually clicks the NPC.
+            if (Game1.player.modData != null && Game1.player.modData.ContainsKey(AutoKissClickActiveModDataKey))
+                return false;
+
             // First try the normal priority path: if the outfit line is ready, or the
             // built-in AI needs to start/continue generating, consume the click and
             // let Outfit Compliments own this interaction.
@@ -490,10 +503,10 @@ namespace OutfitReactions
             if (!CanNpcNoticeCurrentOutfitNotice(npc))
                 return false;
 
-            if (string.IsNullOrWhiteSpace(spouseDialogueSnapshot.NpcName))
-                CaptureSpouseDialogueBeforeOutfit(npc);
+            if (!spouseDialogueController.HasBackup)
+                spouseDialogueController.Capture(npc, Game1.player, Monitor, DebugLog);
             else
-                TemporarilySkipSpouseFirstDailyDialogue(npc);
+                spouseDialogueController.TemporarilySkipFirstDailyDialogue(npc, Game1.player, Monitor, DebugLog);
 
             bool queued = QueueSpouseOutfitDialogueOnly(npc);
             if (queued)
@@ -703,6 +716,23 @@ namespace OutfitReactions
         /// </summary>
         private void ApplyDetectedClothesChange(FashionSenseChangeInfo changeInfo)
         {
+            // Some detected "changes" have nothing describable in them — e.g. a vanilla pants slot
+            // flickering as an internal side effect of swapping Fashion Sense pants, which counts
+            // toward CountChanges() via VanillaPantsChanged but has no dialogue branch of its own
+            // (pants alone are never commented on, same as shoes). Applying one of these as if it
+            // were a real change would wipe every NPC's "already reacted" memory and overwrite the
+            // last GENUINE change with one nobody can say anything about — silently blocking every
+            // notice (spouse and everyone else) until the next real change comes along. Treat a
+            // changeInfo with no dialogue key as a no-op: leave all existing state untouched.
+            if (string.IsNullOrEmpty(GetFashionSenseDialogueKey(changeInfo)))
+            {
+                if (DebugLog) Monitor.Log(
+                    $"[FS] Detected change had nothing describable (total={changeInfo.CountChanges()}, likely a vanilla-pants-only side effect) — ignoring, not resetting notice state.",
+                    LogLevel.Info
+                );
+                return;
+            }
+
             // A fresh change should cancel any previous one-shot hair/hat/accessory notice that may
             // still be waiting for cleanup. Without this, changing A -> B could leave the old
             // pending reaction blocking the new one.

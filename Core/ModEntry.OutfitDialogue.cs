@@ -900,8 +900,8 @@ namespace OutfitReactions
                 // If the spouse was interrupted inside the farmhouse and we captured a
                 // simple local route, restore it before pausing. Outside the farmhouse
                 // there should be no backup because we never stopped the controller.
-                if (spouseRouteSnapshot.FinalDestination != null)
-                    RestoreSpouseControllerAfterOutfit(npc);
+                if (spouseRouteController.HasRoute)
+                    spouseRouteController.Restore(npc, Monitor, DebugLog);
                 else
                     ClearSpouseControllerBackup();
             }
@@ -910,7 +910,7 @@ namespace OutfitReactions
                 ClearSpouseControllerBackup();
             }
 
-            RestoreSpouseDialogueAfterOutfit(npc, restoreTalkState: true, clearCurrentDialogue: true);
+            spouseDialogueController.Restore(npc, Game1.player, restoreTalkState: true, clearCurrentDialogue: true, monitor: Monitor, debugLog: DebugLog);
             // clearChangeFlag is intentionally false here. changedClothes/lastFashionSenseChangeInfo
             // are shared global state that HasNoticeableCurrentFashionSenseAppearance() (and therefore
             // every OTHER npc's ability to notice this same outfit) also reads. Sebastian's own
@@ -932,18 +932,11 @@ namespace OutfitReactions
                 return;
             }
 
-            spouseProximityState.LingerActive = true;
-            spouseProximityState.LingerNpc = npc;
-            spouseProximityState.LingerTimer = SpouseProximityState.PostOutfitLingerDelayTicks;
+            SpousePostOutfitLingerController.Begin(spouseProximityState, npc);
 
             CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
 
-            if (npc.movementPause < 6)
-                npc.movementPause = 6;
-
-            npc.Sprite?.StopAnimation();
-            npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
-            spouseProximityState.LingerPoseApplied = true;
+            SpousePostOutfitLingerController.ApplyHoldPose(spouseProximityState, npc, Game1.player);
 
             if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] {npc.Name} will linger after the outfit compliment until distance >= {SpouseProximityState.PostOutfitLingerDistance:F0} or {SpouseProximityState.PostOutfitLingerDelayTicks} ticks.", LogLevel.Info);
         }
@@ -964,30 +957,16 @@ namespace OutfitReactions
             float distance = sameLocation ? DistanceToPlayer(npc) : SpouseProximityState.PostOutfitLingerDistance;
             bool hasCapturedSpecialAction = spouseSpecialActionController.HasSnapshotFor(npc);
 
-            if (spouseProximityState.LingerTimer > 0)
-                spouseProximityState.LingerTimer--;
-
-            bool shouldResume = hasCapturedSpecialAction
-                ? (!sameLocation || distance >= OutfitSpecialActionRestoreDistance)
-                : (!sameLocation || distance >= SpouseProximityState.PostOutfitLingerDistance || spouseProximityState.LingerTimer <= 0);
+            bool shouldResume = SpousePostOutfitLingerController.TickAndShouldResume(
+                spouseProximityState,
+                sameLocation,
+                distance,
+                hasCapturedSpecialAction,
+                OutfitSpecialActionRestoreDistance);
 
             if (!shouldResume)
             {
-                // Match the kiss mod behavior: pause movement without deleting the controller.
-                if (npc.movementPause < 6)
-                    npc.movementPause = 6;
-
-                // Apply the "looking at the farmer" pose only once per linger session (see the
-                // same reasoning in UpdateSpouseOutfitNoticeHold above). Re-forcing StopAnimation()/
-                // faceGeneralDirection() every tick here is what made the partner appear frozen
-                // instead of playing a kiss animation: any animation another mod applied on this
-                // same NPC was cancelled back to idle on the very next tick.
-                if (!spouseProximityState.LingerPoseApplied)
-                {
-                    npc.Sprite?.StopAnimation();
-                    npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
-                    spouseProximityState.LingerPoseApplied = true;
-                }
+                SpousePostOutfitLingerController.ApplyHoldPose(spouseProximityState, npc, Game1.player);
                 return;
             }
 
@@ -1000,7 +979,7 @@ namespace OutfitReactions
 
         private void ClearSpousePostOutfitLinger()
         {
-            spouseProximityState.ClearLinger();
+            SpousePostOutfitLingerController.Clear(spouseProximityState);
         }
 
         private void InstallPlayerReplyMenuAfterOutfitDialogue(NPC npc, bool isSpouseDialogue, string npcCompliment, Action onFinished)
