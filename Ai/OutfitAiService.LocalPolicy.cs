@@ -1,0 +1,311 @@
+using StardewModdingAPI;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using OutfitReactions;
+
+namespace OutfitReactions.Ai
+{
+    internal sealed partial class OutfitAiService
+    {
+        private static string BuildLocalSeasonAuthorityInstruction(OutfitAiContext context)
+        {
+            if (context == null)
+                return "";
+
+            string actualSeasonKey = NormalizeSeasonKey(context.Season);
+            string actualSeason = FormatSeasonForPrompt(context.Season, context.TargetLanguage);
+            string outfitSeason = DescribeInferredOutfitSeasonForPrompt(context);
+
+            StringBuilder builder = new();
+            builder.Append("AUTHORITATIVE SEASON RULE: the actual current in-game season is ").Append(actualSeason).Append(". ");
+            builder.Append("Outfit/theme clues may suggest a different season, but those clues describe the outfit style, not the date. ");
+            builder.Append("Do not replace the actual season with another one. ");
+
+            if (!string.IsNullOrWhiteSpace(outfitSeason))
+            {
+                builder.Append("This outfit appears to have ").Append(outfitSeason).Append(" vibes. ");
+                builder.Append("If that clashes with the actual season, mention the contrast using the actual season above.");
+            }
+            else if (!string.IsNullOrWhiteSpace(actualSeasonKey))
+            {
+                builder.Append("Only mention another season if the outfit itself clearly has that seasonal theme.");
+            }
+
+            return builder.ToString();
+        }
+
+        private static string FormatSeasonForPrompt(string season, string targetLanguage)
+        {
+            string key = NormalizeSeasonKey(season);
+            bool portuguese = !string.IsNullOrWhiteSpace(targetLanguage) && targetLanguage.IndexOf("Portuguese", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            return key switch
+            {
+                "spring" => portuguese ? "spring / primavera" : "spring",
+                "summer" => portuguese ? "summer / verão" : "summer",
+                "fall" => portuguese ? "fall / autumn / outono" : "fall / autumn",
+                "winter" => portuguese ? "winter / inverno" : "winter",
+                _ => string.IsNullOrWhiteSpace(season) ? "unknown" : season
+            };
+        }
+
+        private static string NormalizeSeasonKey(string season)
+        {
+            if (string.IsNullOrWhiteSpace(season))
+                return "";
+
+            string value = season.Trim().ToLowerInvariant();
+            if (value.Contains("spring") || value.Contains("primavera"))
+                return "spring";
+            if (value.Contains("summer") || value.Contains("verão") || value.Contains("verao"))
+                return "summer";
+            if (value.Contains("fall") || value.Contains("autumn") || value.Contains("outono"))
+                return "fall";
+            if (value.Contains("winter") || value.Contains("inverno"))
+                return "winter";
+
+            return value;
+        }
+
+        private static string DescribeInferredOutfitSeasonForPrompt(OutfitAiContext context)
+        {
+            HashSet<string> inferred = InferSeasonKeysFromOutfitClues(context);
+            if (inferred.Count <= 0)
+                return "";
+
+            List<string> labels = new();
+            foreach (string season in inferred)
+            {
+                labels.Add(season switch
+                {
+                    "spring" => "spring",
+                    "summer" => "summer/beach",
+                    "fall" => "fall/autumn",
+                    "winter" => "winter/Christmas",
+                    _ => season
+                });
+            }
+
+            return string.Join(" and ", labels);
+        }
+
+        private static HashSet<string> InferSeasonKeysFromOutfitClues(OutfitAiContext context)
+        {
+            HashSet<string> result = new(StringComparer.OrdinalIgnoreCase);
+            if (context == null)
+                return result;
+
+            string allClues = string.Join(" ", new[]
+            {
+                context.OutfitName,
+                context.SafeOutfitHint,
+                context.DialogueKey,
+                SanitizeThemeContextForPrompt(context.ThemeContext),
+                SanitizeThemeContextForPrompt(context.ThemePriorityInstruction)
+            }).ToLowerInvariant();
+
+            if (allClues.Contains("xmas") || allClues.Contains("christmas") || allClues.Contains("natal") || allClues.Contains("noel") || allClues.Contains("winter") || allClues.Contains("snow") || allClues.Contains("neve") || allClues.Contains("inverno"))
+                result.Add("winter");
+
+            if (allClues.Contains("swim") || allClues.Contains("bikini") || allClues.Contains("beach") || allClues.Contains("praia") || allClues.Contains("maiô") || allClues.Contains("maio") || allClues.Contains("summer") || allClues.Contains("verão") || allClues.Contains("verao"))
+                result.Add("summer");
+
+            if (allClues.Contains("spring") || allClues.Contains("primavera") || allClues.Contains("flower dance") || allClues.Contains("flowerdance"))
+                result.Add("spring");
+
+            if (allClues.Contains("fall") || allClues.Contains("autumn") || allClues.Contains("outono") || allClues.Contains("spirit") || allClues.Contains("halloween"))
+                result.Add("fall");
+
+            return result;
+        }
+
+        private static string ValidateLocalSeasonReferences(string lower, OutfitAiContext context)
+        {
+            if (string.IsNullOrWhiteSpace(lower) || context == null)
+                return null;
+
+            string normalizedText = " " + Regex.Replace(lower, @"[^\p{L}\p{N}]+", " ").Trim() + " ";
+
+            string actual = NormalizeSeasonKey(context.Season);
+            HashSet<string> allowed = InferSeasonKeysFromOutfitClues(context);
+            if (!string.IsNullOrWhiteSpace(actual))
+                allowed.Add(actual);
+
+            Dictionary<string, string[]> aliases = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["spring"] = new[] { " spring ", " primavera " },
+                ["summer"] = new[] { " summer ", " verão ", " verao " },
+                ["fall"] = new[] { " fall ", " autumn ", " outono " },
+                ["winter"] = new[] { " winter ", " inverno " }
+            };
+
+            foreach (var pair in aliases)
+            {
+                bool mentioned = pair.Value.Any(alias => normalizedText.Contains(alias));
+                if (!mentioned)
+                    continue;
+
+                if (!allowed.Contains(pair.Key))
+                    return "local response confused the actual season with " + pair.Key;
+            }
+
+            return null;
+        }
+
+        private static string BuildSeasonalAwarenessInstruction(OutfitAiContext context)
+        {
+            if (context == null)
+                return "";
+
+            string allClues = string.Join(" ", new[]
+            {
+                context.OutfitName,
+                context.SafeOutfitHint,
+                context.DialogueKey,
+                SanitizeThemeContextForPrompt(context.ThemeContext)
+            }).ToLowerInvariant();
+
+            string season = (context.Season ?? "").ToLowerInvariant();
+            bool christmasOrWinter =
+                allClues.Contains("xmas") || allClues.Contains("christmas") || allClues.Contains("natal") ||
+                allClues.Contains("noel") || allClues.Contains("winter") || allClues.Contains("snow") ||
+                allClues.Contains("neve") || allClues.Contains("inverno");
+
+            if (christmasOrWinter && !season.Contains("winter"))
+            {
+                return "Seasonal awareness: the outfit clue/theme suggests Christmas, snow, or winter, but the current season is " + context.Season + ". React to that mismatch in a human way if it fits the NPC: gentle teasing, surprise, amusement, curiosity, or finding it charmingly out of place. Do not force a line saying it also suits or works for the current season.";
+            }
+
+            bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
+            if (swimOrBeach && (season.Contains("winter") || (context.Weather ?? "").IndexOf("snow", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                return "Seasonal awareness: the outfit clue/theme suggests swimwear or beachwear, but the current season/weather is cold or snowy. Mention that contrast naturally if it fits the character. Do not use technical labels like indoor or theme guidance.";
+            }
+
+            return "Season is flavor, not a requirement: only bring up the season/weather if it genuinely connects to what is worn (e.g. a coat on a chilly rainy spring day, a sundress in summer). NEVER force a seasonal tie-in, and NEVER add a closing line that says the look also suits, fits, or works for the current season just to wrap up — if there is no real connection, end without mentioning the season at all. Use location, weather, and time the same way: only when they add something real. Never repeat technical labels like indoor, outdoor, NPC room, dialogue category, or theme guidance.";
+        }
+
+        private static string BuildLanguageExampleLocalLine(string targetLanguage)
+        {
+            return "<spoken outfit reaction in the current game language; no portrait commands inside the text>";
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // Inline helper so the scoring loop above stays readable.
+        private static string ValidateLocalGeneratedDialogueText(string text, OutfitAiContext context, CharacterAiProfile profile, ModConfig config)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return "empty local dialogue";
+
+            string stripped = DialogueValidator.StripDialogueMarkup(text);
+            string lower = " " + stripped.ToLowerInvariant() + " ";
+
+            int desiredMin = Math.Max(40, GetMinimumLengthTarget(config, ai: null));
+            int allowedShortfall = Math.Max(
+                desiredMin >= 300 ? 70 : desiredMin >= 180 ? 45 : 25,
+                (int)Math.Round(desiredMin * 0.18)
+            );
+            int hardMin = Math.Max(40, desiredMin - allowedShortfall);
+            if (stripped.Length < hardMin)
+                return "local dialogue was too short for configured minimum (" + stripped.Length + "/" + desiredMin + " visible characters, retry threshold " + hardMin + ")";
+
+            if (LooksLikeThirdPersonNarrationForNpc(lower, context?.NpcDisplayName ?? context?.NpcName))
+                return "local response was narration instead of spoken dialogue";
+
+            if (LooksLikeGenericCutesyLocalLine(lower, context))
+                return "local response sounded like generic cutesy/poetic praise instead of the NPC";
+
+            string themeSpecificityIssue = DialogueValidator.ValidateRecognizableThemeSpecificity(text, context);
+            if (!string.IsNullOrWhiteSpace(themeSpecificityIssue))
+                return "local " + themeSpecificityIssue;
+
+            string accessoryCombinationIssue = DialogueValidator.ValidateAccessoryOutfitCombinationSpecificity(text, context);
+            if (!string.IsNullOrWhiteSpace(accessoryCombinationIssue))
+                return "local " + accessoryCombinationIssue;
+
+            if (LooksLikeUnrelatedLocalLine(lower))
+                return "local response introduced unrelated generic details";
+
+            string seasonIssue = ValidateLocalSeasonReferences(lower, context);
+            if (!string.IsNullOrWhiteSpace(seasonIssue))
+                return seasonIssue;
+
+            return null;
+        }
+
+        private static bool LooksLikeThirdPersonNarrationForNpc(string lower, string npcDisplayName)
+        {
+            if (string.IsNullOrWhiteSpace(lower))
+                return false;
+
+            string npc = (npcDisplayName ?? "").Trim().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(npc))
+            {
+                if (lower.Contains(" " + npc + " is ") || lower.Contains(" " + npc + " looks ") || lower.Contains(" " + npc + " smiles ") || lower.Contains(" " + npc + " blushes "))
+                    return true;
+                if (lower.Contains(" " + npc + " está ") || lower.Contains(" " + npc + " esta ") || lower.Contains(" " + npc + " olha ") || lower.Contains(" " + npc + " sorri ") || lower.Contains(" " + npc + " fica "))
+                    return true;
+            }
+
+            return lower.Contains("contexto atual")
+                || lower.Contains("current context")
+                || lower.Contains("tonalidade")
+                || lower.Contains("tone:")
+                || lower.Contains("portrait:")
+                || lower.Contains("**portrait**")
+                || lower.Contains("stage direction")
+                || lower.Contains("scene description");
+        }
+
+        private static bool LooksLikeGenericCutesyLocalLine(string lower, OutfitAiContext context)
+        {
+            // Do not block words like radiant/radiante, wonderful/maravilhoso, magical/mágico, etc.
+            // They can sound clichéd in some outputs, but certain NPCs or outfit themes may use them naturally.
+            // The prompt should guide style; the validator should not hard-ban this vocabulary.
+            return false;
+        }
+
+        private static bool LooksLikeUnrelatedLocalLine(string lower)
+        {
+            if (string.IsNullOrWhiteSpace(lower))
+                return false;
+
+            string[] unrelated =
+            {
+                " crafting wood ", " chopping wood ", " perfect for mining ", " fighting monsters ", " watering crops ",
+                " cortar madeira ", " minerar ", " lutar contra monstros ", " regar plantações ", " regar plantacoes "
+            };
+
+            foreach (string phrase in unrelated)
+            {
+                if (lower.Contains(phrase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /* PORTRAIT_SCORE_SYSTEM — commented out: portrait selection is now left entirely to the AI.
+           The AI reads portrait descriptions from the NPC profile and decides which to use.
+        */
+
+
+    }
+}
