@@ -11,7 +11,7 @@ namespace OutfitReactions
 {
     public sealed partial class ModEntry
     {
-        // â”€â”€ Spouse/NPC clothes reaction flow â€” approach, animation, dialogue, reset â”€â”€
+        // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Spouse/NPC clothes reaction flow ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â approach, animation, dialogue, reset ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬
 
         private bool ShouldStartClothesReaction(NPC npc = null)
         {
@@ -31,7 +31,7 @@ namespace OutfitReactions
             // because a special item worn as a hat also triggers VanillaHatRemoved/VanillaHatChanged.
             // The two checks are chained with else-if: once the special-item check has decided this
             // is (or isn't) a witnessed special-item removal, the generic vanilla-hat check must NOT
-            // run afterwards â€” it uses HatMemoryService, which knows nothing about special items,
+            // run afterwards ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â it uses HatMemoryService, which knows nothing about special items,
             // and would otherwise re-block a reaction the special-item check just approved.
             if (npc != null && IsSpecialItemRemovalOnlyNotice(effectiveChangeInfo))
             {
@@ -54,88 +54,6 @@ namespace OutfitReactions
             return !string.IsNullOrEmpty(dialogueKey);
         }
 
-        private bool ShouldSpouseApproachPlayerForOutfit(NPC npc)
-        {
-            // Outfit notices now use the same safe idea as Lots and Lots of Kisses:
-            // pause with movementPause and keep the NPC looking at the farmer, without
-            // stealing, nulling, or replacing the schedule/controller. The old approach
-            // path is intentionally disabled because it can break custom schedules and
-            // cross-map pathing.
-            return false;
-        }
-
-        private bool TryStartSpouseApproachPath(NPC npc)
-        {
-            if (npc == null || Game1.player == null || Game1.currentLocation == null)
-                return false;
-
-            Point playerTile = Game1.player.TilePoint;
-            Point npcTile = npc.TilePoint;
-
-            int offsetX = Math.Sign(npcTile.X - playerTile.X);
-            int offsetY = Math.Sign(npcTile.Y - playerTile.Y);
-
-            List<Point> candidates = new();
-
-            // Prefer the side the spouse is already standing on, so he does not circle around
-            // the farmer unless that tile is blocked.
-            if (Math.Abs(npcTile.X - playerTile.X) > Math.Abs(npcTile.Y - playerTile.Y))
-            {
-                if (offsetX != 0)
-                    candidates.Add(new Point(playerTile.X + offsetX, playerTile.Y));
-                if (offsetY != 0)
-                    candidates.Add(new Point(playerTile.X, playerTile.Y + offsetY));
-            }
-            else
-            {
-                if (offsetY != 0)
-                    candidates.Add(new Point(playerTile.X, playerTile.Y + offsetY));
-                if (offsetX != 0)
-                    candidates.Add(new Point(playerTile.X + offsetX, playerTile.Y));
-            }
-
-            // Then try every adjacent tile around the player. This makes farmhouse approach
-            // much less fragile when custom furniture, rugs, or decorations block the first
-            // guessed target tile.
-            candidates.Add(new Point(playerTile.X + 1, playerTile.Y));
-            candidates.Add(new Point(playerTile.X - 1, playerTile.Y));
-            candidates.Add(new Point(playerTile.X, playerTile.Y + 1));
-            candidates.Add(new Point(playerTile.X, playerTile.Y - 1));
-            candidates.Add(new Point(playerTile.X + 1, playerTile.Y + 1));
-            candidates.Add(new Point(playerTile.X - 1, playerTile.Y + 1));
-            candidates.Add(new Point(playerTile.X + 1, playerTile.Y - 1));
-            candidates.Add(new Point(playerTile.X - 1, playerTile.Y - 1));
-
-            foreach (Point target in candidates
-                .Distinct()
-                .OrderBy(tile => Math.Abs(tile.X - npcTile.X) + Math.Abs(tile.Y - npcTile.Y)))
-            {
-                if (target == npcTile)
-                    continue;
-
-                var tileLocation = new xTile.Dimensions.Location(target.X, target.Y);
-                if (!Game1.currentLocation.isTilePassable(tileLocation, Game1.viewport))
-                    continue;
-
-                try
-                {
-                    var path = new PathFindController(npc, Game1.currentLocation, target, -1, false);
-                    if (path?.pathToEndPoint != null && path.pathToEndPoint.Count > 0)
-                    {
-                        npc.controller = path;
-                        if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Started farmhouse approach path for {npc.Name} to {target} ({path.pathToEndPoint.Count} steps).", LogLevel.Info);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Failed approach path candidate {target} for {npc.Name}: {ex.Message}", LogLevel.Info);
-                }
-            }
-
-            return false;
-        }
-
         private void UpdateClothesReactionSystem(NPC npc)
         {
             if (changedClothes && !isReactingToClothes)
@@ -147,13 +65,10 @@ namespace OutfitReactions
             float distance = DistanceToPlayer(npc);
             bool inClothesNoticeRange = distance < Config.OutfitNoticeDistance && npc.currentLocation == Game1.player.currentLocation;
             bool shouldStartClothesReaction = ShouldStartClothesReaction(npc);
-            bool spouseCanApproachPlayer = ShouldSpouseApproachPlayerForOutfit(npc);
+            bool spouseCanApproachPlayer = spouseOutfitApproachController.ShouldApproach(npc);
 
             if (changedClothes && !isReactingToClothes && !shouldStartClothesReaction)
             {
-                // This saved outfit was already read by this spouse/NPC for the current notice.
-                // Keep the current outfit candidate alive for other NPCs instead of
-                // clearing it every tick.
                 FashionSenseChangeInfo effectiveChangeInfo = GetEffectiveFashionSenseChangeInfoForNpc(npc);
                 if (IsSavedOutfitNoticeChange(effectiveChangeInfo) && !CanNpcNoticeCurrentOutfitNotice(npc))
                 {
@@ -161,19 +76,12 @@ namespace OutfitReactions
                     return;
                 }
 
-                // NPC-specific vanilla-hat removals should not clear the global notice just because
-                // this partner did not witness the removed hat. Other NPCs nearby may still have
-                // hat memory and be allowed to react to the removal.
-                if (IsVanillaHatRemovalOnlyNotice(lastFashionSenseChangeInfo)
-                    && !NpcRemembersRemovedVanillaHat(npc))
+                if (IsVanillaHatRemovalOnlyNotice(lastFashionSenseChangeInfo) && !NpcRemembersRemovedVanillaHat(npc))
                 {
                     playerWasInClothesNoticeRange = inClothesNoticeRange;
                     return;
                 }
 
-                // Same idea for special wearable items (e.g. Mayor's shorts): if this NPC did not
-                // see the removed item and there is no saved-outfit fallback for them, keep the
-                // global removal notice alive for NPCs who did see it.
                 if (IsSpecialItemRemovalOnlyNotice(lastFashionSenseChangeInfo)
                     && !NpcRemembersRemovedSpecialItem(npc, lastFashionSenseChangeInfo))
                 {
@@ -181,12 +89,6 @@ namespace OutfitReactions
                     return;
                 }
 
-                // Any other change type (e.g. a general piece-level FS change with ChangedOutfit=false)
-                // falls through to here. This must NOT clear the shared changedClothes/
-                // lastFashionSenseChangeInfo state: those are read by HasNoticeableCurrentFashionSenseAppearance(),
-                // which gates every OTHER (non-spouse) NPC's ability to notice this same change. Sebastian
-                // being done with his own reaction doesn't mean nobody else has seen it yet â€” only his
-                // own per-NPC state (isReactingToClothes, clothesFirstNoticeDone, etc.) needs resetting here.
                 ResetClothesState(false);
                 return;
             }
@@ -207,8 +109,7 @@ namespace OutfitReactions
 
                     if (spouseCanApproachPlayer)
                         spouseRouteController.Stop(npc, Monitor, DebugLog);
-                    // Show that an outfit compliment is pending, but do not force-stop the route
-                    // unless the spouse is actually close enough for the kiss-style pause.
+
                     ShowSpousePendingOutfitBubbleIfNeeded(npc, force: true);
                     UpdateSpouseOutfitNoticeHold(npc, distance);
                 }
@@ -236,10 +137,6 @@ namespace OutfitReactions
                         }
                         else
                         {
-                            // Outside the farmhouse, do not interrupt the spouse's schedule or
-                            // controller. Just make the outfit compliment available on click,
-                            // like a prioritized dialogue, while they keep their normal route.
-
                             isReactingToClothes = true;
                             clothesPathStarted = false;
                             clothesComplimentReady = true;
@@ -259,8 +156,6 @@ namespace OutfitReactions
                 }
             }
 
-            // Don't expose the spouse compliment immediately after the first emote.
-            // Always let the original reaction beat happen first: notice -> pause/call -> approach if needed -> dialogue ready.
             if (isReactingToClothes && clothesReactingNpc == npc)
             {
                 outfitSequenceActive = true;
@@ -270,10 +165,6 @@ namespace OutfitReactions
 
                 if (npc.currentLocation != Game1.player.currentLocation || distance > Config.OutfitCancelDistance)
                 {
-                    // Cancelling Sebastian's own in-progress reaction (player walked away) must not
-                    // wipe the shared changedClothes/lastFashionSenseChangeInfo state either â€” same
-                    // reasoning as the other ResetClothesState(true) call sites above: it would block
-                    // every other NPC from ever noticing this same outfit change.
                     ResetClothesState(false);
                     return;
                 }
@@ -288,22 +179,18 @@ namespace OutfitReactions
 
                     if (npc.controller == null)
                     {
-                        if (TryStartSpouseApproachPath(npc))
+                        if (spouseOutfitApproachController.TryStartPath(npc, Monitor, DebugLog))
                         {
                             clothesPathStarted = true;
                         }
                         else
                         {
-                            // If every nearby tile is blocked by furniture/decor, don't freeze the
-                            // whole reaction forever. Keep the call/dialogue available instead.
                             if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Could not find an approach path for {npc.Name} inside the farmhouse; making the outfit compliment ready on click.", LogLevel.Info);
                             clothesComplimentReady = true;
                         }
 
                         if (clothesInteractionCooldown <= 0)
-                        {
                             clothesInteractionCooldown = 180;
-                        }
                     }
 
                     playerWasInClothesNoticeRange = inClothesNoticeRange;
@@ -316,70 +203,28 @@ namespace OutfitReactions
 
         private void UpdateSpouseOutfitNoticeHold(NPC npc, float distance)
         {
-            if (npc == null || Game1.player == null || npc.currentLocation != Game1.player.currentLocation)
-            {
-                spouseProximityState.ClearNotice();
-                return;
-            }
-
-            // Start the hold only when the spouse naturally gets very close (about one tile).
-            // Once held, keep the soft pause until the farmer backs away enough. We never touch
-            // npc.controller here, so schedules/pathfinding keep their original route alive.
-            spouseProximityState.NoticePauseActive = SpouseOutfitReactionController.ResolveNoticePause(
-                spouseProximityState.NoticePauseActive,
-                isSameLocation: true,
-                distance);
-
-            if (!spouseProximityState.NoticePauseActive)
-            {
-                spouseProximityState.NoticeHoldPoseApplied = false;
-                return;
-            }
-
-            CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
-
-            if (npc.movementPause < 6)
-                npc.movementPause = 6;
-
-            // Only strike the "looking at the farmer" pose once, on the tick the hold starts â€”
-            // not every tick. Other mods (e.g. a kiss mod) may animate this same NPC while the
-            // hold is active; re-applying StopAnimation()/faceGeneralDirection() every tick would
-            // immediately cancel that animation back to idle right after it's set, making the NPC
-            // appear frozen during, say, a kiss. movementPause alone is enough to keep them in place.
-            if (!spouseProximityState.NoticeHoldPoseApplied)
-            {
-                npc.Sprite?.StopAnimation();
-                npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
-                spouseProximityState.NoticeHoldPoseApplied = true;
-            }
+            spouseOutfitNoticeController.UpdateHold(
+                spouseProximityState,
+                npc,
+                Game1.player,
+                distance,
+                CaptureSpouseOutfitSpecialActionBeforeOutfit);
         }
 
         private void ShowSpousePendingOutfitBubbleIfNeeded(NPC npc, bool force = false)
         {
-            if (npc == null || Game1.player == null || npc.currentLocation != Game1.player.currentLocation)
-                return;
-
-            if (Game1.activeClickableMenu != null || Game1.eventUp)
-                return;
-
-            // Only keep the reminder visible while the farmer is near enough to reasonably click.
-            if (DistanceToPlayer(npc) > Config.OutfitNoticeDistance)
-                return;
-
-            // Fire the ellipsis emote only ONCE per outfit notice.
-            // It re-fires only if the player left the notice range and came back
-            // (clothesEmoteFired is reset in ResetClothesState/ResetClothesReactionState).
-            if (!SpouseOutfitReactionController.CanShowPendingBubble(
+            if (spouseOutfitNoticeController.TryShowPendingBubble(
+                spouseProximityState,
+                npc,
+                Game1.player,
                 force,
                 clothesEmoteFired,
-                spouseProximityState.PendingBubbleTimer))
-                return;
-
-            // 40 = ellipsis bubble. This reads as "I noticed something / talk to me" without
-            // interrupting the NPC's current route.
-            npc.doEmote(40);
-            clothesEmoteFired = true;
-            spouseProximityState.PendingBubbleTimer = SpouseOutfitReactionController.GetPendingBubbleCooldown(force);
+                Config.OutfitNoticeDistance,
+                Game1.activeClickableMenu != null || Game1.eventUp,
+                DistanceToPlayer))
+            {
+                clothesEmoteFired = true;
+            }
         }
 
         private void ShowOutfitCompliment(NPC npc, bool inClothesNoticeRange)
@@ -462,22 +307,10 @@ namespace OutfitReactions
 
         private bool QueueSpouseOutfitDialogueOnly(NPC npc)
         {
-            if (npc == null)
-                return false;
-
-            // AI-only build:
-            // 1) Outfit Compliments built-in AI.
-            // Manual NPC-specific/generic JSON fallbacks are intentionally disabled/commented out.
-            //
-            // Built-in AI no longer pushes a temporary Dialogue object immediately. It starts a
-            // background generation task and draws the waiting text on the HUD instead. That means
-            // CurrentDialogue can legitimately stay empty here; returning false would let vanilla
-            // checkAction continue and could restart the outfit notice loop forever.
-            if (TryShowOwnAiOutfitDialogue(npc, isSpouseDialogue: true, clearExistingDialogue: false))
-                return true;
-
-            Monitor.Log($" No AI outfit dialogue was queued for {npc.Name}. Manual JSON outfit dialogue is disabled in this AI-only build. Keeping this outfit notice pending until the player cancels by moving away.", LogLevel.Warn);
-            return false;
+            return spouseDialogueController.TryQueueOwnAiDialogue(
+                npc,
+                npcToQueue => TryShowOwnAiOutfitDialogue(npcToQueue, isSpouseDialogue: true, clearExistingDialogue: false),
+                Monitor);
         }
 
         private void RestoreSpouseDialogueBackupIfPending()
@@ -653,5 +486,11 @@ namespace OutfitReactions
 
     }
 }
+
+
+
+
+
+
 
 

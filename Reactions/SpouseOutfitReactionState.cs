@@ -226,6 +226,132 @@ namespace OutfitReactions
         }
     }
 
+    /// <summary>Owns the optional pathing strategy used when a spouse can approach for an outfit reaction.</summary>
+    internal sealed class SpouseOutfitApproachController
+    {
+        public bool ShouldApproach(NPC npc)
+        {
+            // Keep the current kiss-compatible behavior: notices use movementPause and never
+            // replace the spouse's controller or schedule with a custom approach path.
+            return false;
+        }
+
+        public bool TryStartPath(NPC npc, IMonitor monitor, bool debugLog)
+        {
+            if (npc == null || Game1.player == null || Game1.currentLocation == null)
+                return false;
+
+            Point playerTile = Game1.player.TilePoint;
+            Point npcTile = npc.TilePoint;
+            int offsetX = Math.Sign(npcTile.X - playerTile.X);
+            int offsetY = Math.Sign(npcTile.Y - playerTile.Y);
+            List<Point> candidates = new();
+
+            if (Math.Abs(npcTile.X - playerTile.X) > Math.Abs(npcTile.Y - playerTile.Y))
+            {
+                if (offsetX != 0) candidates.Add(new Point(playerTile.X + offsetX, playerTile.Y));
+                if (offsetY != 0) candidates.Add(new Point(playerTile.X, playerTile.Y + offsetY));
+            }
+            else
+            {
+                if (offsetY != 0) candidates.Add(new Point(playerTile.X, playerTile.Y + offsetY));
+                if (offsetX != 0) candidates.Add(new Point(playerTile.X + offsetX, playerTile.Y));
+            }
+
+            candidates.Add(new Point(playerTile.X + 1, playerTile.Y));
+            candidates.Add(new Point(playerTile.X - 1, playerTile.Y));
+            candidates.Add(new Point(playerTile.X, playerTile.Y + 1));
+            candidates.Add(new Point(playerTile.X, playerTile.Y - 1));
+            candidates.Add(new Point(playerTile.X + 1, playerTile.Y + 1));
+            candidates.Add(new Point(playerTile.X - 1, playerTile.Y + 1));
+            candidates.Add(new Point(playerTile.X + 1, playerTile.Y - 1));
+            candidates.Add(new Point(playerTile.X - 1, playerTile.Y - 1));
+
+            foreach (Point target in candidates.Distinct().OrderBy(tile => Math.Abs(tile.X - npcTile.X) + Math.Abs(tile.Y - npcTile.Y)))
+            {
+                if (target == npcTile || !Game1.currentLocation.isTilePassable(new xTile.Dimensions.Location(target.X, target.Y), Game1.viewport))
+                    continue;
+
+                try
+                {
+                    var path = new PathFindController(npc, Game1.currentLocation, target, -1, false);
+                    if (path?.pathToEndPoint != null && path.pathToEndPoint.Count > 0)
+                    {
+                        npc.controller = path;
+                        if (debugLog) monitor.Log($"[CLOTHES SPOUSE] Started farmhouse approach path for {npc.Name} to {target} ({path.pathToEndPoint.Count} steps).", LogLevel.Info);
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (debugLog) monitor.Log($"[CLOTHES SPOUSE] Failed approach path candidate {target} for {npc.Name}: {ex.Message}", LogLevel.Info);
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Owns the soft notice pause and pending-dialogue bubble for a spouse reaction.</summary>
+    internal sealed class SpouseOutfitNoticeController
+    {
+        public void UpdateHold(SpouseProximityState state, NPC npc, Farmer player, float distance, Action<NPC> captureSpecialAction)
+        {
+            if (npc == null || player == null || npc.currentLocation != player.currentLocation)
+            {
+                state.ClearNotice();
+                return;
+            }
+
+            state.NoticePauseActive = SpouseOutfitReactionController.ResolveNoticePause(
+                state.NoticePauseActive,
+                isSameLocation: true,
+                distance);
+
+            if (!state.NoticePauseActive)
+            {
+                state.NoticeHoldPoseApplied = false;
+                return;
+            }
+
+            captureSpecialAction(npc);
+            if (npc.movementPause < 6)
+                npc.movementPause = 6;
+
+            // Do not cancel an animation supplied by another mod every tick (such as a kiss).
+            if (state.NoticeHoldPoseApplied)
+                return;
+
+            npc.Sprite?.StopAnimation();
+            npc.faceGeneralDirection(player.getStandingPosition(), 0, false, false);
+            state.NoticeHoldPoseApplied = true;
+        }
+
+        public bool TryShowPendingBubble(
+            SpouseProximityState state,
+            NPC npc,
+            Farmer player,
+            bool force,
+            bool alreadyEmoted,
+            float noticeDistance,
+            bool interactionBlocked,
+            Func<NPC, float> distanceToPlayer)
+        {
+            if (npc == null || player == null || npc.currentLocation != player.currentLocation || interactionBlocked)
+                return false;
+
+            if (distanceToPlayer(npc) > noticeDistance)
+                return false;
+
+            if (!SpouseOutfitReactionController.CanShowPendingBubble(force, alreadyEmoted, state.PendingBubbleTimer))
+                return false;
+
+            npc.doEmote(40);
+            state.PendingBubbleTimer = SpouseOutfitReactionController.GetPendingBubbleCooldown(force);
+            return true;
+        }
+    }
+
     /// <summary>Dialogue and friendship state temporarily replaced by a spouse outfit reaction.</summary>
     internal sealed class SpouseDialogueSnapshot
     {
@@ -309,6 +435,18 @@ namespace OutfitReactions
         }
 
         public void Clear() => Snapshot.Clear();
+
+        public bool TryQueueOwnAiDialogue(NPC npc, Func<NPC, bool> tryShowOwnAiDialogue, IMonitor monitor)
+        {
+            if (npc == null)
+                return false;
+
+            if (tryShowOwnAiDialogue(npc))
+                return true;
+
+            monitor.Log($" No AI outfit dialogue was queued for {npc.Name}. Manual JSON outfit dialogue is disabled in this AI-only build. Keeping this outfit notice pending until the player cancels by moving away.", LogLevel.Warn);
+            return false;
+        }
 
         private void RestoreTalkedToToday(NPC npc, Farmer player, IMonitor monitor, bool debugLog)
         {

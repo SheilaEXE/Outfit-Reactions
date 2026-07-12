@@ -32,6 +32,8 @@ namespace OutfitReactions
         // Captures the original route's destination, then recalculates a path after dialogue.
         // This preserves the NPC's schedule without replaying obsolete path steps.
         private readonly SpouseRouteController spouseRouteController = new();
+        private readonly SpouseOutfitApproachController spouseOutfitApproachController = new();
+        private readonly SpouseOutfitNoticeController spouseOutfitNoticeController = new();
 
         // The notice pause and post-dialogue linger use movementPause only, leaving the
         // spouse's controller and custom schedule intact whenever possible.
