@@ -424,4 +424,43 @@ namespace OutfitReactions
 
         public static int GetPendingBubbleCooldown(bool force) => force ? 180 : 240;
     }
+
+    /// <summary>
+    /// Coordinates the close-partner outfit-reaction lifecycle. It keeps SMAPI event handling
+    /// in ModEntry while making the reaction flow's entry points explicit and testable.
+    /// </summary>
+    internal sealed class SpouseOutfitReactionCoordinator
+    {
+        private readonly Action<NPC> updateActivePartner;
+        private readonly Func<NPC, bool> shouldStartReaction;
+        private readonly Action<bool> resetReaction;
+        private readonly Action updatePostOutfitLinger;
+        private readonly Func<NPC, bool> handleInteraction;
+
+        public SpouseOutfitReactionCoordinator(
+            Action<NPC> updateActivePartner,
+            Func<NPC, bool> shouldStartReaction,
+            Action<bool> resetReaction,
+            Action updatePostOutfitLinger,
+            Func<NPC, bool> handleInteraction)
+        {
+            this.updateActivePartner = updateActivePartner;
+            this.shouldStartReaction = shouldStartReaction;
+            this.resetReaction = resetReaction;
+            this.updatePostOutfitLinger = updatePostOutfitLinger;
+            this.handleInteraction = handleInteraction;
+        }
+
+        public void Update(NPC activePartner, NPC spouse, bool hasPendingOutfitChange)
+        {
+            if (activePartner != null)
+                updateActivePartner(activePartner);
+            else if (hasPendingOutfitChange && !shouldStartReaction(spouse))
+                resetReaction(true);
+
+            updatePostOutfitLinger();
+        }
+
+        public bool TryHandleInteraction(NPC npc) => handleInteraction(npc);
+    }
 }

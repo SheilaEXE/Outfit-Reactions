@@ -11,10 +11,7 @@ namespace OutfitReactions
 {
     public sealed partial class ModEntry
     {
-        // ── Spouse/NPC clothes reaction flow — approach, animation, dialogue, reset ──
-
-        private static readonly FieldInfo _directionsToNewLocationField =
-            typeof(NPC).GetField("directionsToNewLocation", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        // â”€â”€ Spouse/NPC clothes reaction flow â€” approach, animation, dialogue, reset â”€â”€
 
         private bool ShouldStartClothesReaction(NPC npc = null)
         {
@@ -34,7 +31,7 @@ namespace OutfitReactions
             // because a special item worn as a hat also triggers VanillaHatRemoved/VanillaHatChanged.
             // The two checks are chained with else-if: once the special-item check has decided this
             // is (or isn't) a witnessed special-item removal, the generic vanilla-hat check must NOT
-            // run afterwards — it uses HatMemoryService, which knows nothing about special items,
+            // run afterwards â€” it uses HatMemoryService, which knows nothing about special items,
             // and would otherwise re-block a reaction the special-item check just approved.
             if (npc != null && IsSpecialItemRemovalOnlyNotice(effectiveChangeInfo))
             {
@@ -188,7 +185,7 @@ namespace OutfitReactions
                 // falls through to here. This must NOT clear the shared changedClothes/
                 // lastFashionSenseChangeInfo state: those are read by HasNoticeableCurrentFashionSenseAppearance(),
                 // which gates every OTHER (non-spouse) NPC's ability to notice this same change. Sebastian
-                // being done with his own reaction doesn't mean nobody else has seen it yet — only his
+                // being done with his own reaction doesn't mean nobody else has seen it yet â€” only his
                 // own per-NPC state (isReactingToClothes, clothesFirstNoticeDone, etc.) needs resetting here.
                 ResetClothesState(false);
                 return;
@@ -274,7 +271,7 @@ namespace OutfitReactions
                 if (npc.currentLocation != Game1.player.currentLocation || distance > Config.OutfitCancelDistance)
                 {
                     // Cancelling Sebastian's own in-progress reaction (player walked away) must not
-                    // wipe the shared changedClothes/lastFashionSenseChangeInfo state either — same
+                    // wipe the shared changedClothes/lastFashionSenseChangeInfo state either â€” same
                     // reasoning as the other ResetClothesState(true) call sites above: it would block
                     // every other NPC from ever noticing this same outfit change.
                     ResetClothesState(false);
@@ -344,7 +341,7 @@ namespace OutfitReactions
             if (npc.movementPause < 6)
                 npc.movementPause = 6;
 
-            // Only strike the "looking at the farmer" pose once, on the tick the hold starts —
+            // Only strike the "looking at the farmer" pose once, on the tick the hold starts â€”
             // not every tick. Other mods (e.g. a kiss mod) may animate this same NPC while the
             // hold is active; re-applying StopAnimation()/faceGeneralDirection() every tick would
             // immediately cancel that animation back to idle right after it's set, making the NPC
@@ -500,113 +497,6 @@ namespace OutfitReactions
         }
 
         // Kept temporarily while the inactive legacy route block is removed in a later cleanup.
-        private SchedulePathDescription GetNpcDirections(NPC npc)
-        {
-            try { return _directionsToNewLocationField?.GetValue(npc) as SchedulePathDescription; }
-            catch { return null; }
-        }
-
-        private void SetNpcDirections(NPC npc, SchedulePathDescription value)
-        {
-            try { _directionsToNewLocationField?.SetValue(npc, value); }
-            catch { }
-        }
-
-        private void StopNpcForClothesReaction(NPC npc)
-        {
-            if (npc == null)
-                return;
-
-            // Capture on the FIRST call only — that's the real pre-interruption state.
-            // We save only the FINAL destination tile from the active controller, plus the end
-            // behavior. On restore we recompute a fresh path from the NPC's CURRENT position
-            // to that destination, so it walks straight there from wherever it ends up after
-            // the dialogue — no replaying old tiles, no detours to the previous position.
-            if (spouseRouteController.Snapshot.FinalDestination == null)
-            {
-                try
-                {
-                    if (npc.controller != null)
-                    {
-                        var path = npc.controller.pathToEndPoint;
-                        if (path != null && path.Count > 0)
-                        {
-                            // The bottom of the stack is the final tile of the path on this map.
-                            // (Stack enumeration goes top-to-bottom, so Last() = bottom = final.)
-                            Point finalTile = path.Last();
-                            spouseRouteController.Snapshot.FinalDestination = finalTile;
-                            spouseRouteController.Snapshot.EndBehavior = npc.controller.endBehaviorFunction;
-                            spouseRouteController.Snapshot.FinalFacingDirection = npc.controller.finalFacingDirection;
-                            spouseRouteController.Snapshot.Directions = GetNpcDirections(npc);
-                            if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Captured destination {finalTile} for {npc.Name}.", LogLevel.Info);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Could not capture destination for {npc.Name}: {ex.Message}", LogLevel.Info);
-                }
-            }
-
-            npc.controller = null;
-            npc.Halt();
-            npc.Sprite.StopAnimation();
-        }
-
-        private void RestoreSpouseControllerAfterOutfit(NPC npc)
-        {
-            if (npc == null || spouseRouteController.Snapshot.FinalDestination == null)
-            {
-                // Nothing to restore — let the schedule decide what to do next.
-                npc?.checkSchedule(Game1.timeOfDay);
-                spouseRouteController.Clear();
-                return;
-            }
-
-            try
-            {
-                Point destination = spouseRouteController.Snapshot.FinalDestination.Value;
-
-                // Recompute a fresh path from the NPC's CURRENT position to the saved destination.
-                // This is the key: we don't replay the old stack of tiles (which would make the NPC
-                // walk back to where it was when first interrupted). We just ask the game to
-                // pathfind from where the NPC is RIGHT NOW directly to where it was heading.
-                var restoredController = new PathFindController(
-                    npc,
-                    Utility.getGameLocationOfCharacter(npc),
-                    destination,
-                    spouseRouteController.Snapshot.FinalFacingDirection,
-                    spouseRouteController.Snapshot.EndBehavior);
-
-                if (restoredController.pathToEndPoint != null && restoredController.pathToEndPoint.Count > 0)
-                {
-                    restoredController.endBehaviorFunction = spouseRouteController.Snapshot.EndBehavior;
-                    npc.controller = restoredController;
-
-                    // Keep directionsToNewLocation in sync so cross-map warp logic still works.
-                    if (spouseRouteController.Snapshot.Directions != null)
-                        SetNpcDirections(npc, spouseRouteController.Snapshot.Directions);
-
-                    if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Restored {npc.Name}'s path to {destination} ({restoredController.pathToEndPoint.Count} steps).", LogLevel.Info);
-                }
-                else
-                {
-                    // Couldn't pathfind to the destination (tile blocked, etc.) — let schedule handle it.
-                    if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Could not pathfind to {destination} for {npc.Name} — falling back to checkSchedule.", LogLevel.Info);
-                    npc.checkSchedule(Game1.timeOfDay);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Error restoring path for {npc.Name}: {ex.Message} — falling back to checkSchedule.", LogLevel.Info);
-                npc.checkSchedule(Game1.timeOfDay);
-            }
-            finally
-            {
-                spouseRouteController.Clear();
-            }
-        }
-
         private int TryGetAnimationFrameIndex(FarmerSprite.AnimationFrame frame)
         {
             try
@@ -686,81 +576,6 @@ namespace OutfitReactions
             if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Saved special animation for {npc.Name} before outfit reaction. frame={spouseSpecialActionController.Current.CurrentFrame} anim={(animation != null ? animation.Count : 0)}", LogLevel.Info);
         }
 
-        private bool TryRestoreSpouseOutfitSpecialAction(bool force = false)
-        {
-            SpouseOutfitSpecialActionSnapshot snapshot = spouseSpecialActionController.Current;
-            if (snapshot == null || snapshot.Npc == null)
-                return false;
-
-            NPC npc = snapshot.Npc;
-            if (npc.Sprite == null || npc.currentLocation == null || npc.currentLocation != snapshot.Location)
-            {
-                spouseSpecialActionController.Clear();
-                return false;
-            }
-
-            if (!force)
-            {
-                if (Game1.activeClickableMenu != null || Game1.dialogueUp)
-                    return false;
-
-                if (Game1.player != null && npc.currentLocation == Game1.player.currentLocation && DistanceToPlayer(npc) < OutfitSpecialActionRestoreDistance)
-                    return false;
-            }
-
-            try
-            {
-                npc.FacingDirection = snapshot.FacingDirection;
-                npc.flip = snapshot.Flip;
-                npc.movementPause = snapshot.MovementPause;
-                npc.addedSpeed = snapshot.AddedSpeed;
-
-                if (snapshot.CurrentAnimation != null && snapshot.CurrentAnimation.Count > 0)
-                {
-                    npc.Sprite.CurrentAnimation = new List<FarmerSprite.AnimationFrame>(snapshot.CurrentAnimation);
-                    TrySetSpritePrivateField(npc.Sprite, "currentAnimationIndex", 0);
-                    TrySetSpritePrivateField(npc.Sprite, "timer", 0);
-                }
-                else
-                {
-                    npc.Sprite.StopAnimation();
-                    npc.Sprite.ClearAnimation();
-                    npc.Sprite.CurrentAnimation = null;
-                }
-
-                npc.Sprite.CurrentFrame = snapshot.CurrentFrame;
-                npc.Sprite.UpdateSourceRect();
-
-                if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Restored special animation for {npc.Name} after outfit reaction. frame={snapshot.CurrentFrame} anim={(snapshot.CurrentAnimation != null ? snapshot.CurrentAnimation.Count : 0)}", LogLevel.Info);
-
-                spouseSpecialActionController.Clear();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Monitor.Log($"[CLOTHES SPOUSE] Could not restore special animation for {npc?.Name ?? "null"}: {ex.Message}", LogLevel.Warn);
-                spouseSpecialActionController.Clear();
-                return false;
-            }
-        }
-
-        private void TrySetSpritePrivateField(object target, string fieldName, object value)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                    field.SetValue(target, value);
-            }
-            catch
-            {
-                // Optional internal field.
-            }
-        }
-
         private int GetNpcIdleFrameForDirection(int facingDirection)
         {
             switch (facingDirection)
@@ -838,3 +653,5 @@ namespace OutfitReactions
 
     }
 }
+
+

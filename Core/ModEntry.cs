@@ -294,6 +294,11 @@ namespace OutfitReactions
 
         internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
         {
+            return SpouseOutfitReactionCoordinator.TryHandleInteraction(npc);
+        }
+
+        private bool TryHandleOutfitDialogueOrBlockNpcInteractionCore(NPC npc)
+        {
             if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
                 return false;
 
@@ -796,16 +801,10 @@ namespace OutfitReactions
             // is still excluded from the other-NPC system below.
             NPC activePartner = spouse ?? datingNpc;
 
-            if (activePartner != null)
-            {
-                UpdateClothesReactionSystem(activePartner);
-            }
-            else if (changedClothes && lastFashionSenseChangeInfo != null && !ShouldStartClothesReaction(spouse))
-            {
-                ResetClothesState(true);
-            }
-
-            UpdateSpousePostOutfitLinger();
+            SpouseOutfitReactionCoordinator.Update(
+                activePartner,
+                spouse,
+                changedClothes && lastFashionSenseChangeInfo != null);
 
             UpdatePendingOwnAiGenerations();
             UpdatePendingOwnAiPlayerReplyGenerations();

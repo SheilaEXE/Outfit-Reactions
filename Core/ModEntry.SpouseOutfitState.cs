@@ -27,6 +27,7 @@ namespace OutfitReactions
         private bool outfitSequenceActive;
 
         private readonly SpouseDialogueController spouseDialogueController = new();
+        private SpouseOutfitReactionCoordinator spouseOutfitReactionCoordinator;
 
         // Captures the original route's destination, then recalculates a path after dialogue.
         // This preserves the NPC's schedule without replaying obsolete path steps.
@@ -40,6 +41,14 @@ namespace OutfitReactions
 
         private const float SpouseOutfitNoticePauseDistance = SpouseProximityState.NoticePauseDistance;
         private const float SpouseOutfitNoticeReleaseDistance = SpouseProximityState.NoticeReleaseDistance;
+
+        private SpouseOutfitReactionCoordinator SpouseOutfitReactionCoordinator =>
+            spouseOutfitReactionCoordinator ??= new SpouseOutfitReactionCoordinator(
+                UpdateClothesReactionSystem,
+                ShouldStartClothesReaction,
+                ResetClothesState,
+                UpdateSpousePostOutfitLinger,
+                TryHandleOutfitDialogueOrBlockNpcInteractionCore);
 
     }
 }

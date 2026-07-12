@@ -889,7 +889,7 @@ namespace OutfitReactions
 
             if (sameLocation)
             {
-                // Do NOT call StopNpcForClothesReaction here. After the dialogue, we
+                // Do NOT stop the route here. After the dialogue, we
                 // only want the kiss-mod-style linger: pause with movementPause and look
                 // at the farmer. Deleting the controller here can break outdoor schedules.
                 CaptureSpouseOutfitSpecialActionBeforeOutfit(npc);
