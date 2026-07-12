@@ -1,10 +1,8 @@
-using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewValley;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 namespace OutfitReactions
 {
@@ -25,6 +23,8 @@ namespace OutfitReactions
         private readonly Action<NPC> markCurrentOutfitAsNoticed;
         private readonly Func<NPC, bool> canNpcReactToOutfit;
         private readonly Func<NPC, bool> hasNpcSeenCurrentVisualBefore;
+        private readonly NpcSpecialActionController specialActionController;
+        private readonly NpcPeekingController peekingController;
         private readonly Random random = new();
         // The discovery scan (foreach over every NPC in the location, checking distance/facing/
         // line-of-sight for new notices) is the expensive part of Update(). It's throttled to run
@@ -46,17 +46,6 @@ namespace OutfitReactions
         private readonly HashSet<string> reactedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PendingPrompt> pendingPrompts = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> rollCooldowns = new(StringComparer.OrdinalIgnoreCase);
-
-        private readonly Dictionary<string, SpyingState> spyingNpcs = new(StringComparer.OrdinalIgnoreCase);
-
-        // Tracks how many ticks ago each NPC was last seen actually moving. npc.isMoving() flickers
-        // false for a tick at tile boundaries/turns, so we smooth it: an NPC counts as "walking" if
-        // they moved within the last few ticks. A genuinely standing NPC stops moving entirely and
-        // this counter climbs past the threshold, releasing them to the standing-reaction path.
-        private readonly Dictionary<string, int> ticksSinceLastMoving = new(StringComparer.OrdinalIgnoreCase);
-        private const int WalkingGraceTicks = 30; // ~0.5s at 60fps before a paused NPC counts as standing
-        // ─────────────────────────────────────────────────────────────────────────────
-
 
         public OtherNpcClothesReactionSystem(
             IMonitor monitor,
@@ -80,6 +69,8 @@ namespace OutfitReactions
             this.markCurrentOutfitAsNoticed = markCurrentOutfitAsNoticed;
             this.canNpcReactToOutfit = canNpcReactToOutfit;
             this.hasNpcSeenCurrentVisualBefore = hasNpcSeenCurrentVisualBefore;
+            this.specialActionController = new NpcSpecialActionController(monitor);
+            this.peekingController = new NpcPeekingController(random, pendingPrompts, ArmPendingReactionForSpy);
         }
 
         public void Reset(bool clearPrompts = true)
@@ -90,8 +81,7 @@ namespace OutfitReactions
             reactedNpcsThisOutfit.Clear();
             pendingPrompts.Clear();
             rollCooldowns.Clear();
-            spyingNpcs.Clear();
-            ticksSinceLastMoving.Clear();
+            peekingController.Clear();
         }
 
         public void NotifyOutfitChanged()
@@ -101,8 +91,7 @@ namespace OutfitReactions
             reactedNpcsThisOutfit.Clear();
             pendingPrompts.Clear();
             rollCooldowns.Clear();
-            spyingNpcs.Clear();
-            ticksSinceLastMoving.Clear();
+            peekingController.Clear();
             // Force the next Update() call to run the discovery scan immediately instead of
             // waiting out the throttle interval on top of the 200ms delay already applied before
             // this is called.
@@ -141,8 +130,8 @@ namespace OutfitReactions
             float cancelDistance = Math.Max(noticeDistance, config.OutfitCancelDistance);
 
             // Tick the peeping mechanic for all NPCs currently mid-spy. This only touches NPCs
-            // already in spyingNpcs (a small set), so it stays smooth running every tick.
-            UpdateSpyingNpcs(noticeDistance, cancelDistance);
+            // already in the peeking controller (a small set), so it stays smooth every tick.
+            peekingController.Update(noticeDistance, cancelDistance);
 
             int newVisualChance = Math.Clamp(config.NpcOutfitReactionChance, 0, 100);
             int repeatedVisualChance = Math.Clamp(config.NpcRepeatedVisualNoticeChance, 0, 100);
@@ -171,18 +160,8 @@ namespace OutfitReactions
                 // walking NPC. We smooth it with a small grace window: track how long since they last
                 // actually moved, and treat them as walking until they've been still for a while.
                 // (NPCs mid-peek are paused on purpose and handled separately, so skip their tracking.)
-                if (!spyingNpcs.ContainsKey(npc.Name))
-                {
-                    if (npc.isMoving())
-                        ticksSinceLastMoving[npc.Name] = 0;
-                    else if (ticksSinceLastMoving.TryGetValue(npc.Name, out int t))
-                        ticksSinceLastMoving[npc.Name] = t + 1;
-                    else
-                        ticksSinceLastMoving[npc.Name] = WalkingGraceTicks + 1; // unknown = treat as standing
-                }
-
-                bool npcIsWalking = ticksSinceLastMoving.TryGetValue(npc.Name, out int sinceMoved)
-                    && sinceMoved < WalkingGraceTicks;
+                peekingController.UpdateMovementTracking(npc);
+                bool npcIsWalking = peekingController.IsRecentlyMoving(npc.Name);
 
                 // ── Peeping mechanic (NPC is walking) ────────────────────────────
                 // While an NPC is actively moving through their schedule and the player
@@ -194,32 +173,21 @@ namespace OutfitReactions
                 // the vast majority of ticks, so testing it before HasLineOfSightToPlayer avoids
                 // running the tile-by-tile raycast for every nearby walking NPC on every tick.
                 if (npcIsWalking
-                    && !spyingNpcs.ContainsKey(npc.Name)
+                    && !peekingController.Contains(npc.Name)
                     && !reactedNpcsThisOutfit.Contains(npc.Name)
                     && DistanceToPlayer(npc) <= noticeDistance
                     && random.Next(1000) < 3   // ~0.3% per tick ≈ one notice every ~5-7s nearby
                     && HasLineOfSightToPlayer(npc))
                 {
-                    spyingNpcs[npc.Name] = new SpyingState
-                    {
-                        OriginalFacingDirection = npc.FacingDirection,
-                        PeekGraceTimer = 30  // ~0.5s before the player can "catch" them
-                    };
-                    // Snap the sprite to idle so the NPC doesn't freeze mid-stride.
-                    if (npc.Sprite != null)
-                    {
-                        npc.Sprite.StopAnimation();
-                        npc.Sprite.CurrentFrame = GetNpcIdleFrameForDirection(npc.FacingDirection);
-                        npc.Sprite.UpdateSourceRect();
-                    }
+                    peekingController.Begin(npc);
                     // Peeking counts as noticing: arm the pending reaction (no bubble/pause here —
-                    // the peeking visuals are driven by UpdateSpyingNpcs) so a click still reacts.
+                    // the peeking visuals are driven by NpcPeekingController) so a click still reacts.
                     ArmPendingReactionForSpy(npc);
                 }
 
-                // NPCs already in the spying state are handled by UpdateSpyingNpcs;
+                // NPCs already in the spying state are handled by NpcPeekingController;
                 // skip the normal standing-reaction logic while they're peeking.
-                if (spyingNpcs.ContainsKey(npc.Name))
+                if (peekingController.Contains(npc.Name))
                     continue;
                 // ─────────────────────────────────────────────────────────────────
 
@@ -313,7 +281,7 @@ namespace OutfitReactions
             reactedNpcsThisOutfit.Add(npc.Name);
             pendingPrompts[npc.Name] = pending;
             // If this NPC was peeping, end the spy state cleanly — the full reaction takes over.
-            spyingNpcs.Remove(npc.Name);
+            peekingController.Remove(npc.Name);
 
             ShowPendingDialogueBubbleIfNeeded(npc, pending, config, force: true);
             UpdateNpcLookState(npc, pending, config);
@@ -326,7 +294,7 @@ namespace OutfitReactions
         /// <summary>
         /// Arms a pending outfit reaction for an NPC that just started peeking while walking, WITHOUT
         /// the normal notice bubble or movement pause. The peeking visuals (stop, turn, glance away)
-        /// are driven entirely by <see cref="UpdateSpyingNpcs"/>; this only records the pending state
+        /// are driven entirely by NpcPeekingController; this only records the pending state
         /// so that if the player walks over and clicks, the full reaction plays just like a standing
         /// notice. The reaction is marked as already-noticed for this outfit to avoid double-noticing.
         /// </summary>
@@ -349,7 +317,7 @@ namespace OutfitReactions
             reactedNpcsThisOutfit.Add(npc.Name);
             pendingPrompts[npc.Name] = pending;
             // No ShowPendingDialogueBubbleIfNeeded / UpdateNpcLookState here on purpose: while peeking,
-            // the NPC's stop/turn/glance is controlled by UpdateSpyingNpcs, not the standing-notice path.
+            // the NPC's stop/turn/glance is controlled by NpcPeekingController, not the standing-notice path.
         }
 
         private bool TryQueuePromptAfterNotice(NPC npc, PendingPrompt pending)
@@ -418,11 +386,11 @@ namespace OutfitReactions
 
             // The player engaged this NPC — the peeking "game" is over; the full reaction takes over.
             // First carry over whether they were ever caught peeking, so the AI can flavor the line.
-            if (spyingNpcs.TryGetValue(npc.Name, out SpyingState spyState) && spyState != null)
+            if (peekingController.TryGetState(npc.Name, out SpyingState spyState) && spyState != null)
             {
                 pending.WasCaughtPeeking = spyState.WasEverCaught;
             }
-            spyingNpcs.Remove(npc.Name);
+            peekingController.Remove(npc.Name);
 
             if (pending.NoticeDelayTimer > 0)
                 pending.NoticeDelayTimer = 0;
@@ -941,7 +909,7 @@ namespace OutfitReactions
 
             if (pending.NoticePauseActive)
             {
-                CaptureNpcSpecialActionBeforeOutfit(npc, pending);
+                specialActionController.Capture(npc, pending);
 
                 if (npc.movementPause < 6)
                     npc.movementPause = 6;
@@ -960,7 +928,7 @@ namespace OutfitReactions
             // an explicit restore here they're left facing the player indefinitely.
             if (pending.WasLookingAtPlayer)
             {
-                bool restoredSpecialAction = TryRestoreNpcSpecialActionAfterOutfit(npc, pending, force: true);
+                bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
                 if (!restoredSpecialAction)
                     FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
             }
@@ -1105,7 +1073,7 @@ namespace OutfitReactions
 
             if (!shouldFinish)
             {
-                CaptureNpcSpecialActionBeforeOutfit(npc, pending);
+                specialActionController.Capture(npc, pending);
 
                 if (npc.movementPause < 6)
                     npc.movementPause = 6;
@@ -1115,7 +1083,7 @@ namespace OutfitReactions
                 return;
             }
 
-            bool restoredSpecialAction = TryRestoreNpcSpecialActionAfterOutfit(npc, pending, force: true);
+            bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
             if (!restoredSpecialAction)
                 npc.movementPause = 0;
 
@@ -1232,7 +1200,7 @@ namespace OutfitReactions
 
             rollCooldowns[npc.Name] = CancelledReactionCooldownTicks;
 
-            bool restoredSpecialAction = TryRestoreNpcSpecialActionAfterOutfit(npc, pending, force: true);
+            bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
 
             if (!restoredSpecialAction && pending.WasLookingAtPlayer)
                 FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
@@ -1260,7 +1228,7 @@ namespace OutfitReactions
                     RestoreTalkedToTodayIfUnread(npc, pending);
                 }
 
-                bool restoredSpecialAction = TryRestoreNpcSpecialActionAfterOutfit(npc, pending, force: true);
+                bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
 
                 if (!restoredSpecialAction && pending.WasLookingAtPlayer)
                     FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
@@ -1283,637 +1251,35 @@ namespace OutfitReactions
             }
         }
 
-        private int TryGetAnimationFrameIndex(FarmerSprite.AnimationFrame frame)
-        {
-            try
-            {
-                object boxed = frame;
-                FieldInfo field = boxed.GetType().GetField("frame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null && field.GetValue(boxed) is int fieldValue)
-                    return fieldValue;
-
-                PropertyInfo property = boxed.GetType().GetProperty("Frame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (property != null && property.GetValue(boxed) is int propertyValue)
-                    return propertyValue;
-            }
-            catch
-            {
-                // Internal animation frame details are optional; CurrentFrame still covers the common cases.
-            }
-
-            return -1;
-        }
-
-        private bool AnimationLooksLikeSpecialAction(List<FarmerSprite.AnimationFrame> animation)
-        {
-            if (animation == null || animation.Count <= 0)
-                return false;
-
-            foreach (FarmerSprite.AnimationFrame frame in animation)
-            {
-                int frameIndex = TryGetAnimationFrameIndex(frame);
-                if (frameIndex >= 16)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private void CaptureNpcSpecialActionBeforeOutfit(NPC npc, PendingPrompt pending)
-        {
-            if (npc == null || pending == null || npc.Sprite == null || npc.currentLocation == null)
-                return;
-
-            if (pending.SpecialActionSnapshot != null)
-                return;
-
-            // Walking schedules should keep their controller/route. Only save scene-style animations.
-            if (npc.isMoving())
-                return;
-
-            List<FarmerSprite.AnimationFrame> animation = null;
-            if (npc.Sprite.CurrentAnimation != null && npc.Sprite.CurrentAnimation.Count > 0)
-                animation = new List<FarmerSprite.AnimationFrame>(npc.Sprite.CurrentAnimation);
-
-            bool hasSpecialAnimation = animation != null && animation.Count > 0;
-            bool hasSpecialStaticFrame = npc.Sprite.CurrentFrame >= 16;
-
-            if (!hasSpecialAnimation && !hasSpecialStaticFrame)
-                return;
-
-            pending.SpecialActionSnapshot = new NpcOutfitSpecialActionSnapshot
-            {
-                Npc = npc,
-                Location = npc.currentLocation,
-                FacingDirection = npc.FacingDirection,
-                CurrentFrame = npc.Sprite.CurrentFrame,
-                Flip = npc.flip,
-                MovementPause = (int)npc.movementPause,
-                AddedSpeed = (int)npc.addedSpeed,
-                CurrentAnimation = animation
-            };
-
-            npc.Sprite.StopAnimation();
-            npc.Sprite.ClearAnimation();
-            npc.Sprite.CurrentAnimation = null;
-            npc.flip = false;
-            npc.Sprite.CurrentFrame = GetNpcIdleFrameForDirection(npc.FacingDirection);
-
-            // FISHING FIX, SCOPED: only touch sprite dimensions / NetBool / behavior name when
-            // this NPC's end-of-route behavior genuinely contains "fish" (matches vanilla's own
-            // internal naming, e.g. Willy's is "Willy_fish" — not just the bare word "fish"), so
-            // every other special-pose NPC (sitting, reading, playing an instrument, etc.) keeps
-            // using exactly the plain restore path this system already used successfully before.
-            // Without this scoping, re-invoking doMiddleAnimation on a non-fishing NPC would
-            // reconstruct whatever behavior they're actually scheduled for elsewhere in the day
-            // (sleep, writing in a journal, etc.), completely unrelated to the pose they were
-            // interrupted from.
-            string endOfRouteBehaviorName = TryGetNetStringField(npc, "endOfRouteBehaviorName");
-            bool isFishingBehavior = !string.IsNullOrEmpty(endOfRouteBehaviorName)
-                && endOfRouteBehaviorName.IndexOf("fish", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            if (isFishingBehavior)
-            {
-                // extendSourceRect(...) inflates the sprite's sourceRect to cover two tilesheet
-                // rows (body + rod) and sets ignoreSourceRectUpdates = true while doing it. Reset
-                // these before the CurrentFrame set above takes effect visually, so
-                // UpdateSourceRect() actually recomputes with normal dimensions instead of
-                // silently no-op'ing (it early-returns while that flag is set).
-                pending.SpecialActionSnapshot.SavedIgnoreSourceRectUpdates = TryGetPrivateField(npc.Sprite, "ignoreSourceRectUpdates") as bool? ?? false;
-                pending.SpecialActionSnapshot.SavedSpriteWidth = TryGetPrivateField(npc.Sprite, "spriteWidth") as int? ?? npc.Sprite.SpriteWidth;
-                pending.SpecialActionSnapshot.SavedTempSpriteHeight = TryGetPrivateField(npc.Sprite, "tempSpriteHeight") as int? ?? -1;
-                pending.SpecialActionSnapshot.HasSavedSpriteDimensions = true;
-
-                TrySetSpritePrivateField(npc.Sprite, "ignoreSourceRectUpdates", false);
-                TrySetSpritePrivateField(npc.Sprite, "spriteWidth", 16);
-                TrySetSpritePrivateField(npc.Sprite, "tempSpriteHeight", -1); // vanilla's own sentinel for "use normal spriteHeight"
-
-                pending.SpecialActionSnapshot.SavedDoingEndOfRouteAnimation = TryGetNetBoolField(npc, "doingEndOfRouteAnimation");
-                pending.SpecialActionSnapshot.SavedCurrentlyDoingEndOfRouteAnimation = TryGetPrivateField(npc, "currentlyDoingEndOfRouteAnimation") as bool?;
-                pending.SpecialActionSnapshot.SavedStartedEndOfRouteBehavior = endOfRouteBehaviorName;
-
-                TrySetNetBoolField(npc, "doingEndOfRouteAnimation", false);
-                TrySetSpritePrivateField(npc, "currentlyDoingEndOfRouteAnimation", false);
-
-                // The fishing rod is drawn as a separate layer independent of the main sprite
-                // frame, and "drawOffset" shifts where on screen the NPC is drawn — clearing both
-                // is what stops the mismatched/shifted "ghost" during the hold.
-                pending.SpecialActionSnapshot.SavedYOffset = TryGetPrivateField(npc, "yOffset") as float? ?? 0f;
-                pending.SpecialActionSnapshot.SavedLoadedEndOfRouteBehavior = TryGetPrivateField(npc, "loadedEndOfRouteBehavior") as string;
-                pending.SpecialActionSnapshot.SavedDrawOffset = TryGetPrivateField(npc, "drawOffset") as Vector2? ?? Vector2.Zero;
-                pending.SpecialActionSnapshot.HasSavedRodLayerFields = true;
-
-                TrySetSpritePrivateField(npc, "yOffset", 0f);
-                TrySetSpritePrivateField(npc, "loadedEndOfRouteBehavior", null);
-                TrySetSpritePrivateField(npc, "drawOffset", Vector2.Zero);
-            }
-
-            npc.Sprite.UpdateSourceRect();
-
-            if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Saved special animation for {npc.Name} before outfit reaction. frame={pending.SpecialActionSnapshot.CurrentFrame} anim={(animation != null ? animation.Count : 0)} fishing={isFishingBehavior}", LogLevel.Info);
-        }
-
-        private bool TryRestoreNpcSpecialActionAfterOutfit(NPC npc, PendingPrompt pending, bool force = false)
-        {
-            if (pending == null || pending.SpecialActionSnapshot == null)
-                return false;
-
-            NpcOutfitSpecialActionSnapshot snapshot = pending.SpecialActionSnapshot;
-            npc ??= snapshot.Npc;
-
-            if (npc == null || npc.Sprite == null || npc.currentLocation == null)
-            {
-                pending.SpecialActionSnapshot = null;
-                return false;
-            }
-
-            if (npc != snapshot.Npc || npc.currentLocation != snapshot.Location)
-            {
-                pending.SpecialActionSnapshot = null;
-                return false;
-            }
-
-            if (!force)
-            {
-                if (Game1.activeClickableMenu != null || Game1.dialogueUp)
-                    return false;
-
-                if (Game1.player != null && npc.currentLocation == Game1.player.currentLocation && DistanceToPlayer(npc) < NpcSpecialActionRestoreDistance)
-                    return false;
-            }
-
-            try
-            {
-                npc.FacingDirection = snapshot.FacingDirection;
-                npc.flip = snapshot.Flip;
-                npc.movementPause = snapshot.MovementPause;
-                npc.addedSpeed = snapshot.AddedSpeed;
-
-                // FISHING FIX: restore the sprite dimensions and rod-layer fields BEFORE touching
-                // CurrentAnimation/CurrentFrame/UpdateSourceRect below — see the matching comment
-                // in CaptureNpcSpecialActionBeforeOutfit for the full explanation.
-                if (snapshot.HasSavedSpriteDimensions)
-                {
-                    TrySetSpritePrivateField(npc.Sprite, "spriteWidth", snapshot.SavedSpriteWidth);
-                    TrySetSpritePrivateField(npc.Sprite, "tempSpriteHeight", snapshot.SavedTempSpriteHeight);
-                    TrySetSpritePrivateField(npc.Sprite, "ignoreSourceRectUpdates", snapshot.SavedIgnoreSourceRectUpdates);
-                    snapshot.HasSavedSpriteDimensions = false;
-                }
-
-                if (snapshot.SavedDoingEndOfRouteAnimation.HasValue)
-                {
-                    TrySetNetBoolField(npc, "doingEndOfRouteAnimation", snapshot.SavedDoingEndOfRouteAnimation.Value);
-                    TrySetSpritePrivateField(npc, "currentlyDoingEndOfRouteAnimation", snapshot.SavedCurrentlyDoingEndOfRouteAnimation ?? false);
-                    snapshot.SavedDoingEndOfRouteAnimation = null;
-                    snapshot.SavedCurrentlyDoingEndOfRouteAnimation = null;
-                }
-
-                if (snapshot.HasSavedRodLayerFields)
-                {
-                    TrySetSpritePrivateField(npc, "yOffset", snapshot.SavedYOffset);
-                    TrySetSpritePrivateField(npc, "loadedEndOfRouteBehavior", snapshot.SavedLoadedEndOfRouteBehavior);
-                    TrySetSpritePrivateField(npc, "drawOffset", snapshot.SavedDrawOffset);
-                    snapshot.HasSavedRodLayerFields = false;
-                }
-
-                if (snapshot.CurrentAnimation != null && snapshot.CurrentAnimation.Count > 0)
-                {
-                    npc.Sprite.CurrentAnimation = new List<FarmerSprite.AnimationFrame>(snapshot.CurrentAnimation);
-                    TrySetSpritePrivateField(npc.Sprite, "currentAnimationIndex", 0);
-                    TrySetSpritePrivateField(npc.Sprite, "timer", 0);
-                }
-                else
-                {
-                    npc.Sprite.StopAnimation();
-                    npc.Sprite.ClearAnimation();
-                    npc.Sprite.CurrentAnimation = null;
-                }
-
-                npc.Sprite.CurrentFrame = snapshot.CurrentFrame;
-                npc.Sprite.UpdateSourceRect();
-
-                if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Restored special animation for {npc.Name} after outfit reaction. frame={snapshot.CurrentFrame} anim={(snapshot.CurrentAnimation != null ? snapshot.CurrentAnimation.Count : 0)}", LogLevel.Info);
-
-                // FISHING FIX: resetting the sprite dimensions/NetBool/rod-layer fields above stops
-                // the mismatched-frame glitch, but doesn't make vanilla resume the actual fishing
-                // animation loop by itself — that's driven by NPC.doMiddleAnimation, a private
-                // method scheduled via a self-rescheduling Game1 DelayedAction chain that doesn't
-                // restart on its own once interrupted. Without this, the NPC is left standing in
-                // the idle pose forever instead of going back to actually fishing. Re-invoke it
-                // manually, a short delay after restoring above so vanilla's own movement/behavior
-                // systems have a moment to settle first.
-                if (!string.IsNullOrEmpty(snapshot.SavedStartedEndOfRouteBehavior))
-                {
-                    string behaviorName = snapshot.SavedStartedEndOfRouteBehavior;
-                    snapshot.SavedStartedEndOfRouteBehavior = null;
-                    NPC npcForDelay = npc;
-
-                    DelayedAction.functionAfterDelay(() =>
-                    {
-                        if (npcForDelay?.currentLocation == null || npcForDelay.Sprite == null)
-                            return;
-
-                        try
-                        {
-                            // doMiddleAnimation only re-runs startRouteBehavior (which sets up the
-                            // extended tempSpriteHeight/sourceRect) when "_startedEndOfRouteBehavior"
-                            // already holds the behavior name — set it back first.
-                            TrySetSpritePrivateField(npcForDelay, "_startedEndOfRouteBehavior", behaviorName);
-
-                            MethodInfo method = npcForDelay.GetType().GetMethod("doMiddleAnimation",
-                                BindingFlags.Instance | BindingFlags.NonPublic);
-                            method?.Invoke(npcForDelay, new object[] { null });
-                        }
-                        catch (Exception ex)
-                        {
-                            monitor?.Log($"[NPC OUTFIT] Failed to re-run doMiddleAnimation for {npcForDelay.Name}: {ex}", LogLevel.Warn);
-                        }
-                    }, 150);
-                }
-
-                pending.SpecialActionSnapshot = null;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                monitor?.Log($"[NPC OUTFIT] Could not restore special animation for {npc?.Name ?? "null"}: {ex.Message}", LogLevel.Warn);
-                pending.SpecialActionSnapshot = null;
-                return false;
-            }
-        }
-
-        private void TrySetSpritePrivateField(object target, string fieldName, object value)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                    field.SetValue(target, value);
-            }
-            catch
-            {
-                // Optional internal field.
-            }
-        }
-
-        private object TryGetPrivateField(object target, string fieldName)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return null;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                return field?.GetValue(target);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        // "doingEndOfRouteAnimation" (and similar) are NetBool fields — a synced netcode field
-        // wrapping the real value in its own ".Value" property. Every read/write of it goes
-        // through get_Value()/set_Value(), never the field directly, so a plain
-        // TrySetSpritePrivateField silently fails on it. Use these NetField-aware helpers instead.
-        private void TrySetNetBoolField(object target, string fieldName, bool value)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                object netField = field?.GetValue(target);
-                if (netField == null)
-                    return;
-
-                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
-                if (valueProp != null && valueProp.CanWrite)
-                    valueProp.SetValue(netField, value);
-            }
-            catch
-            {
-                // Optional internal field.
-            }
-        }
-
-        private bool? TryGetNetBoolField(object target, string fieldName)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return null;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                object netField = field?.GetValue(target);
-                if (netField == null)
-                    return null;
-
-                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
-                return valueProp?.GetValue(netField) as bool?;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        // Same NetField unwrapping as above, but for NetString fields (e.g.
-        // "endOfRouteBehaviorName") — used to identify whether the NPC's current special pose is
-        // genuinely fishing, and to recover the behavior name to resume it after restoring.
-        private string TryGetNetStringField(object target, string fieldName)
-        {
-            if (target == null || string.IsNullOrWhiteSpace(fieldName))
-                return null;
-
-            try
-            {
-                FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                object netField = field?.GetValue(target);
-                if (netField == null)
-                    return null;
-
-                PropertyInfo valueProp = netField.GetType().GetProperty("Value");
-                return valueProp?.GetValue(netField) as string;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private int GetNpcIdleFrameForDirection(int facingDirection)
-        {
-            switch (facingDirection)
-            {
-                case 0: return 8;
-                case 1: return 4;
-                case 2: return 0;
-                case 3: return 12;
-                default: return 0;
-            }
-        }
-
-        // ── Peeping / glancing mechanic ──────────────────────────────────────────────
-
-        private void UpdateSpyingNpcs(float noticeDistance, float cancelDistance)
-        {
-            if (Game1.player == null)
-                return;
-
-            // Tick down each spying NPC.
-            foreach (string name in spyingNpcs.Keys.ToList())
-            {
-                NPC npc = Game1.currentLocation?.characters
-                    .FirstOrDefault(c => c?.Name != null && c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-
-                // Remove if NPC left the location or walked out of cancel range.
-                if (npc == null || npc.currentLocation != Game1.player.currentLocation
-                    || DistanceToPlayer(npc) > cancelDistance)
-                {
-                    spyingNpcs.Remove(name);
-                    continue;
-                }
-
-                SpyingState state = spyingNpcs[name];
-
-                // Walk cooldown: after the player looks away, the NPC strolls normally for ~2s before
-                // peeking again, instead of snapping back to a stare immediately. Let them walk freely
-                // (no movementPause) and just count down; only re-peek once the timer expires.
-                if (state.WalkCooldownTimer > 0)
-                {
-                    state.WalkCooldownTimer--;
-                    continue;
-                }
-
-                // Cooldown finished. Only resume peeking if the NPC is still within notice range and
-                // still walking; otherwise keep strolling and re-check after another short interval.
-                if (DistanceToPlayer(npc) > noticeDistance)
-                {
-                    state.WalkCooldownTimer = 60; // re-check in ~1s; they may walk back into range
-                    continue;
-                }
-
-                if (state.IsBeingWatched)
-                {
-                    // Caught! The NPC is "pretending" nothing happened — they resume walking their
-                    // schedule normally. Do NOT renew movementPause here: we want them moving again.
-                    // We just wait until the player looks away, then start the walk cooldown.
-
-                    if (state.PretendTimer > 0)
-                    {
-                        state.PretendTimer--;
-                        continue;
-                    }
-
-                    // Brief pretend timer expired — now check if player is STILL watching.
-                    if (IsPlayerFacingNpc(npc))
-                    {
-                        // Still being watched; keep pretending (walking normally) a bit longer.
-                        state.PretendTimer = 12;
-                        continue;
-                    }
-
-                    // Player looked away — walk normally for ~2s before considering peeking again.
-                    state.IsBeingWatched = false;
-                    state.WalkCooldownTimer = 120; // ~2 seconds at 60fps
-                    continue;
-                }
-
-                // ── Active peeking ────────────────────────────────────────────────
-                // Renew movementPause every tick (safe: never kills schedule/controller).
-                if (npc.movementPause < 6)
-                    npc.movementPause = 6;
-
-                // Face the player. Do this every tick regardless of isMoving(): with movementPause
-                // active the NPC can still report isMoving()==true (residual velocity while paused),
-                // which previously skipped the turn entirely and left them frozen mid-stride.
-                npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
-
-                // Re-apply idle frame every tick: faceGeneralDirection (and residual movement
-                // velocity) can reset the sprite to a walk frame, so we force the standing pose.
-                if (npc.Sprite != null)
-                {
-                    npc.Sprite.StopAnimation();
-                    npc.Sprite.CurrentFrame = GetNpcIdleFrameForDirection(npc.FacingDirection);
-                    npc.Sprite.UpdateSourceRect();
-                }
-
-                // Brief grace period after first noticing — prevents the disguise emote from
-                // firing immediately if the player was already facing the NPC when they noticed.
-                if (state.PeekGraceTimer > 0)
-                {
-                    state.PeekGraceTimer--;
-                    continue;
-                }
-
-                // If player looks at the NPC, they get "caught".
-                if (IsPlayerFacingNpc(npc))
-                {
-                    state.IsBeingWatched = true;
-                    state.WasEverCaught = true;
-                    state.PretendTimer = 15;
-
-                    // Persist "caught" onto the pending reaction RIGHT NOW, so even if the spy state is
-                    // later cleared (NPC leaves range, etc.) before the player clicks, the reaction
-                    // still knows they were caught and can open with the "you saw me looking…" line.
-                    // If the pending was cleared in the meantime (e.g. a notice refresh), re-arm it so
-                    // the "caught" flavor is never lost — this affected NPCs whose pending got wiped.
-                    if (!pendingPrompts.TryGetValue(name, out PendingPrompt caughtPending) || caughtPending == null)
-                    {
-                        ArmPendingReactionForSpy(npc);
-                        pendingPrompts.TryGetValue(name, out caughtPending);
-                    }
-                    if (caughtPending != null)
-                        caughtPending.WasCaughtPeeking = true;
-
-                    // Randomly react with one of two emotes (50/50).
-                    if (random.Next(2) == 0)
-                        npc.doEmote(28);
-                    else
-                        npc.doEmote(16);
-
-                    // Release movementPause so NPC immediately resumes walking.
-                    npc.movementPause = 0;
-                }
-            }
-        }
-
-        /// <summary>
-        /// True when the player is roughly facing toward this NPC — i.e. the player
-        /// would "see" the NPC when they look in their current facing direction.
-        /// </summary>
-        private static bool IsPlayerFacingNpc(NPC npc)
-        {
-            if (npc == null || Game1.player == null)
-                return false;
-
-            Vector2 playerPos = Game1.player.getStandingPosition();
-            Vector2 npcPos    = npc.getStandingPosition();
-            Vector2 delta     = npcPos - playerPos;
-
-            if (delta.LengthSquared() < 16f * 16f)
-                return true;
-
-            return Game1.player.FacingDirection switch
-            {
-                0 => delta.Y < 0,   // player facing up,   NPC is above
-                1 => delta.X > 0,   // player facing right, NPC is to the right
-                2 => delta.Y > 0,   // player facing down,  NPC is below
-                3 => delta.X < 0,   // player facing left,  NPC is to the left
-                _ => true
-            };
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────────
-
         /// <summary>
         /// True when there is an unobstructed tile path between the NPC and the player — i.e. no
         /// solid wall, door, or impassable tile blocks the line between them. Uses a simple
         /// tile-by-tile raycast along the line connecting the two positions. This prevents NPCs in
         /// closed-off rooms (same GameLocation but behind a wall/door) from noticing the player.
         /// </summary>
-        private static bool HasLineOfSightToPlayer(NPC npc)
+        private bool HasLineOfSightToPlayer(NPC npc)
         {
-            if (npc == null || Game1.player == null || npc.currentLocation == null)
-                return false;
-
-            GameLocation location = npc.currentLocation;
-            Vector2 npcTile    = new Vector2((int)(npc.Position.X / Game1.tileSize), (int)(npc.Position.Y / Game1.tileSize));
-            Vector2 playerTile = new Vector2((int)(Game1.player.Position.X / Game1.tileSize), (int)(Game1.player.Position.Y / Game1.tileSize));
-
-            // If they're on the same tile or adjacent, always visible.
-            float dx = playerTile.X - npcTile.X;
-            float dy = playerTile.Y - npcTile.Y;
-            int steps = (int)Math.Max(Math.Abs(dx), Math.Abs(dy));
-            if (steps <= 1)
-                return true;
-
-            // Walk tile-by-tile along the line and check for solid obstacles.
-            for (int i = 1; i < steps; i++)
-            {
-                float t = (float)i / steps;
-                int tileX = (int)Math.Round(npcTile.X + dx * t);
-                int tileY = (int)Math.Round(npcTile.Y + dy * t);
-
-                try
-                {
-                    // isTilePassable returns false for walls, solid objects, and closed doors.
-                    xTile.Dimensions.Location tileLoc = new(tileX, tileY);
-                    if (!location.isTilePassable(tileLoc, Game1.viewport))
-                        return false;
-                }
-                catch
-                {
-                    // Out-of-bounds or unexpected tile — treat as blocked.
-                    return false;
-                }
-            }
-
-            return true;
+            return peekingController.HasLineOfSightToPlayer(npc);
         }
 
-        private static bool IsNpcFacingPlayer(NPC npc)
+        private bool IsNpcFacingPlayer(NPC npc)
         {
-            if (npc == null || Game1.player == null)
-                return false;
-
-            Vector2 npcPos    = npc.getStandingPosition();
-            Vector2 playerPos = Game1.player.getStandingPosition();
-            Vector2 delta     = playerPos - npcPos;
-
-            if (delta.LengthSquared() < 16f * 16f)
-                return true;
-
-            return npc.FacingDirection switch
-            {
-                0 => delta.Y < 0,
-                1 => delta.X > 0,
-                2 => delta.Y > 0,
-                3 => delta.X < 0,
-                _ => true
-            };
+            return peekingController.IsNpcFacingPlayer(npc);
         }
 
         private float DistanceToPlayer(NPC npc)
         {
-            if (npc == null || Game1.player == null)
-                return float.MaxValue;
-
-            return Vector2.Distance(npc.Position, Game1.player.Position);
+            return peekingController.DistanceToPlayer(npc);
         }
 
         private bool FacePlayerIfSafe(NPC npc)
         {
-            if (npc == null || Game1.player == null)
-                return false;
-
-            if (npc.currentLocation != Game1.player.currentLocation)
-                return false;
-
-            // Don't stop schedules or clear controllers; while movementPause is holding a
-            // pending outfit notice, the controller may still exist even though the NPC is idle.
-            if (npc.isMoving())
-                return false;
-
-            npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
-            return true;
+            return peekingController.FacePlayerIfSafe(npc);
         }
 
         private bool FaceDirectionIfSafe(NPC npc, int direction)
         {
-            if (npc == null)
-                return false;
-
-            if (npc.isMoving())
-                return false;
-
-            npc.faceDirection(direction);
-            return true;
+            return peekingController.FaceDirectionIfSafe(npc, direction);
         }
     }
 }
