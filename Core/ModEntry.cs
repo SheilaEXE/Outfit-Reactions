@@ -1,1625 +1,987 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
-using System.Collections;
+using Netcode;
+using OutfitReactions.Ai;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
-using StardewValley.Pathfinding;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using OutfitReactions.Ai;
+using StardewValley.Network;
+using StardewValley.Objects;
+using xTile;
+using xTile.Dimensions;
+using xTile.ObjectModel;
 
-namespace OutfitReactions
+namespace OutfitReactions;
+
+public sealed partial class ModEntry : Mod
 {
-    public sealed partial class ModEntry : Mod
-    {
-        internal static ModEntry Instance { get; private set; }
-
-        private readonly Random random = new();
-        private Harmony harmony;
-
-        internal ModConfig Config { get; set; } = new();
-
-        // True when the user turns on debug logging in the config menu. Operational/diagnostic
-        // logs are only emitted when this is on, so by default they don't appear in the SMAPI log
-        // at all (not even at Debug level), keeping the log clean.
-        internal static bool DebugLog => Instance?.Config?.EnableDebugLogging ?? false;
-
-        private IFashionSenseApi fsApi;
-        private OtherNpcClothesReactionSystem otherNpcClothesReactionSystem;
-        private OutfitAiService outfitAiService;
-        private OutfitMemoryService outfitMemoryService;
-        private HatMemoryService hatMemoryService;
-
-        // Periodic vanilla-hat tracking: the vanilla hat (Game1.player.hat) can change WITHOUT the
-        // Fashion Sense menu ever opening (e.g. equipping from inventory), so the menu-close path
-        // never sees it. We poll for it on a light interval instead.
-        private string lastKnownVanillaHatId;
-        private List<string> lastKnownVanillaHatSpecialItemCandidates = new();
-        private string lastKnownVanillaPantsName;
-        private List<string> lastKnownVanillaPantsSpecialItemCandidates = new();
-        // Dedupe set for [SPECIAL ITEM DEBUG] logs — cleared whenever a new change is detected.
-        private readonly HashSet<string> loggedSpecialItemDebugKeys = new(StringComparer.Ordinal);
-        private bool vanillaClothingTrackingInitialized;
-        private int vanillaClothingPollTimer;
-        private OutfitVisionService outfitVisionService;
-        private FashionSenseVisualService fashionSenseVisualService;
-        private SpecialHatReactionService specialHatReactionService;
-        private SpecialItemReactionService specialItemReactionService;
-
-        private bool changedClothes = false;
-        // Tracks the saved outfit id we last made "eligible for notices" via the notice refresh, so
-        // the refresh doesn't keep calling NotifyOutfitChanged() for the SAME unchanged outfit. That
-        // call clears reactedNpcsThisOutfit, which would let NPCs re-notice the same look every tick
-        // (e.g. peeking NPCs noticing again right after, without the player changing anything).
-        private string lastEligibleSavedOutfitId = "";
-        // modData key written on the Farmer so OTHER mods (e.g. the kiss mod) can tell when an
-        // Outfit Reactions reaction is in progress and hold off. Value is "1" while active, removed
-        // otherwise. Kept in modData (not a cross-mod API) so it works regardless of mod load order.
-        internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
-
-        // Read-side of the cross-mod handshake: written by the Lots of Kisses mod (NatrollEXE.LotsOfKisses)
-        // into the Farmer's modData for the exact duration of a simulated checkAction click it uses
-        // to play the vanilla kiss animation. See TryHandleOutfitDialogueOrBlockNpcInteraction.
-        private const string AutoKissClickActiveModDataKey = "NatrollEXE.LotsOfKisses/AutoKissClickActive";
-
-        /// <summary>
-        /// True whenever any outfit reaction is pending, generating, or open. Other interaction
-        /// mods use this cross-mod flag to avoid simulating NPC.checkAction during the pending
-        /// outfit-dialogue window, which would otherwise steal the click via the Harmony priority patch.
-        /// </summary>
-        internal bool IsAnyOutfitReactionActive()
-        {
-            if (isReactingToClothes || outfitSequenceActive)
-                return true;
-            if (clothesComplimentReady || clothesPathStarted)
-                return true;
-            if (otherNpcClothesReactionSystem?.HasAnyActivePendingReaction() == true)
-                return true;
-            return false;
-        }
-
-        private void UpdateReactionActiveModDataFlag()
-        {
-            if (Game1.player == null)
-                return;
-
-            bool active = IsAnyOutfitReactionActive();
-            bool hasFlag = Game1.player.modData.ContainsKey(ReactionActiveModDataKey);
-
-            if (active && !hasFlag)
-                Game1.player.modData[ReactionActiveModDataKey] = "1";
-            else if (!active && hasFlag)
-                Game1.player.modData.Remove(ReactionActiveModDataKey);
-        }
-        private FashionSenseSnapshot fsSnapshotBefore = null;
-        private bool fashionSenseMenuOpen = false;
-        private FashionSenseChangeInfo lastFashionSenseChangeInfo = null;
-        // NPCs that already reacted to the CURRENT immediate change. Lets each nearby NPC react
-        // once without wiping the change for everyone else (fixes the 2nd NPC losing the dialogue).
-        private readonly HashSet<string> npcsReactedToCurrentNotice = new(StringComparer.OrdinalIgnoreCase);
-
-        private readonly AiGenerationCoordinator aiGenerationCoordinator = new();
-        private readonly OutfitReplyConversationHistory outfitReplyConversationHistory = new();
-
-        private const string AssetPrefix = "Mods/NatrollEXE.OutfitReactions/Clothes";
-
-        // AI-only build:
-        // Manual outfit dialogue JSON from Mods/NatrollEXE.OutfitReactions/Clothes is intentionally disabled.
-        // The old loader/fallback helpers are kept in the source for future use, but every runtime path below
-        // returns before reading/queueing those manual lines.
-        // Manual JSON dialogue path is disabled in this AI-only build. This is a property (not a
-        // const) on purpose: as a const, the compiler folds it to false and flags every method
-        // below it as "unreachable code" (CS0162). As a property the value is evaluated at runtime,
-        private const string OutfitNoticeModDataPrefix = "NatrollEXE.OutfitReactions.OutfitNotice.";
-        private const string PlayerAccessoryDescriptionModDataPrefix = "NatrollEXE.OutfitReactions.PlayerAccessoryDescription.";
-        internal void QueueAiConnectionTestFromConfigMenu()
-        {
-            outfitAiService?.QueueConnectionTestFromConfigMenu();
-        }
-
-        public override void Entry(IModHelper helper)
-        {
-            Instance = this;
-            Config = helper.ReadConfig<ModConfig>();
-            Config.MigrateLegacyAiSettings();
-            outfitAiService = new OutfitAiService(helper, Monitor, () => Config);
-            outfitAiService.IsRomanceableNpc = IsNpcRomanceable;
-            outfitMemoryService = new OutfitMemoryService(helper, Monitor);
-            hatMemoryService = new HatMemoryService(helper, Monitor);
-            outfitVisionService = new OutfitVisionService(Monitor);
-            fashionSenseVisualService = new FashionSenseVisualService(Monitor, () => fsApi);
-            specialHatReactionService = new SpecialHatReactionService(helper, Monitor);
-            specialItemReactionService = new SpecialItemReactionService(helper, Monitor);
-
-            otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(
-                Monitor,
-                () => Config,
-                TryQueueOtherNpcOutfitDialogue,
-                RefreshOtherNpcOutfitPrompt,
-                ClearOutfitPrompt,
-                HasNoticeableCurrentFashionSenseAppearance,
-                CanNpcNoticeCurrentOutfitNotice,
-                MarkCurrentOutfitAsNoticed,
-                CanNpcReactToCurrentOutfitNotice,
-                HasNpcSeenCurrentVisualBefore
-            );
-
-            helper.Events.GameLoop.GameLaunched += OnGameLaunched;
-            helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-            helper.Events.GameLoop.DayStarted += OnDayStarted;
-            helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
-            helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
-            helper.Events.Display.MenuChanged += OnMenuChanged;
-            helper.Events.Display.RenderedHud += OnRenderedHud;
-            helper.Events.Input.ButtonPressed += OnButtonPressed;
-            helper.Events.Player.Warped += OnWarped;
-            helper.Events.Content.AssetRequested += OnAssetRequested;
-            helper.Events.Content.AssetsInvalidated += OnAssetsInvalidated;
-            helper.Events.GameLoop.Saving += OnSaving;
-
-            helper.ConsoleCommands.Add("oc_debug_notice", "Outfit Compliments: print why the current outfit notice can/can't start for nearby NPCs.", DebugOutfitNoticeCommand);
-            helper.ConsoleCommands.Add("oc_clear_notice_memory", "Outfit Compliments: clear this save's outfit notice memory and reset pending notice state.", ClearOutfitNoticeMemoryCommand);
-            helper.ConsoleCommands.Add("oc_test_voicesamples", "Outfit Reactions: report how many real in-game voice-sample lines each NPC profile has (run after loading a save).", VoiceSampleReportCommand);
-            helper.ConsoleCommands.Add("oc_preview_voicesamples", "Outfit Reactions: show the exact voice-sample lines that would be injected into the prompt for ONE NPC. Usage: oc_preview_voicesamples <NpcName>", VoiceSamplePreviewCommand);
-
-            ApplyHarmonyPatches();
-        }
-
-        private void ApplyHarmonyPatches()
-        {
-            try
-            {
-                MethodBase target = AccessTools.Method(
-                    typeof(NPC),
-                    nameof(NPC.checkAction),
-                    new[] { typeof(Farmer), typeof(GameLocation) }
-                );
-
-                if (target == null)
-                {
-                    Monitor.Log("[CLOTHES PRIORITY] NPC.checkAction target method was NOT found. Patch was not applied.", LogLevel.Warn);
-                    return;
-                }
-
-                harmony = new Harmony(ModManifest.UniqueID);
-                harmony.PatchAll(typeof(ModEntry).Assembly);
-
-                if (DebugLog) Monitor.Log("[CLOTHES PRIORITY] NPC.checkAction Harmony patch applied.", LogLevel.Info);
-            }
-            catch (Exception ex)
-            {
-                Monitor.Log("[CLOTHES PRIORITY] Failed to apply NPC.checkAction patch: " + ex, LogLevel.Warn);
-            }
-        }
-        [HarmonyPatch]
-        private static class NPCCheckActionPatch
-        {
-            private static bool firstRunLogged = false;
-
-            private static MethodBase TargetMethod()
-            {
-                return AccessTools.Method(
-                    typeof(NPC),
-                    nameof(NPC.checkAction),
-                    new[] { typeof(Farmer), typeof(GameLocation) }
-                );
-            }
-
-            [HarmonyPriority(Priority.First)]
-            private static bool Prefix(NPC __instance, Farmer who, GameLocation l, ref bool __result)
-            {
-                try
-                {
-                    if (!firstRunLogged)
-                    {
-                        firstRunLogged = true;
-                        if (DebugLog) Instance?.Monitor?.Log("[CLOTHES PRIORITY] NPC.checkAction prefix ran for the first time.", LogLevel.Info);
-                    }
-
-                    if (Instance?.TryHandleOutfitDialogueOrBlockNpcInteraction(__instance) == true)
-                    {
-                        __result = true;
-                        return false;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Instance?.Monitor?.Log("[CLOTHES PRIORITY] Error while prioritizing/blocking outfit dialogue before NPC.checkAction: " + ex, LogLevel.Warn);
-                }
-
-                return true;
-            }
-        }
-
-        // ── Suppresses NPC.doMiddleAnimation (the private method vanilla's own
-        // reallyDoAnimationAtEndOfScheduleRoute schedules itself into via a self-rescheduling
-        // Game1 DelayedAction chain — completely separate from NPC.update, so this system's own
-        // per-tick pose-forcing code can "win" most ticks but still loses on whichever tick this
-        // callback independently fires) for an NPC currently held mid-outfit-reaction while
-        // genuinely fishing. Without this, vanilla can re-run the fishing pose's extended
-        // sourceRect setup on top of the forced idle frame mid-hold, showing the wrong tilesheet
-        // row. Scoped as narrowly as possible via IsHeldForFishingSpecialAction — never touches
-        // any other NPC or pose.
-        [HarmonyPatch(typeof(NPC), "doMiddleAnimation")]
-        private static class NPCDoMiddleAnimationPatch
-        {
-            private static bool Prefix(NPC __instance)
-            {
-                try
-                {
-                    if (__instance == null || Instance?.otherNpcClothesReactionSystem == null)
-                        return true;
-
-                    if (!Instance.otherNpcClothesReactionSystem.IsHeldForFishingSpecialAction(__instance))
-                        return true; // not a held fishing NPC — run normally
-
-                    return false; // skip — this NPC's pose is being held for an outfit reaction
-                }
-                catch (Exception ex)
-                {
-                    Instance?.Monitor?.Log($"[NPC OUTFIT] Error suppressing doMiddleAnimation: {ex}", LogLevel.Warn);
-                    return true;
-                }
-            }
-        }
-        internal bool PrioritizeOutfitDialogueBeforeNpcCheckAction(NPC npc)
-        {
-            if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
-                return false;
-
-            if (npc == null || npc.currentLocation != Game1.player.currentLocation)
-                return false;
-
-            if (Game1.eventUp)
-                return false;
-
-            if (TryPrioritizeSpouseOutfitDialogueForClick(npc))
-                return true;
-
-            return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) == true;
-        }
-
-        internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
-        {
-            return SpouseOutfitReactionCoordinator.TryHandleInteraction(npc);
-        }
-
-        private bool TryHandleOutfitDialogueOrBlockNpcInteractionCore(NPC npc)
-        {
-            if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
-                return false;
-
-            if (npc == null || npc.currentLocation != Game1.player.currentLocation)
-                return false;
-
-            if (Game1.eventUp)
-                return false;
-
-            // Cross-mod signal: Lots of Kisses sets this in the Farmer's modData for the exact
-            // duration of a simulated checkAction click it uses to trigger the vanilla kiss
-            // animation (bump kiss, multi-kiss, etc.) — not a real player click on the NPC. Step
-            // aside and let checkAction run normally so the kiss plays; the outfit dialogue stays
-            // pending and will still open the next time the player actually clicks the NPC.
-            if (Game1.player.modData != null && Game1.player.modData.ContainsKey(AutoKissClickActiveModDataKey))
-                return false;
-
-            // First try the normal priority path: if the outfit line is ready, or the
-            // built-in AI needs to start/continue generating, consume the click and
-            // let Outfit Compliments own this interaction.
-            if (TryOpenPrioritizedOutfitDialogueFromCheckAction(npc))
-                return true;
-
-            // If the NPC has already noticed the outfit but the outfit dialogue is not
-            // readable yet, still swallow the click. This blocks vanilla kisses, spouse
-            // kisses from other checkAction-based mods, and normal dialogue until the
-            // outfit compliment is actually read or the notice is cancelled by distance.
-            if (ShouldBlockNpcInteractionUntilOutfitDialogueRead(npc))
-            {
-                ShowPendingOutfitBlockedInteractionFeedback(npc);
-                if (DebugLog) Monitor.Log($"[CLOTHES PRIORITY] Blocked normal interaction/kiss with {npc.Name} because an unread outfit dialogue is pending.", LogLevel.Info);
-                return true;
-            }
-
-            return false;
-        }
-
-        private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
-        {
-            fsApi = Helper.ModRegistry.GetApi<IFashionSenseApi>("PeacefulEnd.FashionSense");
-            Monitor.Log(fsApi != null
-                ? "Fashion Sense API loaded successfully."
-                : "Fashion Sense API not found. Outfit compliments will not detect clothing changes.",
-                fsApi != null ? LogLevel.Debug : LogLevel.Warn);
-
-            outfitAiService?.LoadProfiles();
-
-            try
-            {
-                var gmcm = Helper.ModRegistry.GetApi<IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
-                ModConfigMenu.Register(this, gmcm);
-            }
-            catch (Exception ex)
-            {
-                Monitor.Log("Failed to register GMCM options: " + ex.Message, LogLevel.Trace);
-            }
-        }
-
-        private void OnSaving(object sender, SavingEventArgs e)
-        {
-            outfitMemoryService?.Save();
-            hatMemoryService?.Save();
-        }
-
-        private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
-        {
-            outfitMemoryService?.Load();
-            hatMemoryService?.Load();
-            // Repopulate the installed-mod-IDs cache now that all mods are fully loaded,
-            // so ConditionalMatchNames in item.json are evaluated against the real mod list.
-            specialItemReactionService?.ResetModRegistryCache();
-            // Reset vanilla-hat tracking so the first poll on this save just sets the baseline
-            // instead of firing a spurious "hat changed" on load.
-            vanillaClothingTrackingInitialized = false;
-            lastKnownVanillaHatId = null;
-            lastKnownVanillaPantsName = null;
-            ResetClothesState(true);
-            otherNpcClothesReactionSystem?.Reset();
-            outfitAiService?.LoadProfiles(quiet: true);
-        }
-
-        private void OnDayStarted(object sender, DayStartedEventArgs e)
-        {
-            ResetClothesState(true);
-            otherNpcClothesReactionSystem?.Reset();
-            // Clear the cross-mod reaction flag in case the game closed mid-reaction; the Update loop
-            // will re-set it if a reaction is genuinely active.
-            Game1.player?.modData?.Remove(ReactionActiveModDataKey);
-            outfitAiService?.LoadProfiles(quiet: true);
-        }
-
-        private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
-        {
-            CancelAllPendingOwnAiGenerations();
-            ResetClothesState(true);
-            otherNpcClothesReactionSystem?.Reset();
-        }
-
-        private void OnRenderedHud(object sender, RenderedHudEventArgs e)
-        {
-            if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
-                return;
-
-            foreach (PendingAiGeneration pending in aiGenerationCoordinator.GetOutfitSnapshot())
-            {
-                if (pending == null || pending.Task == null || pending.Task.IsCompleted)
-                    continue;
-
-                NPC npc = Game1.getCharacterFromName(pending.NpcName);
-                if (npc == null || npc.currentLocation != Game1.player.currentLocation)
-                    continue;
-
-                DrawOwnAiWaitingHudMessage(e.SpriteBatch, npc, GetOwnAiWaitingDialogueText(npc, pending.WaitingDotCount));
-                return;
-            }
-
-            foreach (PendingAiPlayerReplyGeneration pending in aiGenerationCoordinator.GetReplySnapshot())
-            {
-                if (pending == null || pending.Task == null || pending.Task.IsCompleted)
-                    continue;
-
-                NPC npc = Game1.getCharacterFromName(pending.NpcName);
-                if (npc == null || npc.currentLocation != Game1.player.currentLocation)
-                    continue;
-
-                DrawOwnAiWaitingHudMessage(e.SpriteBatch, npc, GetOwnAiReplyWaitingDialogueText(npc, pending.WaitingDotCount));
-                return;
-            }
-        }
-
-        private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
-        {
-            if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
-                return;
-
-            if (Game1.activeClickableMenu != null || Game1.eventUp)
-                return;
-
-            if (!e.Button.IsActionButton() && !e.Button.IsUseToolButton())
-                return;
-
-            NPC npc = GetNpcBeingInteractedWith();
-            if (npc == null)
-                return;
-
-            // This runs right before Stardew handles the click. Some vanilla/other-mod first-talk
-            // dialogues are generated at click time and can jump in front of the outfit line if we
-            // only queued it earlier. Re-queue the outfit reaction here so it is definitely the
-            // first dialogue seen, while our backup/restore logic keeps the previous dialogue for
-            // the next click.
-            if (TryPrioritizeSpouseOutfitDialogueForClick(npc))
-                return;
-
-            otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc);
-        }
-
-        private NPC GetNpcBeingInteractedWith()
-        {
-            if (Game1.player == null || Game1.currentLocation == null)
-                return null;
-
-            // Main Stardew interaction target: the tile the farmer is facing/grabbing.
-            Vector2 grabTile = Game1.player.GetGrabTile();
-            NPC npc = Game1.currentLocation.characters
-                .OfType<NPC>()
-                .FirstOrDefault(c => c != null && !c.IsInvisible && c.TilePoint.X == (int)grabTile.X && c.TilePoint.Y == (int)grabTile.Y);
-
-            if (npc != null)
-                return npc;
-
-            // Mouse fallback, useful when the player right-clicks an NPC directly.
-            int mouseTileX = (Game1.getOldMouseX() + Game1.viewport.X) / Game1.tileSize;
-            int mouseTileY = (Game1.getOldMouseY() + Game1.viewport.Y) / Game1.tileSize;
-
-            npc = Game1.currentLocation.characters
-                .OfType<NPC>()
-                .Where(c => c != null && !c.IsInvisible && c.TilePoint.X == mouseTileX && c.TilePoint.Y == mouseTileY)
-                .OrderBy(c => Vector2.Distance(c.Position, Game1.player.Position))
-                .FirstOrDefault(c => Vector2.Distance(c.Position, Game1.player.Position) <= 192f);
-
-            if (npc != null)
-                return npc;
-
-            // Last fallback for slightly offset sprites or modded NPC sizes.
-            return Game1.currentLocation.characters
-                .OfType<NPC>()
-                .Where(c => c != null && !c.IsInvisible && c.currentLocation == Game1.player.currentLocation)
-                .Where(c => Vector2.Distance(c.Position, Game1.player.Position) <= 112f)
-                .OrderBy(c => Vector2.Distance(c.Position, Game1.player.Position))
-                .FirstOrDefault();
-        }
-
-        private bool TryPrioritizeSpouseOutfitDialogueForClick(NPC npc)
-        {
-            if (npc == null || clothesReactingNpc == null)
-                return false;
-
-            if (!npc.Name.Equals(clothesReactingNpc.Name, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (!clothesComplimentReady || !outfitSequenceActive)
-                return false;
-
-            if (lastFashionSenseChangeInfo == null)
-                return false;
-
-            if (!CanNpcNoticeCurrentOutfitNotice(npc))
-                return false;
-
-            if (!spouseDialogueController.HasBackup)
-                spouseDialogueController.Capture(npc, Game1.player, Monitor, DebugLog);
-            else
-                spouseDialogueController.TemporarilySkipFirstDailyDialogue(npc, Game1.player, Monitor, DebugLog);
-
-            bool queued = QueueSpouseOutfitDialogueOnly(npc);
-            if (queued)
-                if (DebugLog) Monitor.Log($"[CLOTHES SPOUSE] Re-prioritized outfit dialogue for {npc.Name} at click time.", LogLevel.Info);
-            else
-                KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "AI queue was not available on click.");
-
-            return queued;
-        }
-
-        private void OnWarped(object sender, WarpedEventArgs e)
-        {
-            if (!Context.IsWorldReady || e == null || !e.IsLocalPlayer)
-                return;
-
-            CancelAllPendingOwnAiGenerations();
-
-            if (isReactingToClothes || outfitSequenceActive)
-                ResetClothesReactionState();
-
-            otherNpcClothesReactionSystem?.Reset();
-        }
-
-        private void OnAssetRequested(object sender, AssetRequestedEventArgs e)
-        {
-            if (e.NameWithoutLocale.IsEquivalentTo(OutfitAiService.NpcCharacteristicsAssetName))
-            {
-                e.LoadFrom(
-                    () => outfitAiService?.LoadDefaultProfilesFromFiles() ?? new Dictionary<string, CharacterAiProfile>(StringComparer.OrdinalIgnoreCase),
-                    AssetLoadPriority.Low
-                );
-                return;
-            }
-        }
-
-        private void OnAssetsInvalidated(object sender, AssetsInvalidatedEventArgs e)
-        {
-            if (!Context.IsWorldReady)
-                return;
-
-            foreach (var name in e.NamesWithoutLocale)
-            {
-                string assetName = name.ToString();
-
-                if (assetName.StartsWith(AssetPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (assetName.Equals(OutfitAiService.NpcCharacteristicsAssetName, StringComparison.OrdinalIgnoreCase))
-                {
-                    outfitAiService?.LoadProfiles(quiet: true);
-                    continue;
-                }
-            }
-        }
-
-        private void OnMenuChanged(object sender, MenuChangedEventArgs e)
-        {
-            if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
-                return;
-
-            bool newIsFs = e.NewMenu != null && IsFashionSenseMenu(e.NewMenu);
-            bool oldIsFs = e.OldMenu != null && IsFashionSenseMenu(e.OldMenu);
-
-            if (newIsFs && !fashionSenseMenuOpen)
-            {
-                fashionSenseMenuOpen = true;
-                fsSnapshotBefore = CaptureFashionSenseSnapshot();
-                return;
-            }
-
-            if (fashionSenseMenuOpen && newIsFs)
-                return;
-
-            if (fashionSenseMenuOpen && oldIsFs && e.NewMenu == null)
-            {
-                fashionSenseMenuOpen = false;
-
-                DelayedAction.functionAfterDelay(() =>
-                {
-                    if (!Context.IsWorldReady || Game1.player == null)
-                        return;
-
-                    FashionSenseSnapshot after = CaptureFashionSenseSnapshot();
-                    FashionSenseChangeInfo changeInfo = CompareFashionSenseSnapshots(fsSnapshotBefore, after);
-                    fsSnapshotBefore = null;
-
-                    // Keep the lightweight vanilla poller in sync with changes handled by the
-                    // Fashion Sense menu-close path. This prevents duplicate reactions after a
-                    // Fashion Sense hat hides/reveals a vanilla hat underneath it.
-                    lastKnownVanillaHatId = after?.VanillaHat ?? "";
-                    lastKnownVanillaPantsName = after?.VanillaPants ?? "";
-                    lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(after?.VanillaPantsSpecialItemCandidates);
-                    vanillaClothingTrackingInitialized = true;
-
-                    if (changeInfo != null && changeInfo.CountChanges() > 0)
-                    {
-                        ApplyDetectedClothesChange(changeInfo);
-                    }
-                }, 200);
-            }
-        }
-
-        /// <summary>
-        /// Polls the vanilla hat slot (Game1.player.hat) on a light interval and, if it changed
-        /// since the last check, builds a change and routes it through the normal reaction flow.
-        /// This is needed because vanilla hats can be equipped/removed from the inventory without
-        /// ever opening the Fashion Sense menu, which is the only other place changes are detected.
-        /// </summary>
-        private void PollVanillaHatAndPantsChange()
-        {
-            // Light throttle: check a few times per second, not every tick.
-            if (vanillaClothingPollTimer > 0)
-            {
-                vanillaClothingPollTimer--;
-                return;
-            }
-            vanillaClothingPollTimer = 15;
-
-            // Don't poll while the Fashion Sense menu is open; that path handles changes on close.
-            if (fashionSenseMenuOpen)
-                return;
-
-            string currentHatId = GetVisibleVanillaHatId();
-            string currentHatName = GetCurrentVanillaHatName();
-            List<string> currentHatSpecialItemCandidates = !string.IsNullOrWhiteSpace(currentHatId)
-                ? GetCurrentVisibleVanillaHatSpecialItemCandidates(currentHatName)
-                : new List<string>();
-            string currentPantsName = GetCurrentVanillaPantsName();
-            List<string> currentPantsSpecialItemCandidates = !string.IsNullOrWhiteSpace(currentPantsName)
-                ? GetCurrentVanillaPantsSpecialItemCandidates(currentPantsName)
-                : new List<string>();
-
-            // First observation after load: just record the baseline, don't fire a reaction.
-            if (!vanillaClothingTrackingInitialized)
-            {
-                lastKnownVanillaHatId = currentHatId;
-                lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(currentHatSpecialItemCandidates);
-                lastKnownVanillaPantsName = currentPantsName ?? "";
-                lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(currentPantsSpecialItemCandidates);
-                vanillaClothingTrackingInitialized = true;
-                return;
-            }
-
-            bool hatChanged = !string.Equals(currentHatId, lastKnownVanillaHatId ?? "", StringComparison.OrdinalIgnoreCase);
-            bool pantsChanged = !string.Equals(currentPantsName ?? "", lastKnownVanillaPantsName ?? "", StringComparison.OrdinalIgnoreCase);
-
-            if (!hatChanged && !pantsChanged)
-                return; // no change
-
-            // Build before/after snapshots so the vanilla-hat/pants fields are populated correctly.
-            FashionSenseSnapshot before = CaptureFashionSenseSnapshot();
-            before.VanillaHat = lastKnownVanillaHatId ?? "";
-            before.VanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaHatSpecialItemCandidates);
-            before.VanillaPants = lastKnownVanillaPantsName ?? "";
-            before.VanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaPantsSpecialItemCandidates);
-            FashionSenseSnapshot after = CaptureFashionSenseSnapshot();
-            after.VanillaHat = currentHatId;
-            after.VanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(currentHatSpecialItemCandidates);
-            after.VanillaPants = currentPantsName ?? "";
-            after.VanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(currentPantsSpecialItemCandidates);
-
-            lastKnownVanillaHatId = currentHatId;
-            lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(currentHatSpecialItemCandidates);
-            lastKnownVanillaPantsName = currentPantsName ?? "";
-            lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(currentPantsSpecialItemCandidates);
-
-            FashionSenseChangeInfo changeInfo = CompareFashionSenseSnapshots(before, after);
-            int changeCount = changeInfo?.CountChanges() ?? 0;
-
-            if (DebugLog)
-            {
-                Monitor.Log(
-                    $"[VANILLA POLL] hatChanged={hatChanged} (now='{currentHatId}' was='{before.VanillaHat}') | " +
-                    $"pantsChanged={pantsChanged} (now='{currentPantsName}' was='{before.VanillaPants}') | " +
-                    $"changeCount={changeCount} vanillaPantsChanged={changeInfo?.VanillaPantsChanged} vanillaPantsRemoved={changeInfo?.VanillaPantsRemoved} " +
-                    $"fsPantsAfter='{after.Pants}' pantsDebug={GetCurrentVanillaPantsDebugString()}",
-                    LogLevel.Info);
-            }
-
-            // Delay applying the change by 200ms, mirroring the Fashion Sense menu-close path.
-            // ApplyDetectedClothesChange resets the per-NPC notice tracking, which makes every
-            // nearby NPC eligible again and triggers a burst of line-of-sight checks on the next
-            // Update() tick. Applying it immediately means that burst lands on the exact tick the
-            // player equips the hat, which is felt as a hitch right at the click. Delaying it
-            // decouples the cost from the click the same way the FS path already does, so it's
-            // no longer synchronized with (and therefore no longer noticeable at) the moment of
-            // interaction. All tracking fields above are already updated synchronously, so a
-            // fresh poll during the delay window won't re-detect the same change.
-            if (changeInfo != null && changeCount > 0)
-            {
-                DelayedAction.functionAfterDelay(() =>
-                {
-                    if (!Context.IsWorldReady || Game1.player == null)
-                        return;
-
-                    ApplyDetectedClothesChange(changeInfo);
-                }, 200);
-            }
-        }
-
-        /// <summary>
-        /// Applies a freshly detected clothing change: cancels any stale pending notice, sets the
-        /// new change as current, and notifies the other-NPC reaction system. Shared by the Fashion
-        /// Sense menu-close path and the periodic vanilla-hat poll.
-        /// </summary>
-        private void ApplyDetectedClothesChange(FashionSenseChangeInfo changeInfo)
-        {
-            // Some detected "changes" have nothing describable in them — e.g. a vanilla pants slot
-            // flickering as an internal side effect of swapping Fashion Sense pants, which counts
-            // toward CountChanges() via VanillaPantsChanged but has no dialogue branch of its own
-            // (pants alone are never commented on, same as shoes). Applying one of these as if it
-            // were a real change would wipe every NPC's "already reacted" memory and overwrite the
-            // last GENUINE change with one nobody can say anything about — silently blocking every
-            // notice (spouse and everyone else) until the next real change comes along. Treat a
-            // changeInfo with no dialogue key as a no-op: leave all existing state untouched.
-            if (string.IsNullOrEmpty(GetFashionSenseDialogueKey(changeInfo)))
-            {
-                if (DebugLog) Monitor.Log(
-                    $"[FS] Detected change had nothing describable (total={changeInfo.CountChanges()}, likely a vanilla-pants-only side effect) — ignoring, not resetting notice state.",
-                    LogLevel.Info
-                );
-                return;
-            }
-
-            // A fresh change should cancel any previous one-shot hair/hat/accessory notice that may
-            // still be waiting for cleanup. Without this, changing A -> B could leave the old
-            // pending reaction blocking the new one.
-            ResetClothesState(clearChangeFlag: true);
-            npcsReactedToCurrentNotice.Clear();
-            loggedSpecialItemDebugKeys.Clear();
-            otherNpcClothesReactionSystem?.Reset();
-
-            // A genuine change resets the "already made eligible" tracker so the new look is treated
-            // as fresh (and the notice refresh can later re-arm it correctly).
-            lastEligibleSavedOutfitId = "";
-
-            lastFashionSenseChangeInfo = changeInfo;
-            changedClothes = true;
-            otherNpcClothesReactionSystem?.NotifyOutfitChanged();
-
-            if (DebugLog) Monitor.Log(
-                $"[FS] outfit change detected | total={changeInfo.CountChanges()} hair={changeInfo.ChangedHair} accessory={changeInfo.ChangedAccessory} hat={changeInfo.ChangedHat} vanillaHat={changeInfo.VanillaHatChanged} shirt={changeInfo.ChangedShirt} pants={changeInfo.ChangedPants} sleeves={changeInfo.ChangedSleeves} shoes={changeInfo.ChangedShoes} outfit={changeInfo.ChangedOutfit} newHair={changeInfo.NewHairId} newHat={changeInfo.NewHatId} newAccessory={changeInfo.NewAccessoryId}",
-                LogLevel.Info
-            );
-
-            if (changeInfo.ChangedAccessory && !AreVisionOnlyFashionSenseTriggersEnabled())
-            {
-                bool willNotice = ItemNameRevealsShape(changeInfo.NewAccessoryId);
-                if (DebugLog) Monitor.Log(willNotice
-                    ? "[FS] Accessory changed (no vision): item name reveals its shape, so it will be noticed."
-                    : "[FS] Accessory changed (no vision): item name is too generic to describe, so it is skipped.", LogLevel.Info);
-            }
-        }
-
-        private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
-        {
-            if (!Context.IsWorldReady || !Config.Enabled)
-                return;
-
-            UpdateReactionActiveModDataFlag();
-
-            if (clothesNoticePauseTimer > 0)
-                clothesNoticePauseTimer--;
-
-            if (clothesChaseTimer > 0)
-                clothesChaseTimer--;
-
-            if (clothesSecondNoticeCooldown > 0)
-                clothesSecondNoticeCooldown--;
-
-            if (clothesInteractionCooldown > 0)
-                clothesInteractionCooldown--;
-
-            if (spouseProximityState.PendingBubbleTimer > 0)
-                spouseProximityState.PendingBubbleTimer--;
-
-            RefreshCurrentSavedOutfitNoticeCandidate();
-            PollVanillaHatAndPantsChange();
-
-            NPC spouse = GetSpouse();
-            NPC datingNpc = GetDatingNpc();
-            // The "active partner" for the close-partner reaction flow is the spouse when present,
-            // otherwise the dating NPC. If both exist (polyamory mods), spouse takes priority for
-            // the reaction system (only one can be the active focus at a time) while the dating NPC
-            // is still excluded from the other-NPC system below.
-            NPC activePartner = spouse ?? datingNpc;
-
-            SpouseOutfitReactionCoordinator.Update(
-                activePartner,
-                spouse,
-                changedClothes && lastFashionSenseChangeInfo != null);
-
-            UpdatePendingOwnAiGenerations();
-            UpdatePendingOwnAiPlayerReplyGenerations();
-            // Exclude both the official spouse AND the dating NPC from the other-NPC system —
-            // both get the close-partner treatment above instead.
-            string excludedPartnerName = activePartner?.Name ?? Game1.player?.spouse;
-            otherNpcClothesReactionSystem?.Update(excludedPartnerName);
-        }
-
-        private void RefreshCurrentSavedOutfitNoticeCandidate()
-        {
-            if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
-                return;
-
-            // If the player just changed only hair/accessories/clothing pieces without switching
-            // a saved outfit, keep that immediate reaction instead of replacing it with the
-            // current saved outfit candidate. Once that reaction is consumed/cancelled, the
-            // saved outfit can become eligible again.
-            if (changedClothes && lastFashionSenseChangeInfo != null && !lastFashionSenseChangeInfo.ChangedOutfit)
-                return;
-
-            if (!TryGetCurrentSavedFashionSenseOutfitId(out string currentOutfitId))
-            {
-                // If the player removed/cleared the saved FS outfit, stop keeping the
-                // previous saved outfit eligible for notices. Hair-only reactions are
-                // left alone because they are handled by the immediate FS change flow.
-                if (IsSavedOutfitNoticeChange(lastFashionSenseChangeInfo))
-                {
-                    ResetClothesState(true);
-                    otherNpcClothesReactionSystem?.Reset();
-                }
-
-                return;
-            }
-
-            if (lastFashionSenseChangeInfo != null &&
-                lastFashionSenseChangeInfo.ChangedOutfit &&
-                string.Equals(lastFashionSenseChangeInfo.NewOutfitId, currentOutfitId, StringComparison.OrdinalIgnoreCase))
-            {
-                changedClothes = true;
-                return;
-            }
-
-            FashionSenseChangeInfo currentOutfitChange = new()
-            {
-                ChangedOutfit = true,
-                NewOutfitId = currentOutfitId
-            };
-
-            if (string.IsNullOrWhiteSpace(GetFashionSenseDialogueKey(currentOutfitChange)))
-                return;
-
-            // Only fire a fresh "outfit changed" notification (which clears the per-outfit reacted
-            // set) when this saved outfit is actually NEW since the last time we made it eligible.
-            // Re-firing for the same unchanged outfit would let NPCs notice it over and over.
-            if (string.Equals(lastEligibleSavedOutfitId, currentOutfitId, StringComparison.OrdinalIgnoreCase))
-            {
-                changedClothes = true;
-                return;
-            }
-            lastEligibleSavedOutfitId = currentOutfitId;
-            npcsReactedToCurrentNotice.Clear();
-
-            lastFashionSenseChangeInfo = currentOutfitChange;
-            changedClothes = true;
-            otherNpcClothesReactionSystem?.NotifyOutfitChanged();
-
-            if (DebugLog) Monitor.Log($"[CLOTHES NOTICE] Current saved outfit is eligible for outfit notices: {currentOutfitId}", LogLevel.Info);
-        }
-
-        private bool IsSavedOutfitNoticeChange(FashionSenseChangeInfo changeInfo)
-        {
-            return changeInfo != null
-                && changeInfo.ChangedOutfit
-                && !string.IsNullOrWhiteSpace(changeInfo.NewOutfitId);
-        }
-
-        private bool IsVanillaHatRemovalOnlyNotice(FashionSenseChangeInfo changeInfo)
-        {
-            return changeInfo != null
-                && changeInfo.VanillaHatRemoved
-                && changeInfo.VanillaHatChanged
-                && changeInfo.CountChanges() == 1;
-        }
-
-        private bool IsSpecialItemRemovalOnlyNotice(FashionSenseChangeInfo changeInfo)
-        {
-            // A special item can be "removed" even when the vanilla pants slot did not become
-            // literally empty (e.g. Mayor's shorts -> Farmer Pants). What matters is that the
-            // previous visible vanilla pants matched luckypurpleshorts.json, and the current
-            // visible pants no longer match that same special item. Same logic applies to
-            // special items worn as hats (e.g. the mod short-hat).
-            if (changeInfo == null || changeInfo.CountChanges() != 1)
-                return false;
-
-            if (!changeInfo.VanillaPantsChanged && !changeInfo.VanillaHatChanged)
-                return false;
-
-            return TryResolveSpecialItemNoticeForNpc(null, changeInfo, requireNpcMemoryForRemoval: false, out SpecialItemNoticeInfo notice)
-                && notice != null
-                && notice.WasRemoved;
-        }
-
-        private bool NpcRemembersRemovedSpecialItem(NPC npc, FashionSenseChangeInfo changeInfo)
-        {
-            return npc != null
-                && changeInfo != null
-                && TryResolveSpecialItemNoticeForNpc(npc, changeInfo, requireNpcMemoryForRemoval: false, out SpecialItemNoticeInfo notice)
-                && notice != null
-                && notice.WasRemoved
-                && HasSpecialItemMemory(npc, notice);
-        }
-
-        private bool NpcRemembersRemovedVanillaHat(NPC npc)
-        {
-            return npc != null
-                && !string.IsNullOrWhiteSpace(hatMemoryService?.GetLastHatNameForNpc(npc.Name) ?? "");
-        }
-
-        private FashionSenseChangeInfo TryBuildCurrentSavedOutfitNoticeChange()
-        {
-            if (!TryGetCurrentSavedFashionSenseOutfitId(out string currentOutfitId)
-                || string.IsNullOrWhiteSpace(currentOutfitId))
-                return null;
-
-            FashionSenseChangeInfo outfitChange = new()
-            {
-                ChangedOutfit = true,
-                NewOutfitId = currentOutfitId
-            };
-
-            return string.IsNullOrWhiteSpace(GetFashionSenseDialogueKey(outfitChange))
-                ? null
-                : outfitChange;
-        }
-
-        /// <summary>
-        /// Returns the change this specific NPC should react to. A vanilla-hat removal is only
-        /// meaningful to NPCs who remember seeing that hat. NPCs who did not witness it can fall
-        /// back to the currently equipped saved outfit, if one is still active, instead of being
-        /// forced into a hat topic they have no context for.
-        /// </summary>
-        private FashionSenseChangeInfo GetEffectiveFashionSenseChangeInfoForNpc(NPC npc)
-        {
-            if (lastFashionSenseChangeInfo == null)
-                return null;
-
-            // Special item removal (e.g. the short-hat mod) must be handled BEFORE vanilla hat
-            // removal, because the short-hat triggers both VanillaHatChanged and VanillaHatRemoved,
-            // and the vanilla hat removal path would incorrectly fall back to the saved outfit
-            // (it uses HatMemoryService, which doesn't know about special items).
-            if (IsSpecialItemRemovalOnlyNotice(lastFashionSenseChangeInfo) && npc != null)
-            {
-                // If this NPC has already reacted to the removal notice, there is nothing
-                // more to show — return null so they do not react a second time.
-                if (npcsReactedToCurrentNotice.Contains(npc.Name ?? ""))
-                    return null;
-
-                // If the NPC remembers the removed special item, the removal notice applies to
-                // them directly. Return it here so the vanilla-hat block below cannot hijack it
-                // with a saved-outfit fallback (its memory check uses HatMemoryService, which
-                // knows nothing about special items).
-                if (NpcRemembersRemovedSpecialItem(npc, lastFashionSenseChangeInfo))
-                    return lastFashionSenseChangeInfo;
-
-                // NPC has no memory of the item — they can't react to its removal.
-                // Fall back to a saved-outfit notice if one is available.
-                FashionSenseChangeInfo specialItemFallback = TryBuildCurrentSavedOutfitNoticeChange();
-                if (specialItemFallback != null)
-                    return specialItemFallback;
-            }
-
-            if (IsVanillaHatRemovalOnlyNotice(lastFashionSenseChangeInfo)
-                && npc != null
-                && !NpcRemembersRemovedVanillaHat(npc))
-            {
-                FashionSenseChangeInfo fallbackOutfitChange = TryBuildCurrentSavedOutfitNoticeChange();
-                if (fallbackOutfitChange != null)
-                    return fallbackOutfitChange;
-            }
-
-            return lastFashionSenseChangeInfo;
-        }
-
-        private bool CanNpcNoticeCurrentOutfitNotice(NPC npc)
-        {
-            if (npc == null)
-                return false;
-
-            // Gating is now per active outfit/change notice, not tied to an in-game calendar period.
-            // The set is cleared only when a real new change is detected, so the same NPC
-            // will not repeat the same pending notice, but can react again after the look changes.
-            return !HasNpcReactedToCurrentOutfitNotice(npc, lastFashionSenseChangeInfo?.NewOutfitId);
-        }
-
-        // True if this NPC has already seen the player's CURRENT look before, so the reaction system
-        // can use the lower "repeated visual" chance instead of the "new visual" chance.
-        // Saved outfits use the deep outfit memory; vanilla hats use the dedicated hat memory.
-        private bool HasNpcSeenCurrentVisualBefore(NPC npc)
-        {
-            if (npc == null)
-                return false;
-
-            FashionSenseChangeInfo effectiveChangeInfo = GetEffectiveFashionSenseChangeInfoForNpc(npc);
-
-            if (TryResolveSpecialItemNoticeForNpc(npc, effectiveChangeInfo, requireNpcMemoryForRemoval: false, out SpecialItemNoticeInfo specialItemNotice)
-                && specialItemNotice != null
-                && specialItemNotice.IsValid)
-                return HasSpecialItemMemory(npc, specialItemNotice);
-
-            if (IsSavedOutfitNoticeChange(effectiveChangeInfo) && outfitMemoryService != null)
-            {
-                string currentOutfitId = GetCurrentSavedFashionSenseOutfitIdForAi(effectiveChangeInfo.NewOutfitId);
-                if (!string.IsNullOrWhiteSpace(currentOutfitId))
-                {
-                    OutfitComponents current = BuildCurrentOutfitComponentsForMemory();
-                    var memory = outfitMemoryService.GetMemory(npc.Name, currentOutfitId, current);
-                    return memory != null && memory.TimesSeenBefore > 0;
-                }
-            }
-
-            string hatId = GetVisibleVanillaHatId();
-            if (!string.IsNullOrWhiteSpace(hatId) && hatMemoryService != null)
-            {
-                var memory = hatMemoryService.GetMemory(npc.Name, hatId, GetCurrentVanillaHatName());
-                return memory != null && memory.TimesSeenBefore > 0;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// True only when this NPC plausibly already saw the farmer's PREVIOUS look (the one that
-        /// included the accessory that was just removed). Used so an NPC the farmer never interacted
-        /// with while wearing the accessory does not talk about it as something they remember "from
-        /// before". We treat the NPC as a witness if they have prior memory of the current saved
-        /// outfit, since that means they have seen this farmer in this outfit/combination before.
-        /// </summary>
-        private bool DidNpcWitnessPreviousLook(NPC npc)
-        {
-            if (npc == null)
-                return false;
-
-            // If this NPC already reacted to the current notice earlier, they are part of
-            // this ongoing change sequence and can reference what just happened.
-            if (npcsReactedToCurrentNotice.Contains(npc.Name ?? ""))
-                return true;
-
-            // Otherwise, only count them as a witness if they have prior memory of this saved outfit.
-            if (outfitMemoryService != null && lastFashionSenseChangeInfo != null)
-            {
-                string currentOutfitId = GetCurrentSavedFashionSenseOutfitIdForAi(lastFashionSenseChangeInfo.NewOutfitId);
-                if (!string.IsNullOrWhiteSpace(currentOutfitId))
-                {
-                    OutfitComponents current = BuildCurrentOutfitComponentsForMemory();
-                    var memory = outfitMemoryService.GetMemory(npc.Name, currentOutfitId, current);
-                    if (memory != null && memory.TimesSeenBefore > 0)
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void MarkCurrentOutfitAsNoticed(NPC npc)
-        {
-            if (npc == null || lastFashionSenseChangeInfo == null)
-                return;
-
-            string npcName = npc.Name ?? "";
-            FashionSenseChangeInfo effectiveChangeInfo = GetEffectiveFashionSenseChangeInfoForNpc(npc);
-            if (effectiveChangeInfo == null)
-                return;
-
-            // This method can be reached twice for the same final dialogue: once when the AI line
-            // opens and once when the non-spouse restore path runs after the menu closes. Guard first
-            // so outfit/hat memory is recorded only once per actual reaction.
-            if (npcsReactedToCurrentNotice.Contains(npcName))
-                return;
-
-            bool specialItemOnlyReaction = ShouldRecordCurrentNoticeAsSpecialItemOnlyReaction(npc, effectiveChangeInfo, out SpecialItemNoticeInfo specialItemNotice);
-            bool vanillaHatOnlyReaction = ShouldRecordCurrentNoticeAsVanillaHatOnlyReaction(npc);
-
-            npcsReactedToCurrentNotice.Add(npcName);
-
-            if (specialItemOnlyReaction)
-            {
-                RecordSpecialItemMemory(npc, specialItemNotice);
-
-                if (DebugLog)
-                    Monitor.Log($"[SPECIAL ITEM MEMORY] {npc.Name} reacted to special item '{specialItemNotice?.EntryId}'; saved outfit memory was not updated for this item-focused reaction.", LogLevel.Info);
-
-                // If the NPC reacted to a REMOVAL (the item is no longer equipped), the notice
-                // has been consumed. Clear the change info so subsequent NPC interactions do not
-                // re-trigger the same "just removed" reaction indefinitely.
-                // Equip reactions (WasRemoved=false) are intentionally left alive so other
-                // nearby NPCs can still notice the same currently-worn special item.
-                if (specialItemNotice?.WasRemoved == true)
-                {
-                    if (DebugLog)
-                        Monitor.Log($"[SPECIAL ITEM MEMORY] Special item '{specialItemNotice.EntryId}' was a removal reaction; clearing the notice so it does not repeat.", LogLevel.Info);
-                    changedClothes = false;
-                    lastFashionSenseChangeInfo = null;
-                    // Stamp the current saved outfit as already eligible so RefreshCurrentSavedOutfitNoticeCandidate
-                    // does not immediately re-arm it and trigger a second reaction on the next tick.
-                    if (TryGetCurrentSavedFashionSenseOutfitId(out string currentOutfitId) && !string.IsNullOrWhiteSpace(currentOutfitId))
-                        lastEligibleSavedOutfitId = currentOutfitId;
-                }
-
-                return;
-            }
-
-            if (vanillaHatOnlyReaction)
-            {
-                RecordVanillaHatMemory(npc);
-
-                string currentPantsName = GetCurrentVanillaPantsName();
-                if (!string.IsNullOrWhiteSpace(currentPantsName))
-                    RecordVanillaPantsMemory(npc, currentPantsName);
-
-                if (DebugLog) Monitor.Log($"[HAT MEMORY] {npc.Name} reacted to a vanilla-hat focused notice; saved outfit memory was not updated for this hat-focused reaction.", LogLevel.Info);
-                return;
-            }
-
-            if (IsSavedOutfitNoticeChange(effectiveChangeInfo))
-            {
-                // Save outfit memory so next time the NPC recognises this look.
-                // Capture the current equipped pieces from Fashion Sense, not only the one
-                // piece reported by the latest change. This keeps outfit+accessory combos
-                // accurate when a player adds/removes wings, capes, backpacks, etc.
-                string currentSavedOutfitId = GetCurrentSavedFashionSenseOutfitIdForAi(effectiveChangeInfo.NewOutfitId);
-                if (!string.IsNullOrWhiteSpace(currentSavedOutfitId))
-                    RecordOutfitMemory(npc, currentSavedOutfitId);
-
-                if (DebugLog) Monitor.Log($"[CLOTHES NOTICE] Recorded that {npc.Name} reacted to outfit '{currentSavedOutfitId}'.", LogLevel.Info);
-                return;
-            }
-
-            if (IsImmediateFashionSenseNoticeChange(effectiveChangeInfo))
-            {
-                // Hair/hat/accessory changes are immediate one-shot notices. Mark only THIS npc
-                // as having reacted, so the same NPC won't repeat the compliment on every click,
-                // but other nearby NPCs can still react to the same change.
-                if (DebugLog) Monitor.Log($"[FS] {npc.Name} reacted to the immediate change; it stays available for other NPCs.", LogLevel.Info);
-
-                // Record what vanilla hat (or bare head) this NPC just saw, so future sessions can
-                // remember it — independent of any saved Fashion Sense outfit.
-                if (effectiveChangeInfo.VanillaHatChanged || !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId()))
-                    RecordVanillaHatMemory(npc);
-
-                // Record vanilla pants this NPC just saw (e.g. Mayor's Purple Shorts).
-                string currentPantsName = GetCurrentVanillaPantsName();
-                if (!string.IsNullOrWhiteSpace(currentPantsName))
-                    RecordVanillaPantsMemory(npc, currentPantsName);
-
-                // If the immediate change happened while a saved outfit is still equipped,
-                // update that NPC's memory for the whole current combination too. This lets
-                // them notice: "same Pikachu outfit, but the moth wings are gone" or
-                // "now the black wings replaced the moth wings" instead of acting like
-                // each accessory is unrelated to the saved outfit.
-                string currentSavedOutfitId = GetCurrentSavedFashionSenseOutfitIdForAi(effectiveChangeInfo.NewOutfitId);
-                if (!string.IsNullOrWhiteSpace(currentSavedOutfitId))
-                    RecordOutfitMemory(npc, currentSavedOutfitId);
-            }
-        }
-
-        private bool ShouldRecordCurrentNoticeAsSpecialItemOnlyReaction(NPC npc, FashionSenseChangeInfo effectiveChangeInfo, out SpecialItemNoticeInfo notice)
-        {
-            notice = null;
-
-            if (npc == null || effectiveChangeInfo == null)
-                return false;
-
-            if (!TryResolveSpecialItemNoticeForNpc(npc, effectiveChangeInfo, requireNpcMemoryForRemoval: true, out notice))
-                return false;
-
-            return notice != null && notice.IsValid;
-        }
-
-        private bool ShouldRecordCurrentNoticeAsVanillaHatOnlyReaction(NPC npc)
-        {
-            if (lastFashionSenseChangeInfo == null)
-                return false;
-
-            if (ModConfigMenu.NormalizeVanillaHatReactionMode(Config?.VanillaHatReactionMode) != "HatOnly")
-                return false;
-
-            // Keep memory aligned with the exact prompt mode: when HatOnly is active, the model is
-            // told to ignore the outfit only if there is a visible vanilla hat now, or if THIS NPC
-            // remembers the vanilla hat that was just removed. NPCs who never saw the removed hat
-            // must not be forced into a hat-focused reaction.
-            if (!string.IsNullOrWhiteSpace(GetVisibleVanillaHatId()))
-                return true;
-
-            return IsVanillaHatRemovalOnlyNotice(lastFashionSenseChangeInfo)
-                && NpcRemembersRemovedVanillaHat(npc);
-        }
-
-        private static bool IsImmediateFashionSenseNoticeChange(FashionSenseChangeInfo changeInfo)
-        {
-            return changeInfo != null
-                && !IsSavedOutfitNoticeChangeStatic(changeInfo)
-                && (changeInfo.ChangedHair || changeInfo.ChangedHat || changeInfo.ChangedAccessory);
-        }
-
-        private static bool IsSavedOutfitNoticeChangeStatic(FashionSenseChangeInfo changeInfo)
-        {
-            return changeInfo != null
-                && changeInfo.ChangedOutfit
-                && !string.IsNullOrWhiteSpace(changeInfo.NewOutfitId);
-        }
-
-        private bool HasNpcReactedToCurrentOutfitNotice(NPC npc, string outfitId)
-        {
-            if (npc == null)
-                return false;
-
-            return npcsReactedToCurrentNotice.Contains(npc.Name ?? "");
-        }
-
-        private static string MakeSafeModDataPart(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return "unknown";
-
-            string normalized = NormalizeOutfitText(value);
-            StringBuilder builder = new();
-
-            foreach (char c in normalized)
-            {
-                if (char.IsLetterOrDigit(c))
-                    builder.Append(c);
-                else if (c == '_' || c == '-')
-                    builder.Append(c);
-            }
-
-            return builder.Length > 0 ? builder.ToString() : "unknown";
-        }
-
-        private static string GetStableHexHash(string value)
-        {
-            unchecked
-            {
-                uint hash = 2166136261;
-                string text = value ?? "";
-
-                foreach (char c in text)
-                {
-                    hash ^= c;
-                    hash *= 16777619;
-                }
-
-                return hash.ToString("x8", CultureInfo.InvariantCulture);
-            }
-        }
-
-        /// <summary>
-        /// Returns true if the NPC is roughly facing the player (within a ~120 degree cone).
-        /// Direction: 0=up, 1=right, 2=down, 3=left (Stardew convention).
-        /// </summary>
-        private static bool IsNpcFacingPlayer(NPC npc)
-        {
-            if (npc == null || Game1.player == null)
-                return false;
-
-            Vector2 npcPos    = npc.getStandingPosition();
-            Vector2 playerPos = Game1.player.getStandingPosition();
-            Vector2 delta     = playerPos - npcPos;
-
-            // If very close, direction doesn't matter.
-            if (delta.LengthSquared() < 16f * 16f)
-                return true;
-
-            // Allow a wide cone: the player must be in the forward half-plane.
-            return npc.FacingDirection switch
-            {
-                0 => delta.Y < 0,   // facing up    → player must be above
-                1 => delta.X > 0,   // facing right → player must be to the right
-                2 => delta.Y > 0,   // facing down  → player must be below
-                3 => delta.X < 0,   // facing left  → player must be to the left
-                _ => true
-            };
-        }
-
-        private float DistanceToPlayer(NPC npc)
-        {
-            if (npc == null || Game1.player == null)
-                return float.MaxValue;
-
-            return Vector2.Distance(npc.Position, Game1.player.Position);
-        }
-
-        private bool CanNpcReactToCurrentOutfitNotice(NPC npc)
-        {
-            // Other-NPC reactions need both checks: the NPC must be eligible/profiled, and the
-            // current pending notice must be valid for this specific NPC. This matters most for
-            // vanilla-hat removals: NPCs who never saw the hat should not react to its absence.
-            return CanNpcReactToOutfit(npc) && ShouldStartClothesReaction(npc);
-        }
-
-        // Cross-mod flag read from a bystander NPC's own modData while Lots of Kisses has them
-        // turned to watch a public multi-kiss. While present, this NPC must not start an outfit
-        // reaction — it would visually collide with the kiss audience moment. Using modData means
-        // no hard dependency or load-order requirement between the two mods.
-        private const string LotsOfKissesBystanderWatchingModDataKey = "NatrollEXE.LotsOfKisses/BystanderWatching";
-
-        private bool IsNpcWatchingAsKissBystander(NPC npc)
-        {
-            return npc?.modData != null
-                && npc.modData.ContainsKey(LotsOfKissesBystanderWatchingModDataKey);
-        }
-
-        private bool CanNpcReactToOutfit(NPC npc)
-        {
-            if (npc == null || string.IsNullOrWhiteSpace(npc.Name))
-                return false;
-
-            // Already reacted to the current active notice? Don't repeat for this NPC,
-            // but other NPCs can still react until the look changes.
-            if (npcsReactedToCurrentNotice.Contains(npc.Name))
-                return false;
-
-            // Lots of Kisses has this NPC turned to watch a public multi-kiss right now — do not
-            // start an outfit reaction on them until they're released back to normal.
-            if (IsNpcWatchingAsKissBystander(npc))
-                return false;
-
-            // Any NPC with an enabled AI profile is allowed to notice outfits.
-            // Content packs only need assets/npc-characteristics/*.json; no ReactingNpcs.json is needed.
-            return outfitAiService?.HasProfile(npc.Name) == true;
-        }
-
-        private bool HasMinimumFriendshipForOutfitReaction(NPC npc)
-        {
-            // Kept as a compatibility helper for older call sites, but the current design
-            // allows outfit reactions at any heart level. The prompt controls intimacy/richness.
-            return npc != null;
-        }
-
-        /// <summary>
-        /// Returns a stable identifier for the VANILLA hat the farmer currently has equipped
-        /// (Game1.player.hat), or "" if none. Used by the appearance snapshot so that equipping,
-        /// swapping, or removing a vanilla hat is detected as a change (the same way Fashion Sense
-        /// accessories are). Uses the item id so different hats produce different values.
-        /// </summary>
-        /// <summary>
-        /// Returns how many portraits the NPC actually has in their portrait spritesheet. Each
-        /// portrait is 64x64, laid out in a grid, so the count is (width/64) * (height/64). Returns
-        /// 0 if it can't be determined (treated as "unknown" — no validation applied).
-        /// </summary>
-        private int GetNpcPortraitCount(NPC npc)
-        {
-            try
-            {
-                if (npc?.Portrait == null)
-                    return 0;
-                int cols = Math.Max(1, npc.Portrait.Width / 64);
-                int rows = Math.Max(1, npc.Portrait.Height / 64);
-                return cols * rows;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        private bool HasNoticeableCurrentFashionSenseAppearance()
-        {
-            return ShouldStartClothesReaction(null);
-        }
-
-        private FashionSenseSnapshot CaptureFashionSenseSnapshot()
-        {
-            if (Game1.player == null)
-                return null;
-
-            string fsHatId = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomHat.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Hat));
-            bool fsHatCoversVanilla = IsFashionSenseHatCoveringVanilla();
-            bool fsPantsCoverVanilla = IsFashionSensePantsCoveringVanilla();
-            string visibleVanillaPantsName = fsPantsCoverVanilla ? "" : (GetCurrentVanillaPantsName() ?? "");
-            List<string> visibleVanillaPantsCandidates = !string.IsNullOrWhiteSpace(visibleVanillaPantsName)
-                ? GetCurrentVanillaPantsSpecialItemCandidates(visibleVanillaPantsName)
-                : new List<string>();
-
-            return new FashionSenseSnapshot
-            {
-                Hair = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomHair.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Hair)),
-                Accessory = NormalizeFashionSenseAccessoryId(StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.0.Id"), GetFsModData("FashionSense.CustomAccessory.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Accessory))),
-                AccessorySecondary = NormalizeFashionSenseAccessoryId(StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.1.Id"), GetFsModData("FashionSense.CustomAccessorySecondary.Id"), GetFsAppearanceId(IFashionSenseApi.Type.AccessorySecondary))),
-                AccessoryTertiary = NormalizeFashionSenseAccessoryId(StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.2.Id"), GetFsModData("FashionSense.CustomAccessoryTertiary.Id"), GetFsAppearanceId(IFashionSenseApi.Type.AccessoryTertiary))),
-                Hat = fsHatId,
-                FashionSenseHatCoversVanilla = fsHatCoversVanilla,
-                // Store the visible vanilla hat, not the raw equipped slot. A Fashion Sense
-                // hat/headwear can cover the vanilla slot, and NPCs should only react to what
-                // they can actually see.
-                VanillaHat = fsHatCoversVanilla ? "" : GetCurrentVanillaHatId(),
-                VanillaHatSpecialItemCandidates = !fsHatCoversVanilla && !string.IsNullOrWhiteSpace(GetCurrentVanillaHatName())
-                    ? GetCurrentVisibleVanillaHatSpecialItemCandidates(GetCurrentVanillaHatName())
-                    : new List<string>(),
-                VanillaPants = visibleVanillaPantsName,
-                VanillaPantsSpecialItemCandidates = visibleVanillaPantsCandidates,
-                Shirt = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomShirt.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Shirt)),
-                Pants = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomPants.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Pants)),
-                Sleeves = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomSleeves.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Sleeves)),
-                Shoes = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomShoes.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Shoes)),
-                OutfitId = TryGetCurrentSavedFashionSenseOutfitId(out string currentOutfitId) ? currentOutfitId : null,
-                HairColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Hair"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Hair)),
-                AccessoryColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.0.Color"), GetFsModData("FashionSense.UI.HandMirror.Color.Accessory"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Accessory)),
-                AccessorySecondaryColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.1.Color"), GetFsModData("FashionSense.UI.HandMirror.Color.AccessorySecondary"), GetFsAppearanceColorKey(IFashionSenseApi.Type.AccessorySecondary)),
-                AccessoryTertiaryColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomAccessory.2.Color"), GetFsModData("FashionSense.UI.HandMirror.Color.AccessoryTertiary"), GetFsAppearanceColorKey(IFashionSenseApi.Type.AccessoryTertiary)),
-                HatColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Hat"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Hat)),
-                ShirtColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Shirt"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Shirt)),
-                PantsColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Pants"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Pants)),
-                SleevesColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Sleeves"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Sleeves)),
-                ShoesColor = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.UI.HandMirror.Color.Shoes"), GetFsAppearanceColorKey(IFashionSenseApi.Type.Shoes))
-            };
-        }
-
-        private FashionSenseChangeInfo CompareFashionSenseSnapshots(FashionSenseSnapshot before, FashionSenseSnapshot after)
-        {
-            if (before == null || after == null)
-                return null;
-
-            bool afterHasSavedOutfit = !string.IsNullOrWhiteSpace(after.OutfitId);
-            bool afterHasFashionSenseHair = !string.IsNullOrWhiteSpace(after.Hair);
-            bool beforeOrAfterHasFashionSenseAccessory = !string.IsNullOrWhiteSpace(StringUtils.FirstNonEmpty(before.Accessory, before.AccessorySecondary, before.AccessoryTertiary, after.Accessory, after.AccessorySecondary, after.AccessoryTertiary));
-            // A "real" Fashion Sense hat is one with a meaningful custom appearance id. Fashion Sense
-            // can report a non-empty but generic/internal/default value in the hat slot even when the
-            // farmer has no actual FS hat equipped, so we must NOT treat every non-empty after.Hat as
-            // a covering FS hat — otherwise a plain vanilla hat (equipped OR removed) would always be
-            // ignored. Only a meaningful custom id counts as actually covering the vanilla slot.
-            // NOTE: Fashion Sense uses the literal string "None" (and blank) to mean "no hat", so those
-            // must be treated as empty here.
-            bool afterHasFashionSenseHat = !IsEmptyFashionSenseValue(after.Hat)
-                && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(after.Hat);
-            bool afterFashionSenseHatCoversVanilla = after.FashionSenseHatCoversVanilla || afterHasFashionSenseHat;
-            // A vanilla hat (Game1.player.hat) is tracked separately from the Fashion Sense hat.
-            // Any change to it — equipping a different hat, removing one, or putting one back on —
-            // should be noticed just like accessory changes are. The equipped name can be blank
-            // (removed), so we compare the raw ids and treat any difference as a change.
-            // IMPORTANT: when a Fashion Sense hat is currently equipped, it visually covers/replaces
-            // the vanilla hat slot entirely (the vanilla hat is not rendered and is not what the
-            // farmer "is wearing" from an in-world perspective). So vanilla-hat changes must be
-            // ignored completely whenever a Fashion Sense hat is active — equipping, swapping, or
-            // removing a vanilla hat underneath a Fashion Sense hat is invisible and must not be
-            // treated as a noticeable change.
-            bool vanillaHatChanged = !afterFashionSenseHatCoversVanilla
-                && !string.Equals(before.VanillaHat ?? "", after.VanillaHat ?? "", StringComparison.OrdinalIgnoreCase);
-            // True specifically when a vanilla hat that WAS equipped is now gone (taken off).
-            // Also gated on no Fashion Sense hat being active now, for the same reason as above.
-            bool vanillaHatRemoved = !afterFashionSenseHatCoversVanilla
-                && !string.IsNullOrWhiteSpace(before.VanillaHat) && string.IsNullOrWhiteSpace(after.VanillaHat);
-
-            // Vanilla pants tracking (same pattern as vanilla hat).
-            bool afterHasFsPants = IsFashionSensePantsValueCoveringVanilla(after.Pants);
-            bool vanillaPantsChanged = !afterHasFsPants
-                && !string.Equals(before.VanillaPants ?? "", after.VanillaPants ?? "", StringComparison.OrdinalIgnoreCase);
-            bool vanillaPantsRemoved = !afterHasFsPants
-                && !string.IsNullOrWhiteSpace(before.VanillaPants) && string.IsNullOrWhiteSpace(after.VanillaPants);
-            bool accessoryIdChanged = before.Accessory != after.Accessory || before.AccessorySecondary != after.AccessorySecondary || before.AccessoryTertiary != after.AccessoryTertiary;
-            bool accessoryColorChanged = before.AccessoryColor != after.AccessoryColor || before.AccessorySecondaryColor != after.AccessorySecondaryColor || before.AccessoryTertiaryColor != after.AccessoryTertiaryColor;
-            bool outfitIdChanged = afterHasSavedOutfit && !string.Equals(before.OutfitId, after.OutfitId, StringComparison.OrdinalIgnoreCase);
-            string changedAccessoryId = GetChangedAccessoryId(before, after, outfitIdChanged);
-            bool afterHasVisibleAccessory = !string.IsNullOrWhiteSpace(BuildCurrentAccessoryMemoryValue(after));
-
-            return new FashionSenseChangeInfo
-            {
-                // A saved Fashion Sense outfit, active Fashion Sense hair, hat/headwear,
-                // or accessory can start a noticing reaction. Vanilla/default clothing pieces
-                // and unsaved single-piece body clothing changes still should not trigger
-                // emotes, looking, or AI/manual outfit dialogue by themselves.
-                ChangedHair = afterHasFashionSenseHair && (before.Hair != after.Hair || before.HairColor != after.HairColor),
-                // Accessory changes must be recognized even if the new accessory ID is blank/unknown
-                // (some Fashion Sense slots/API versions can fail to expose secondary/tertiary accessory IDs,
-                // or the player may remove an accessory). When the saved outfit changed too, never describe
-                // a removed accessory from the PREVIOUS outfit as if it belonged to the NEW outfit; focus on
-                // the accessory currently equipped with the new outfit instead.
-                ChangedAccessory = outfitIdChanged
-                    ? afterHasVisibleAccessory
-                    : (accessoryIdChanged || (beforeOrAfterHasFashionSenseAccessory && accessoryColorChanged)),
-                ChangedHat = (afterHasFashionSenseHat && (before.Hat != after.Hat || before.HatColor != after.HatColor)) || vanillaHatChanged,
-                ChangedShirt = before.Shirt != after.Shirt || before.ShirtColor != after.ShirtColor,
-                ChangedPants = before.Pants != after.Pants || before.PantsColor != after.PantsColor,
-                ChangedSleeves = before.Sleeves != after.Sleeves || before.SleevesColor != after.SleevesColor,
-                ChangedShoes = before.Shoes != after.Shoes || before.ShoesColor != after.ShoesColor,
-                ChangedOutfit = outfitIdChanged,
-                NewHairId = after.Hair,
-                NewAccessoryId = changedAccessoryId,
-                NewHatId = after.Hat,
-                NewVanillaHatId = after.VanillaHat,
-                VanillaHatChanged = vanillaHatChanged,
-                VanillaHatRemoved = vanillaHatRemoved,
-                PreviousVanillaHatId = before.VanillaHat,
-                PreviousVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(before.VanillaHatSpecialItemCandidates),
-                VanillaPantsChanged = vanillaPantsChanged,
-                VanillaPantsRemoved = vanillaPantsRemoved,
-                PreviousVanillaPantsName = before.VanillaPants,
-                NewVanillaPantsName = after.VanillaPants,
-                PreviousVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(before.VanillaPantsSpecialItemCandidates),
-                NewVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(after.VanillaPantsSpecialItemCandidates),
-                NewShirtId = after.Shirt,
-                NewPantsId = after.Pants,
-                NewSleevesId = after.Sleeves,
-                NewShoesId = after.Shoes,
-                NewOutfitId = after.OutfitId
-            };
-        }
-
-        private static string GetChangedAccessoryId(FashionSenseSnapshot before, FashionSenseSnapshot after, bool outfitChanged)
-        {
-            if (before == null || after == null)
-                return "";
-
-            string currentAccessoryCombo = BuildCurrentAccessoryMemoryValue(after);
-
-            // If the saved outfit changed, old accessories belong to the old look.
-            // Example: Pikachu + moth wings -> dinosaur + black wings should be read as
-            // CURRENT dinosaur + black wings, not as "where did the moth wings go?".
-            // If the new outfit has no visible accessory, return blank so the NPC reacts to the outfit itself.
-            if (outfitChanged)
-                return currentAccessoryCombo;
-
-            string changed = GetChangedAccessorySlotDescription(before.Accessory, after.Accessory, before.AccessoryColor, after.AccessoryColor, "accessory");
-            if (!string.IsNullOrWhiteSpace(changed))
-                return changed;
-
-            changed = GetChangedAccessorySlotDescription(before.AccessorySecondary, after.AccessorySecondary, before.AccessorySecondaryColor, after.AccessorySecondaryColor, "secondary accessory");
-            if (!string.IsNullOrWhiteSpace(changed))
-                return changed;
-
-            changed = GetChangedAccessorySlotDescription(before.AccessoryTertiary, after.AccessoryTertiary, before.AccessoryTertiaryColor, after.AccessoryTertiaryColor, "tertiary accessory");
-            if (!string.IsNullOrWhiteSpace(changed))
-                return changed;
-
-            return currentAccessoryCombo;
-        }
-
-        private static string GetChangedAccessorySlotDescription(string beforeId, string afterId, string beforeColor, string afterColor, string slotLabel)
-        {
-            bool idChanged = !string.Equals(beforeId, afterId, StringComparison.OrdinalIgnoreCase);
-            bool colorChanged = !string.Equals(beforeColor, afterColor, StringComparison.OrdinalIgnoreCase);
-            if (!idChanged && !colorChanged)
-                return "";
-
-            if (!string.IsNullOrWhiteSpace(afterId))
-                return afterId;
-
-            if (!string.IsNullOrWhiteSpace(beforeId))
-                return "removed " + beforeId;
-
-            return "changed " + slotLabel;
-        }
-
-        private sealed class FashionSenseChangeInfo
-        {
-            public bool ChangedHair;
-            public bool ChangedAccessory;
-            public bool ChangedHat;
-            public bool ChangedShirt;
-            public bool ChangedPants;
-            public bool ChangedSleeves;
-            public bool ChangedShoes;
-            public bool ChangedOutfit;
-            public string NewHairId;
-            public string NewAccessoryId;
-            public string NewHatId;
-            public string NewVanillaHatId;
-            public bool VanillaHatChanged;
-            public bool VanillaHatRemoved;
-            public string PreviousVanillaHatId;
-            public List<string> PreviousVanillaHatSpecialItemCandidates = new();
-            public bool VanillaPantsChanged;
-            public bool VanillaPantsRemoved;
-            public string PreviousVanillaPantsName;
-            public string NewVanillaPantsName;
-            public List<string> PreviousVanillaPantsSpecialItemCandidates = new();
-            public List<string> NewVanillaPantsSpecialItemCandidates = new();
-            public string NewShirtId;
-            public string NewPantsId;
-            public string NewSleevesId;
-            public string NewShoesId;
-            public string NewOutfitId;
-
-            public int CountChanges()
-            {
-                int count = 0;
-                if (ChangedHair) count++;
-                if (ChangedAccessory) count++;
-                if (ChangedHat) count++;
-                if (ChangedShirt) count++;
-                if (ChangedPants) count++;
-                if (VanillaPantsChanged) count++;
-                if (ChangedSleeves) count++;
-                // Shoes are intentionally excluded: the mod never reacts to or comments on footwear,
-                // so a shoes-only change must not trigger an outfit reaction.
-                if (ChangedOutfit) count++;
-                return count;
-            }
-        }
-
-        // A non-vision (text) AI can only describe an accessory/hat well if the item's NAME
-        // reveals its shape (e.g. "Hawkmoth Wings", "Witch Hat"). Generic code names like
-        // "pack0010" or "item3" tell the AI nothing, so in non-vision mode we skip those to
-        // avoid vague compliments. Vision mode can always see the shape, so it isn't gated.
-
-        // Cached reflection for NPC internals not exposed publicly in 1.6.
-
-        // When Fashion Sense reports no tint for the hair (texture-painted hair), fall back to
-        // the dominant hair color read from the rendered sprite pixels, and present it to the
-        // model as a confirmed, authoritative color so it never guesses from the raw image.
-
-        // Same idea as hair: when the player changed a Fashion Sense hat/headwear item,
-        // use the rendered transparent sprite to provide an authoritative hat color. This
-        // avoids relying on FS tint data for texture-painted hats, and prevents the model
-        // from guessing color from floors, walls, or lighting.
-
-    }
+	[HarmonyPatch]
+	private static class NPCCheckActionPatch
+	{
+		private static bool firstRunLogged;
+
+		private static MethodBase TargetMethod()
+		{
+			return AccessTools.Method(typeof(NPC), "checkAction", new Type[2]
+			{
+				typeof(Farmer),
+				typeof(GameLocation)
+			});
+		}
+
+		[HarmonyPriority(800)]
+		private static bool Prefix(NPC __instance, Farmer who, GameLocation l, ref bool __result)
+		{
+			try
+			{
+				if (!firstRunLogged)
+				{
+					firstRunLogged = true;
+					if (DebugLog)
+					{
+						ModEntry instance = Instance;
+						if (instance != null)
+						{
+							IMonitor monitor = ((Mod)instance).Monitor;
+							if (monitor != null)
+							{
+								monitor.Log("[CLOTHES PRIORITY] NPC.checkAction prefix ran for the first time.", (LogLevel)2);
+							}
+						}
+					}
+				}
+				ModEntry instance2 = Instance;
+				if (instance2 != null && instance2.TryHandleOutfitDialogueOrBlockNpcInteraction(__instance))
+				{
+					__result = true;
+					return false;
+				}
+			}
+			catch (Exception ex)
+			{
+				ModEntry instance3 = Instance;
+				if (instance3 != null)
+				{
+					IMonitor monitor2 = ((Mod)instance3).Monitor;
+					if (monitor2 != null)
+					{
+						monitor2.Log("[CLOTHES PRIORITY] Error while prioritizing/blocking outfit dialogue before NPC.checkAction: " + ex, (LogLevel)3);
+					}
+				}
+			}
+			return true;
+		}
+	}
+
+	[HarmonyPatch(typeof(NPC), "doMiddleAnimation")]
+	private static class NPCDoMiddleAnimationPatch
+	{
+		private static bool Prefix(NPC __instance)
+		{
+			try
+			{
+				if (__instance == null || Instance?.otherNpcClothesReactionSystem == null)
+				{
+					return true;
+				}
+				if (!Instance.otherNpcClothesReactionSystem.IsHeldForFishingSpecialAction(__instance))
+				{
+					return true;
+				}
+				return false;
+			}
+			catch (Exception value)
+			{
+				ModEntry instance = Instance;
+				if (instance != null)
+				{
+					IMonitor monitor = ((Mod)instance).Monitor;
+					if (monitor != null)
+					{
+						monitor.Log($"[NPC OUTFIT] Error suppressing doMiddleAnimation: {value}", (LogLevel)3);
+					}
+				}
+				return true;
+			}
+		}
+	}
+
+	private sealed class FashionSenseChangeInfo
+	{
+		public bool ChangedHair;
+
+		public bool ChangedAccessory;
+
+		public bool ChangedHat;
+
+		public bool ChangedShirt;
+
+		public bool ChangedPants;
+
+		public bool ChangedSleeves;
+
+		public bool ChangedShoes;
+
+		public bool ChangedOutfit;
+
+		public string NewHairId;
+
+		public string NewAccessoryId;
+
+		public string NewHatId;
+
+		public string NewVanillaHatId;
+
+		public bool VanillaHatChanged;
+
+		public bool VanillaHatRemoved;
+
+		public string PreviousVanillaHatId;
+
+		public List<string> PreviousVanillaHatSpecialItemCandidates = new List<string>();
+
+		public bool VanillaPantsChanged;
+
+		public bool VanillaPantsRemoved;
+
+		public string PreviousVanillaPantsName;
+
+		public string NewVanillaPantsName;
+
+		public List<string> PreviousVanillaPantsSpecialItemCandidates = new List<string>();
+
+		public List<string> NewVanillaPantsSpecialItemCandidates = new List<string>();
+
+		public string NewShirtId;
+
+		public string NewPantsId;
+
+		public string NewSleevesId;
+
+		public string NewShoesId;
+
+		public string NewOutfitId;
+
+		public int CountChanges()
+		{
+			int num = 0;
+			if (ChangedHair)
+			{
+				num++;
+			}
+			if (ChangedAccessory)
+			{
+				num++;
+			}
+			if (ChangedHat)
+			{
+				num++;
+			}
+			if (ChangedShirt)
+			{
+				num++;
+			}
+			if (ChangedPants)
+			{
+				num++;
+			}
+			if (VanillaPantsChanged)
+			{
+				num++;
+			}
+			if (ChangedSleeves)
+			{
+				num++;
+			}
+			if (ChangedOutfit)
+			{
+				num++;
+			}
+			return num;
+		}
+	}
+
+	private sealed class FashionSenseSnapshot
+	{
+		public string Hair;
+
+		public string Accessory;
+
+		public string AccessorySecondary;
+
+		public string AccessoryTertiary;
+
+		public string Hat;
+
+		public bool FashionSenseHatCoversVanilla;
+
+		public string VanillaHat;
+
+		public List<string> VanillaHatSpecialItemCandidates = new List<string>();
+
+		public string VanillaPants;
+
+		public List<string> VanillaPantsSpecialItemCandidates = new List<string>();
+
+		public string Shirt;
+
+		public string Pants;
+
+		public string Sleeves;
+
+		public string Shoes;
+
+		public string OutfitId;
+
+		public string HairColor;
+
+		public string AccessoryColor;
+
+		public string AccessorySecondaryColor;
+
+		public string AccessoryTertiaryColor;
+
+		public string HatColor;
+
+		public string ShirtColor;
+
+		public string PantsColor;
+
+		public string SleevesColor;
+
+		public string ShoesColor;
+	}
+
+	private sealed class SpecialItemNoticeInfo
+	{
+		public string EntryId { get; set; } = "";
+
+		public string DisplayName { get; set; } = "";
+
+		public string ItemType { get; set; } = "";
+
+		public string MatchedName { get; set; } = "";
+
+		public string ReactionContext { get; set; } = "";
+
+		public bool WasRemoved { get; set; }
+
+		public string MemoryHint { get; set; } = "";
+
+		public bool HasSecret { get; set; }
+
+		public string SecretId { get; set; } = "";
+
+		public bool IsValid => !string.IsNullOrWhiteSpace(EntryId) && !string.IsNullOrWhiteSpace(ReactionContext);
+	}
+
+	private readonly Random random = new Random();
+
+	private Harmony harmony;
+
+	private IFashionSenseApi fsApi;
+
+	private OtherNpcClothesReactionSystem otherNpcClothesReactionSystem;
+
+	private OutfitAiService outfitAiService;
+
+	private OutfitMemoryService outfitMemoryService;
+
+	private HatMemoryService hatMemoryService;
+
+	private string lastKnownVanillaHatId;
+
+	private List<string> lastKnownVanillaHatSpecialItemCandidates = new List<string>();
+
+	private string lastKnownVanillaPantsName;
+
+	private List<string> lastKnownVanillaPantsSpecialItemCandidates = new List<string>();
+
+	private readonly HashSet<string> loggedSpecialItemDebugKeys = new HashSet<string>(StringComparer.Ordinal);
+
+	private bool vanillaClothingTrackingInitialized;
+
+	private int vanillaClothingPollTimer;
+
+	private OutfitVisionService outfitVisionService;
+
+	private FashionSenseVisualService fashionSenseVisualService;
+
+	private SpecialHatReactionService specialHatReactionService;
+
+	private SpecialItemReactionService specialItemReactionService;
+
+	private bool changedClothes = false;
+
+	private string lastEligibleSavedOutfitId = "";
+
+	internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
+
+	private const string AutoKissClickActiveModDataKey = "NatrollEXE.LotsOfKisses/AutoKissClickActive";
+
+	private FashionSenseSnapshot fsSnapshotBefore = null;
+
+	private bool fashionSenseMenuOpen = false;
+
+	private FashionSenseChangeInfo lastFashionSenseChangeInfo = null;
+
+	private readonly HashSet<string> npcsReactedToCurrentNotice = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly AiGenerationCoordinator aiGenerationCoordinator = new AiGenerationCoordinator();
+
+	private readonly OutfitReplyConversationHistory outfitReplyConversationHistory = new OutfitReplyConversationHistory();
+
+	private const string AssetPrefix = "Mods/NatrollEXE.OutfitReactions/Clothes";
+
+	private const string OutfitNoticeModDataPrefix = "NatrollEXE.OutfitReactions.OutfitNotice.";
+
+	private const string PlayerAccessoryDescriptionModDataPrefix = "NatrollEXE.OutfitReactions.PlayerAccessoryDescription.";
+
+	private const string LotsOfKissesBystanderWatchingModDataKey = "NatrollEXE.LotsOfKisses/BystanderWatching";
+
+	private readonly SpouseOutfitReactionProgressState spouseOutfitReactionProgressState = new SpouseOutfitReactionProgressState();
+
+	private readonly SpouseDialogueController spouseDialogueController = new SpouseDialogueController();
+
+	private SpouseOutfitReactionCoordinator spouseOutfitReactionCoordinator;
+
+	private readonly SpouseRouteController spouseRouteController = new SpouseRouteController();
+
+	private readonly SpouseOutfitApproachController spouseOutfitApproachController = new SpouseOutfitApproachController();
+
+	private readonly SpouseOutfitNoticeController spouseOutfitNoticeController = new SpouseOutfitNoticeController();
+
+	private readonly SpouseProximityState spouseProximityState = new SpouseProximityState();
+
+	private readonly SpouseSpecialActionController spouseSpecialActionController = new SpouseSpecialActionController();
+
+	private const float OutfitSpecialActionRestoreDistance = 300f;
+
+	private const float SpouseOutfitNoticePauseDistance = 96f;
+
+	private const float SpouseOutfitNoticeReleaseDistance = 300f;
+
+	private const string PantsSeenModDataPrefix = "NatrollEXE.OutfitReactions/PantsSeen/";
+
+	private const string SpecialItemSeenModDataPrefix = "NatrollEXE.OutfitReactions/SpecialItemSeen/";
+
+	internal static ModEntry Instance { get; private set; }
+
+	internal ModConfig Config { get; set; } = new ModConfig();
+
+	internal static bool DebugLog => Instance?.Config?.EnableDebugLogging == true;
+
+	private bool isReactingToClothes
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.IsReacting;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.IsReacting = value;
+		}
+	}
+
+	private int clothesInteractionCooldown
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.InteractionCooldown;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.InteractionCooldown = value;
+		}
+	}
+
+	private bool clothesPathStarted
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.PathStarted;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.PathStarted = value;
+		}
+	}
+
+	private bool clothesComplimentReady
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.ComplimentReady;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.ComplimentReady = value;
+		}
+	}
+
+	private Point clothesPreferredOffset
+	{
+		get
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			return spouseOutfitReactionProgressState.PreferredOffset;
+		}
+		set
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			spouseOutfitReactionProgressState.PreferredOffset = value;
+		}
+	}
+
+	private Point clothesLastPlayerTile
+	{
+		get
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			return spouseOutfitReactionProgressState.LastPlayerTile;
+		}
+		set
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			spouseOutfitReactionProgressState.LastPlayerTile = value;
+		}
+	}
+
+	private Point clothesLastTargetTile
+	{
+		get
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			return spouseOutfitReactionProgressState.LastTargetTile;
+		}
+		set
+		{
+			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
+			spouseOutfitReactionProgressState.LastTargetTile = value;
+		}
+	}
+
+	private bool clothesFirstNoticeDone
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.FirstNoticeDone;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.FirstNoticeDone = value;
+		}
+	}
+
+	private bool clothesEmoteFired
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.EmoteFired;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.EmoteFired = value;
+		}
+	}
+
+	private int clothesNoticePauseTimer
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.NoticePauseTimer;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.NoticePauseTimer = value;
+		}
+	}
+
+	private bool playerWasInClothesNoticeRange
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.PlayerWasInNoticeRange;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.PlayerWasInNoticeRange = value;
+		}
+	}
+
+	private int clothesSecondNoticeCooldown
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.SecondNoticeCooldown;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.SecondNoticeCooldown = value;
+		}
+	}
+
+	private int clothesChaseTimer
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.ChaseTimer;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.ChaseTimer = value;
+		}
+	}
+
+	private NPC clothesReactingNpc
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.ReactingNpc;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.ReactingNpc = value;
+		}
+	}
+
+	private bool outfitSequenceActive
+	{
+		get
+		{
+			return spouseOutfitReactionProgressState.SequenceActive;
+		}
+		set
+		{
+			spouseOutfitReactionProgressState.SequenceActive = value;
+		}
+	}
+
+	private SpouseOutfitReactionCoordinator SpouseOutfitReactionCoordinator => spouseOutfitReactionCoordinator ?? (spouseOutfitReactionCoordinator = new SpouseOutfitReactionCoordinator(spouseOutfitReactionProgressState, UpdateClothesReactionSystem, ShouldStartClothesReaction, ResetClothesState, UpdateSpousePostOutfitLinger, TryHandleOutfitDialogueOrBlockNpcInteractionCore));
+
+
+	internal bool IsAnyOutfitReactionActive()
+	{
+		if (isReactingToClothes || outfitSequenceActive)
+		{
+			return true;
+		}
+		if (clothesComplimentReady || clothesPathStarted)
+		{
+			return true;
+		}
+		OtherNpcClothesReactionSystem obj = otherNpcClothesReactionSystem;
+		if (obj != null && obj.HasAnyActivePendingReaction())
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private void UpdateReactionActiveModDataFlag()
+	{
+		if (Game1.player != null)
+		{
+			bool flag = IsAnyOutfitReactionActive();
+			bool flag2 = ((NetDictionary<string, string, NetString, SerializableDictionary<string, string>, NetStringDictionary<string, NetString>>)(object)((Character)Game1.player).modData).ContainsKey("NatrollEXE.OutfitReactions/ReactionActive");
+			if (flag && !flag2)
+			{
+				((NetDictionary<string, string, NetString, SerializableDictionary<string, string>, NetStringDictionary<string, NetString>>)(object)((Character)Game1.player).modData)["NatrollEXE.OutfitReactions/ReactionActive"] = "1";
+			}
+			else if (!flag && flag2)
+			{
+				((NetDictionary<string, string, NetString, SerializableDictionary<string, string>, NetStringDictionary<string, NetString>>)(object)((Character)Game1.player).modData).Remove("NatrollEXE.OutfitReactions/ReactionActive");
+			}
+		}
+	}
+
+	internal void QueueAiConnectionTestFromConfigMenu()
+	{
+		outfitAiService?.QueueConnectionTestFromConfigMenu();
+	}
+
+	public override void Entry(IModHelper helper)
+	{
+		Instance = this;
+		Config = helper.ReadConfig<ModConfig>();
+		Config.MigrateLegacyAiSettings();
+		outfitAiService = new OutfitAiService(helper, ((Mod)this).Monitor, () => Config);
+		outfitAiService.IsRomanceableNpc = IsNpcRomanceable;
+		outfitMemoryService = new OutfitMemoryService(helper, ((Mod)this).Monitor);
+		hatMemoryService = new HatMemoryService(helper, ((Mod)this).Monitor);
+		outfitVisionService = new OutfitVisionService(((Mod)this).Monitor);
+		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
+		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
+		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
+		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore);
+		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+		helper.Events.GameLoop.DayStarted += OnDayStarted;
+		helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+		helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
+		helper.Events.Display.MenuChanged += OnMenuChanged;
+		helper.Events.Display.RenderedHud += OnRenderedHud;
+		helper.Events.Input.ButtonPressed += OnButtonPressed;
+		helper.Events.Player.Warped += OnWarped;
+		helper.Events.Content.AssetRequested += OnAssetRequested;
+		helper.Events.Content.AssetsInvalidated += OnAssetsInvalidated;
+		helper.Events.GameLoop.Saving += OnSaving;
+		helper.ConsoleCommands.Add("oc_debug_notice", "Outfit Compliments: print why the current outfit notice can/can't start for nearby NPCs.", (Action<string, string[]>)DebugOutfitNoticeCommand);
+		helper.ConsoleCommands.Add("oc_clear_notice_memory", "Outfit Compliments: clear this save's outfit notice memory and reset pending notice state.", (Action<string, string[]>)ClearOutfitNoticeMemoryCommand);
+		helper.ConsoleCommands.Add("oc_test_voicesamples", "Outfit Reactions: report how many real in-game voice-sample lines each NPC profile has (run after loading a save).", (Action<string, string[]>)VoiceSampleReportCommand);
+		helper.ConsoleCommands.Add("oc_preview_voicesamples", "Outfit Reactions: show the exact voice-sample lines that would be injected into the prompt for ONE NPC. Usage: oc_preview_voicesamples <NpcName>", (Action<string, string[]>)VoiceSamplePreviewCommand);
+		ApplyHarmonyPatches();
+	}
+
+	private void ApplyHarmonyPatches()
+	{
+		try
+		{
+			MethodBase methodBase = AccessTools.Method(typeof(NPC), "checkAction", new Type[2]
+			{
+				typeof(Farmer),
+				typeof(GameLocation)
+			});
+			if (methodBase == null)
+			{
+				((Mod)this).Monitor.Log("[CLOTHES PRIORITY] NPC.checkAction target method was NOT found. Patch was not applied.", (LogLevel)3);
+				return;
+			}
+			harmony = new Harmony(((Mod)this).ModManifest.UniqueID);
+			harmony.PatchAll(typeof(ModEntry).Assembly);
+			if (DebugLog)
+			{
+				((Mod)this).Monitor.Log("[CLOTHES PRIORITY] NPC.checkAction Harmony patch applied.", (LogLevel)2);
+			}
+		}
+		catch (Exception ex)
+		{
+			((Mod)this).Monitor.Log("[CLOTHES PRIORITY] Failed to apply NPC.checkAction patch: " + ex, (LogLevel)3);
+		}
+	}
+
+	internal bool PrioritizeOutfitDialogueBeforeNpcCheckAction(NPC npc)
+	{
+		if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
+		{
+			return false;
+		}
+		if (npc == null || ((Character)npc).currentLocation != ((Character)Game1.player).currentLocation)
+		{
+			return false;
+		}
+		if (Game1.eventUp)
+		{
+			return false;
+		}
+		if (TryPrioritizeSpouseOutfitDialogueForClick(npc))
+		{
+			return true;
+		}
+		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
+	}
+
+	internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
+	{
+		return SpouseOutfitReactionCoordinator.TryHandleInteraction(npc);
+	}
+
+	private bool TryHandleOutfitDialogueOrBlockNpcInteractionCore(NPC npc)
+	{
+		if (!Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null || !Config.Enabled)
+		{
+			return false;
+		}
+		if (npc == null || ((Character)npc).currentLocation != ((Character)Game1.player).currentLocation)
+		{
+			return false;
+		}
+		if (Game1.eventUp)
+		{
+			return false;
+		}
+		if (((Character)Game1.player).modData != null && ((NetDictionary<string, string, NetString, SerializableDictionary<string, string>, NetStringDictionary<string, NetString>>)(object)((Character)Game1.player).modData).ContainsKey("NatrollEXE.LotsOfKisses/AutoKissClickActive"))
+		{
+			return false;
+		}
+		if (TryOpenPrioritizedOutfitDialogueFromCheckAction(npc))
+		{
+			return true;
+		}
+		if (ShouldBlockNpcInteractionUntilOutfitDialogueRead(npc))
+		{
+			ShowPendingOutfitBlockedInteractionFeedback(npc);
+			if (DebugLog)
+			{
+				((Mod)this).Monitor.Log("[CLOTHES PRIORITY] Blocked normal interaction/kiss with " + ((Character)npc).Name + " because an unread outfit dialogue is pending.", (LogLevel)2);
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
+	{
+		fsApi = ((Mod)this).Helper.ModRegistry.GetApi<IFashionSenseApi>("PeacefulEnd.FashionSense");
+		((Mod)this).Monitor.Log((fsApi != null) ? "Fashion Sense API loaded successfully." : "Fashion Sense API not found. Outfit compliments will not detect clothing changes.", (LogLevel)((fsApi != null) ? 1 : 3));
+		outfitAiService?.LoadProfiles();
+		try
+		{
+			IGenericModConfigMenuApi api = ((Mod)this).Helper.ModRegistry.GetApi<IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
+			ModConfigMenu.Register(this, api);
+		}
+		catch (Exception ex)
+		{
+			((Mod)this).Monitor.Log("Failed to register GMCM options: " + ex.Message, (LogLevel)0);
+		}
+	}
+
+	private void OnSaving(object sender, SavingEventArgs e)
+	{
+		outfitMemoryService?.Save();
+		hatMemoryService?.Save();
+	}
+
+	private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
+	{
+		outfitMemoryService?.Load();
+		hatMemoryService?.Load();
+		specialItemReactionService?.ResetModRegistryCache();
+		vanillaClothingTrackingInitialized = false;
+		lastKnownVanillaHatId = null;
+		lastKnownVanillaPantsName = null;
+		ResetClothesState(clearChangeFlag: true);
+		otherNpcClothesReactionSystem?.Reset();
+		outfitAiService?.LoadProfiles(quiet: true);
+	}
+
+	private void OnDayStarted(object sender, DayStartedEventArgs e)
+	{
+		ResetClothesState(clearChangeFlag: true);
+		otherNpcClothesReactionSystem?.Reset();
+		Farmer player = Game1.player;
+		if (player != null)
+		{
+			((NetDictionary<string, string, NetString, SerializableDictionary<string, string>, NetStringDictionary<string, NetString>>)(object)((Character)player).modData)?.Remove("NatrollEXE.OutfitReactions/ReactionActive");
+		}
+		outfitAiService?.LoadProfiles(quiet: true);
+	}
+
+	private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
+	{
+		CancelAllPendingOwnAiGenerations();
+		ResetClothesState(clearChangeFlag: true);
+		otherNpcClothesReactionSystem?.Reset();
+	}
+
+	private void OnRenderedHud(object sender, RenderedHudEventArgs e)
+	{
+		if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
+		{
+			return;
+		}
+		foreach (PendingAiGeneration item in aiGenerationCoordinator.GetOutfitSnapshot())
+		{
+			if (item != null && item.Task != null && !item.Task.IsCompleted)
+			{
+				NPC characterFromName = Game1.getCharacterFromName(item.NpcName, true, false);
+				if (characterFromName != null && ((Character)characterFromName).currentLocation == ((Character)Game1.player).currentLocation)
+				{
+					DrawOwnAiWaitingHudMessage(e.SpriteBatch, characterFromName, GetOwnAiWaitingDialogueText(characterFromName, item.WaitingDotCount));
+					return;
+				}
+			}
+		}
+		foreach (PendingAiPlayerReplyGeneration item2 in aiGenerationCoordinator.GetReplySnapshot())
+		{
+			if (item2 != null && item2.Task != null && !item2.Task.IsCompleted)
+			{
+				NPC characterFromName2 = Game1.getCharacterFromName(item2.NpcName, true, false);
+				if (characterFromName2 != null && ((Character)characterFromName2).currentLocation == ((Character)Game1.player).currentLocation)
+				{
+					DrawOwnAiWaitingHudMessage(e.SpriteBatch, characterFromName2, GetOwnAiReplyWaitingDialogueText(characterFromName2, item2.WaitingDotCount));
+					break;
+				}
+			}
+		}
+	}
+
+	private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
+	{
+		//IL_0043: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0050: Unknown result type (might be due to invalid IL or missing references)
+		if (Context.IsWorldReady && Game1.player != null && Game1.currentLocation != null && Config.Enabled && Game1.activeClickableMenu == null && !Game1.eventUp && (SButtonExtensions.IsActionButton(e.Button) || SButtonExtensions.IsUseToolButton(e.Button)))
+		{
+			NPC npcBeingInteractedWith = GetNpcBeingInteractedWith();
+			if (npcBeingInteractedWith != null && !TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith))
+			{
+				otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npcBeingInteractedWith);
+			}
+		}
+	}
+
+	private NPC GetNpcBeingInteractedWith()
+	{
+		//IL_002a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_002f: Unknown result type (might be due to invalid IL or missing references)
+		if (Game1.player == null || Game1.currentLocation == null)
+		{
+			return null;
+		}
+		Vector2 grabTile = ((Character)Game1.player).GetGrabTile();
+		NPC val = ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>().FirstOrDefault((NPC c) => c != null && !c.IsInvisible && ((Character)c).TilePoint.X == (int)grabTile.X && ((Character)c).TilePoint.Y == (int)grabTile.Y);
+		if (val != null)
+		{
+			return val;
+		}
+		int mouseTileX = (Game1.getOldMouseX() + Game1.viewport.X) / 64;
+		int mouseTileY = (Game1.getOldMouseY() + Game1.viewport.Y) / 64;
+		val = (from c in ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>()
+			where c != null && !c.IsInvisible && ((Character)c).TilePoint.X == mouseTileX && ((Character)c).TilePoint.Y == mouseTileY
+			orderby Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position)
+			select c).FirstOrDefault((NPC c) => Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position) <= 192f);
+		if (val != null)
+		{
+			return val;
+		}
+		return (from c in ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>()
+			where c != null && !c.IsInvisible && ((Character)c).currentLocation == ((Character)Game1.player).currentLocation
+			where Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position) <= 112f
+			orderby Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position)
+			select c).FirstOrDefault();
+	}
+
+	private bool TryPrioritizeSpouseOutfitDialogueForClick(NPC npc)
+	{
+		if (npc == null || clothesReactingNpc == null)
+		{
+			return false;
+		}
+		if (!((Character)npc).Name.Equals(((Character)clothesReactingNpc).Name, StringComparison.OrdinalIgnoreCase))
+		{
+			return false;
+		}
+		if (!clothesComplimentReady || !outfitSequenceActive)
+		{
+			return false;
+		}
+		if (lastFashionSenseChangeInfo == null)
+		{
+			return false;
+		}
+		if (!CanNpcNoticeCurrentOutfitNotice(npc))
+		{
+			return false;
+		}
+		if (!spouseDialogueController.HasBackup)
+		{
+			spouseDialogueController.Capture(npc, Game1.player, ((Mod)this).Monitor, DebugLog);
+		}
+		else
+		{
+			spouseDialogueController.TemporarilySkipFirstDailyDialogue(npc, Game1.player, ((Mod)this).Monitor, DebugLog);
+		}
+		bool flag = QueueSpouseOutfitDialogueOnly(npc);
+		if (flag)
+		{
+			if (DebugLog)
+			{
+				((Mod)this).Monitor.Log("[CLOTHES SPOUSE] Re-prioritized outfit dialogue for " + ((Character)npc).Name + " at click time.", (LogLevel)2);
+			}
+			else
+			{
+				KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "AI queue was not available on click.");
+			}
+		}
+		return flag;
+	}
+
+	private void OnWarped(object sender, WarpedEventArgs e)
+	{
+		if (Context.IsWorldReady && e != null && e.IsLocalPlayer)
+		{
+			CancelAllPendingOwnAiGenerations();
+			if (isReactingToClothes || outfitSequenceActive)
+			{
+				ResetClothesReactionState();
+			}
+			otherNpcClothesReactionSystem?.Reset();
+		}
+	}
+
+	private void OnAssetRequested(object sender, AssetRequestedEventArgs e)
+	{
+		if (e.NameWithoutLocale.IsEquivalentTo("Mods/NatrollEXE.OutfitReactions/NpcCharacteristics", false))
+		{
+			e.LoadFrom((Func<object>)(() => outfitAiService?.LoadDefaultProfilesFromFiles() ?? new Dictionary<string, CharacterAiProfile>(StringComparer.OrdinalIgnoreCase)), (AssetLoadPriority)(-1000), (string)null);
+		}
+	}
+
+	private void OnAssetsInvalidated(object sender, AssetsInvalidatedEventArgs e)
+	{
+		if (!Context.IsWorldReady)
+		{
+			return;
+		}
+		foreach (IAssetName item in e.NamesWithoutLocale)
+		{
+			string text = ((object)item).ToString();
+			if (!text.StartsWith("Mods/NatrollEXE.OutfitReactions/Clothes", StringComparison.OrdinalIgnoreCase) && text.Equals("Mods/NatrollEXE.OutfitReactions/NpcCharacteristics", StringComparison.OrdinalIgnoreCase))
+			{
+				outfitAiService?.LoadProfiles(quiet: true);
+			}
+		}
+	}
+
+	private void OnMenuChanged(object sender, MenuChangedEventArgs e)
+	{
+		if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
+		{
+			return;
+		}
+		bool flag = e.NewMenu != null && IsFashionSenseMenu(e.NewMenu);
+		bool flag2 = e.OldMenu != null && IsFashionSenseMenu(e.OldMenu);
+		if (flag && !fashionSenseMenuOpen)
+		{
+			fashionSenseMenuOpen = true;
+			fsSnapshotBefore = CaptureFashionSenseSnapshot();
+		}
+		else
+		{
+			if ((fashionSenseMenuOpen && flag) || !(fashionSenseMenuOpen && flag2) || e.NewMenu != null)
+			{
+				return;
+			}
+			fashionSenseMenuOpen = false;
+			DelayedAction.functionAfterDelay((Action)delegate
+			{
+				if (Context.IsWorldReady && Game1.player != null)
+				{
+					FashionSenseSnapshot fashionSenseSnapshot = CaptureFashionSenseSnapshot();
+					FashionSenseChangeInfo fashionSenseChangeInfo = CompareFashionSenseSnapshots(fsSnapshotBefore, fashionSenseSnapshot);
+					fsSnapshotBefore = null;
+					lastKnownVanillaHatId = fashionSenseSnapshot?.VanillaHat ?? "";
+					lastKnownVanillaPantsName = fashionSenseSnapshot?.VanillaPants ?? "";
+					lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(fashionSenseSnapshot?.VanillaPantsSpecialItemCandidates);
+					vanillaClothingTrackingInitialized = true;
+					if (fashionSenseChangeInfo != null && fashionSenseChangeInfo.CountChanges() > 0)
+					{
+						ApplyDetectedClothesChange(fashionSenseChangeInfo);
+					}
+				}
+			}, 200);
+		}
+	}
 }

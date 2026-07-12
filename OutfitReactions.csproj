@@ -21,6 +21,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="recovery-current\**\*.cs" />
+    <Compile Remove="recovery-modentry\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" PrivateAssets="All" />
     <PackageReference Include="Lib.Harmony" Version="2.3.3" PrivateAssets="All" />
   </ItemGroup>

@@ -9,6 +9,135 @@ using System.Reflection;
 
 namespace OutfitReactions
 {
+    /// <summary>Mutable progress for one close-partner outfit reaction.</summary>
+    internal sealed class SpouseOutfitReactionProgressState
+    {
+        public bool IsReacting { get; set; }
+        public int InteractionCooldown { get; set; }
+        public bool PathStarted { get; set; }
+        public bool ComplimentReady { get; set; }
+        public Point PreferredOffset { get; set; } = Point.Zero;
+        public Point LastPlayerTile { get; set; } = Point.Zero;
+        public Point LastTargetTile { get; set; } = Point.Zero;
+        public bool FirstNoticeDone { get; set; }
+        public bool EmoteFired { get; set; }
+        public int NoticePauseTimer { get; set; }
+        public bool PlayerWasInNoticeRange { get; set; }
+        public int SecondNoticeCooldown { get; set; }
+        public int ChaseTimer { get; set; }
+        public NPC ReactingNpc { get; set; }
+        public bool SequenceActive { get; set; }
+
+        public void AdvanceTimers()
+        {
+            if (NoticePauseTimer > 0)
+                NoticePauseTimer--;
+            if (ChaseTimer > 0)
+                ChaseTimer--;
+            if (SecondNoticeCooldown > 0)
+                SecondNoticeCooldown--;
+            if (InteractionCooldown > 0)
+                InteractionCooldown--;
+        }
+
+        // Matches ResetClothesReactionState: cooldowns for interaction and second notice are retained.
+        public void ClearCurrentReaction()
+        {
+            IsReacting = false;
+            PathStarted = false;
+            ComplimentReady = false;
+            PreferredOffset = Point.Zero;
+            LastPlayerTile = Point.Zero;
+            LastTargetTile = Point.Zero;
+            FirstNoticeDone = false;
+            EmoteFired = false;
+            NoticePauseTimer = 0;
+            PlayerWasInNoticeRange = false;
+            ChaseTimer = 0;
+            ReactingNpc = null;
+            SequenceActive = false;
+        }
+
+        // Matches ResetClothesState. ChaseTimer is intentionally retained because the prior
+        // behavior did not clear it in this broader reset path.
+        public void ClearAllProgress()
+        {
+            IsReacting = false;
+            PathStarted = false;
+            ComplimentReady = false;
+            FirstNoticeDone = false;
+            EmoteFired = false;
+            NoticePauseTimer = 0;
+            SecondNoticeCooldown = 0;
+            PlayerWasInNoticeRange = false;
+            InteractionCooldown = 0;
+            PreferredOffset = Point.Zero;
+            LastPlayerTile = Point.Zero;
+            LastTargetTile = Point.Zero;
+            ReactingNpc = null;
+            SequenceActive = false;
+        }
+
+        public void BeginFirstNotice()
+        {
+            SequenceActive = true;
+            FirstNoticeDone = true;
+            NoticePauseTimer = 90;
+        }
+
+        public void BeginApproach(NPC npc)
+        {
+            SequenceActive = true;
+            IsReacting = true;
+            PathStarted = false;
+            ComplimentReady = false;
+            InteractionCooldown = 180;
+            PreferredOffset = Point.Zero;
+            LastPlayerTile = Point.Zero;
+            LastTargetTile = Point.Zero;
+            ChaseTimer = 420;
+            ReactingNpc = npc;
+        }
+
+        public void BeginClickReady(NPC npc)
+        {
+            SequenceActive = true;
+            IsReacting = true;
+            PathStarted = false;
+            ComplimentReady = true;
+            InteractionCooldown = 180;
+            PreferredOffset = Point.Zero;
+            LastPlayerTile = Point.Zero;
+            LastTargetTile = Point.Zero;
+            ChaseTimer = 0;
+            ReactingNpc = npc;
+        }
+
+        public void KeepPendingAfterAiFailure(NPC npc)
+        {
+            SequenceActive = true;
+            IsReacting = true;
+            ComplimentReady = true;
+            PathStarted = false;
+            FirstNoticeDone = true;
+            NoticePauseTimer = 0;
+            SecondNoticeCooldown = Math.Max(SecondNoticeCooldown, 300);
+            ChaseTimer = 0;
+            ReactingNpc = npc;
+        }
+
+        public void MarkComplimentStarted(NPC npc, bool playerWasInNoticeRange)
+        {
+            SequenceActive = true;
+            IsReacting = true;
+            PathStarted = true;
+            ComplimentReady = true;
+            ChaseTimer = 0;
+            ReactingNpc = npc;
+            PlayerWasInNoticeRange = playerWasInNoticeRange;
+        }
+    }
+
     /// <summary>
     /// Snapshot of an NPC's special-action state while a spouse outfit reaction temporarily
     /// takes control of the interaction. Kept outside ModEntry so the eventual spouse-reaction
@@ -448,6 +577,27 @@ namespace OutfitReactions
             return false;
         }
 
+        public void RestoreNormalDialogueAfterAiFailure(
+            NPC npc,
+            Action<NPC> clearOutfitPrompt,
+            Action<NPC> restoreDialogue,
+            IMonitor monitor,
+            bool debugLog)
+        {
+            if (npc == null)
+                return;
+
+            try
+            {
+                clearOutfitPrompt(npc);
+                restoreDialogue(npc);
+            }
+            catch (Exception ex)
+            {
+                if (debugLog) monitor.Log($"[CLOTHES SPOUSE] Could not restore normal dialogue after failed outfit AI for {npc.Name}: {ex.Message}", LogLevel.Info);
+            }
+        }
+
         private void RestoreTalkedToToday(NPC npc, Farmer player, IMonitor monitor, bool debugLog)
         {
             if (npc == null || player == null || !Snapshot.FriendshipStateCaptured || !Snapshot.ForcedTalkedToToday)
@@ -569,6 +719,7 @@ namespace OutfitReactions
     /// </summary>
     internal sealed class SpouseOutfitReactionCoordinator
     {
+        private readonly SpouseOutfitReactionProgressState progressState;
         private readonly Action<NPC> updateActivePartner;
         private readonly Func<NPC, bool> shouldStartReaction;
         private readonly Action<bool> resetReaction;
@@ -576,18 +727,22 @@ namespace OutfitReactions
         private readonly Func<NPC, bool> handleInteraction;
 
         public SpouseOutfitReactionCoordinator(
+            SpouseOutfitReactionProgressState progressState,
             Action<NPC> updateActivePartner,
             Func<NPC, bool> shouldStartReaction,
             Action<bool> resetReaction,
             Action updatePostOutfitLinger,
             Func<NPC, bool> handleInteraction)
         {
+            this.progressState = progressState;
             this.updateActivePartner = updateActivePartner;
             this.shouldStartReaction = shouldStartReaction;
             this.resetReaction = resetReaction;
             this.updatePostOutfitLinger = updatePostOutfitLinger;
             this.handleInteraction = handleInteraction;
         }
+
+        public void AdvanceTimers() => progressState.AdvanceTimers();
 
         public void Update(NPC activePartner, NPC spouse, bool hasPendingOutfitChange)
         {
