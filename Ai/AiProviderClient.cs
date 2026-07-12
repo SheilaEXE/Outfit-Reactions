@@ -311,7 +311,7 @@ namespace OutfitReactions.Ai
             using HttpResponseMessage response = await Http.SendAsync(request, token);
             string json = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"{provider} HTTP {(int)response.StatusCode}: {TrimForLog(json)}");
+                throw new InvalidOperationException($"{provider} HTTP {(int)response.StatusCode}.");
 
             return ExtractOpenAiCompatibleText(json);
         }
@@ -388,7 +388,7 @@ namespace OutfitReactions.Ai
             using HttpResponseMessage response = await Http.SendAsync(request, token);
             string json = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Anthropic HTTP {(int)response.StatusCode}: {TrimForLog(json)}");
+                throw new InvalidOperationException($"Anthropic HTTP {(int)response.StatusCode}.");
 
             using JsonDocument doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("content", out JsonElement contentArray))
@@ -408,7 +408,7 @@ namespace OutfitReactions.Ai
                     return result;
             }
 
-            monitor.Log(" Anthropic response did not contain content/text blocks. Raw response: " + TrimForLog(json), LogLevel.Warn);
+            monitor.Log(" Anthropic response did not contain content/text blocks.", LogLevel.Warn);
             return "";
         }
 
@@ -483,7 +483,7 @@ namespace OutfitReactions.Ai
             using HttpResponseMessage response = await Http.SendAsync(request, token);
             string json = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Gemini HTTP {(int)response.StatusCode}: {TrimForLog(json)}");
+                throw new InvalidOperationException($"Gemini HTTP {(int)response.StatusCode}.");
 
             using JsonDocument doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("candidates", out JsonElement candidates))
@@ -512,7 +512,7 @@ namespace OutfitReactions.Ai
                 }
             }
 
-            monitor.Log(" Gemini response did not contain candidates/content/parts text. Raw response: " + TrimForLog(json), LogLevel.Warn);
+            monitor.Log(" Gemini response did not contain candidates/content/parts text.", LogLevel.Warn);
             return "";
         }
 
@@ -628,14 +628,6 @@ namespace OutfitReactions.Ai
             }
 
             return Math.Max(1000, visibleBudget + nuanceHeadroom);
-        }
-
-        private static string TrimForLog(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return "";
-            text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
-            return text.Length <= 500 ? text : text.Substring(0, 500) + "...";
         }
 
     }

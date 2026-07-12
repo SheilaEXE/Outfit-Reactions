@@ -1,6 +1,6 @@
 # Outfit Reactions
 
-Um mod para **Stardew Valley** que faz NPCs comentarem sobre as roupas do seu personagem de forma dinâmica sempre que você troca de visual, com exclusividade pelo [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/1382).
+Um mod para **Stardew Valley** que faz NPCs comentarem sobre as roupas do seu personagem de forma dinâmica sempre que você troca de visual, com exclusividade pelo [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/9969).
 
 Feito por **NatrollEXE**.
 
@@ -19,7 +19,7 @@ Feito por **NatrollEXE**.
 ## 📋 Requisitos
 
 * [SMAPI](https://smapi.io/) 4.0.0+
-* [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/1382) (obrigatório)
+* [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/9969) 7.5.0+ (obrigatório)
 * [Generic Mod Config Menu](https://www.nexusmods.com/stardewvalley/mods/5098) (opcional, recomendado para configurar facilmente)
 * Uma chave de API de algum provedor de IA compatível (ex: [OpenRouter](https://openrouter.ai/), Google Gemini) para gerar as reações.
 

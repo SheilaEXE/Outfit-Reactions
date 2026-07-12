@@ -422,11 +422,11 @@ namespace OutfitReactions.Ai
                 {
                     if (TryBuildLenientDialogue(profile, context, ai, raw, out dialogue, out string lenientIssue))
                     {
-                        monitor.Log(" Provider response did not pass the strict quality checks (" + validationIssue + "), but retry is disabled. Accepting the first usable AI line instead. Raw response: " + TrimForLog(raw), LogLevel.Warn);
+                        monitor.Log(" Provider response did not pass the strict quality checks (" + validationIssue + "), but retry is disabled. Accepting the first usable AI line instead.", LogLevel.Warn);
                     }
                     else
                     {
-                        monitor.Log(" Provider response was not usable (" + validationIssue + "; lenient parse: " + lenientIssue + "). Using fallback. Raw response: " + TrimForLog(raw), LogLevel.Warn);
+                        monitor.Log(" Provider response was not usable (" + validationIssue + "; lenient parse: " + lenientIssue + "). Using fallback.", LogLevel.Warn);
                         return false;
                     }
                 }
@@ -501,7 +501,7 @@ namespace OutfitReactions.Ai
                 {
                     if (TryBuildLenientDialogue(profile, context, ai, raw, out dialogue, out string lenientIssue))
                     {
-                        monitor.Log(" Follow-up response did not pass strict checks (" + validationIssue + "), accepting lenient result. Raw: " + TrimForLog(raw), LogLevel.Warn);
+                        monitor.Log(" Follow-up response did not pass strict checks (" + validationIssue + "), accepting lenient result.", LogLevel.Warn);
                     }
                     else
                     {
@@ -515,7 +515,7 @@ namespace OutfitReactions.Ai
 
                         for (int attempt = 1; attempt <= maxRetries && !succeeded; attempt++)
                         {
-                            monitor.Log($" Follow-up attempt {attempt}/{maxRetries} failed ({lastIssue}). Retrying with corrective prompt. Raw: " + TrimForLog(lastRaw), LogLevel.Warn);
+                            monitor.Log($" Follow-up attempt {attempt}/{maxRetries} failed ({lastIssue}). Retrying with corrective prompt.", LogLevel.Warn);
 
                             string retryPrompt = BuildFollowUpRetryPrompt(profile, context, ai, npcCompliment, playerReply, lastRaw, lastIssue);
                             string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), null, cancellationToken).GetAwaiter().GetResult();
@@ -2327,12 +2327,5 @@ namespace OutfitReactions.Ai
             return text.Substring(0, Math.Max(0, maxLength)).Trim() + "...";
         }
 
-        private static string TrimForLog(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return "";
-            text = Regex.Replace(text, @"\s+", " ").Trim();
-            return text.Length <= 500 ? text : text.Substring(0, 500) + "...";
-        }
     }
 }
