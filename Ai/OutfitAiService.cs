@@ -2,10 +2,8 @@ using StardewModdingAPI;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,18 +13,13 @@ namespace OutfitReactions.Ai
 {
     internal sealed class OutfitAiService
     {
-        internal const string NpcCharacteristicsAssetName = "Mods/NatrollEXE.OutfitReactions/NpcCharacteristics";
         internal const string AccessoryClarificationMarker = "{{OUTFIT_COMPLIMENTS_ACCESSORY_CLARIFICATION}}";
 
-        private readonly IModHelper helper;
         private readonly IMonitor monitor;
         private readonly Func<ModConfig> getConfig;
         private readonly VoiceSampleService voiceSamples;
+        private readonly CharacterProfileCatalog profileCatalog;
         private readonly AiProviderClient aiClient;
-        // AI generations run on background tasks while profiles can reload on the game thread.
-        // Publish whole, fully-normalized dictionaries instead of mutating a dictionary that a
-        // generation may be reading. Each reader keeps a stable snapshot for its lookup.
-        private volatile Dictionary<string, CharacterAiProfile> profiles = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, string> memoryCache = new(StringComparer.OrdinalIgnoreCase);
         private bool warnedMultipleAiProfilesThisSession;
         internal readonly PromptStyleService PromptStyle;
@@ -34,278 +27,43 @@ namespace OutfitReactions.Ai
         // Set by ModEntry. Returns true if the named NPC can be romanced (vanilla or modded).
         // Used to decide whether to offer the $a (angry) and $l (love) vanilla portraits, which
         // non-romanceable NPCs usually don't have in their portrait sheet.
-        public Func<string, bool> IsRomanceableNpc { get; set; }
+        public Func<string, bool> IsRomanceableNpc
+        {
+            get => profileCatalog.IsRomanceableNpc;
+            set => profileCatalog.IsRomanceableNpc = value;
+        }
 
         public OutfitAiService(IModHelper helper, IMonitor monitor, Func<ModConfig> getConfig)
         {
-            this.helper = helper;
             this.monitor = monitor;
             this.getConfig = getConfig;
             this.voiceSamples = new VoiceSampleService(helper, monitor);
+            this.profileCatalog = new CharacterProfileCatalog(helper, monitor, voiceSamples);
             this.aiClient = new AiProviderClient(monitor);
             this.PromptStyle = new PromptStyleService(helper, monitor);
             this.PromptStyle.Load(quiet: true);
         }
 
-        private bool hasLoggedProfileLoad = false;
-
         public void LoadProfiles(bool quiet = false)
         {
-            // Keep the original behavior of clearing profiles before a failed reload, but do it
-            // atomically so in-flight AI tasks see either the old complete snapshot or this empty
-            // one -- never a Dictionary being changed underneath them.
-            profiles = new Dictionary<string, CharacterAiProfile>(StringComparer.OrdinalIgnoreCase);
+            profileCatalog.Clear();
             PromptStyle.Load(quiet);
-
-            // Only log the load summary the first time per game session. Later reloads
-            // (save loaded, day started, config changed) reload silently so the SMAPI
-            // console isn't spammed with the same list every time.
-            bool logThisLoad = !quiet && !hasLoggedProfileLoad;
-
-            Dictionary<string, CharacterAiProfile> loaded = null;
-
-            try
-            {
-                loaded = helper.GameContent.Load<Dictionary<string, CharacterAiProfile>>(NpcCharacteristicsAssetName);
-            }
-            catch (Exception ex)
-            {
-                monitor.Log(" Failed to load NPC characteristics from asset " + NpcCharacteristicsAssetName + ": " + ex.Message + ". Falling back to files.", LogLevel.Warn);
-            }
-
-            if (loaded == null || loaded.Count <= 0)
-            {
-                monitor.Log(" NPC characteristics asset is empty or unavailable. Falling back to assets/npc-characteristics files.", LogLevel.Trace);
-                loaded = LoadDefaultProfilesFromFiles();
-            }
-
-            if (loaded == null || loaded.Count <= 0)
-            {
-                monitor.Log(" No usable NPC characteristics were loaded. Built-in AI generation will be skipped and fallbacks may be used.", LogLevel.Warn);
-                return;
-            }
-
-            Dictionary<string, CharacterAiProfile> normalizedProfiles = new(StringComparer.OrdinalIgnoreCase);
-            foreach (var pair in loaded)
-            {
-                CharacterAiProfile profile = pair.Value;
-                NormalizeProfile(pair.Key, profile, mirrorExtraPortraitsToPortraits: true, isRomanceableLookup: IsRomanceableNpc);
-
-                if (profile == null || string.IsNullOrWhiteSpace(profile.NpcName) || !profile.Enabled)
-                    continue;
-
-                normalizedProfiles[profile.NpcName] = profile;
-                if (logThisLoad)
-                    monitor.Log($" Loaded NPC characteristics for {profile.NpcName} with {profile.Portraits?.Count ?? 0} portrait descriptions.", LogLevel.Debug);
-            }
-
-            if (logThisLoad)
-            {
-                monitor.Log($" Loaded {normalizedProfiles.Count} usable NPC characteristic profile(s).", LogLevel.Debug);
-                hasLoggedProfileLoad = true;
-            }
-
-            // Atomic reference replacement: background generations can safely finish with the
-            // snapshot they started with, while future calls use the newly loaded profiles.
-            profiles = normalizedProfiles;
+            profileCatalog.Load(quiet);
         }
 
         public Dictionary<string, CharacterAiProfile> LoadDefaultProfilesFromFiles()
         {
-            Dictionary<string, CharacterAiProfile> result = new(StringComparer.OrdinalIgnoreCase);
-
-            JsonSerializerOptions options = new()
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            };
-
-            try
-            {
-                string mainFolder = Path.Combine(helper.DirectoryPath, "assets", "npc-characteristics");
-                LoadProfilesFromFolder(result, mainFolder, options, "Outfit Compliments");
-            }
-            catch (Exception ex)
-            {
-                monitor.Log(" Failed to load built-in NPC characteristic files: " + ex.Message, LogLevel.Warn);
-            }
-
-            try
-            {
-                foreach (IContentPack pack in helper.ContentPacks.GetOwned())
-                {
-                    string folder = Path.Combine(pack.DirectoryPath, "assets", "npc-characteristics");
-                    LoadProfilesFromFolder(result, folder, options, pack.Manifest.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                monitor.Log(" Failed to load NPC characteristics from Outfit Compliments content packs: " + ex.Message, LogLevel.Warn);
-            }
-
-            return result;
+            return profileCatalog.LoadDefaultProfilesFromFiles();
         }
-
-        private void LoadProfilesFromFolder(
-            Dictionary<string, CharacterAiProfile> result,
-            string folder,
-            JsonSerializerOptions options,
-            string sourceName)
-        {
-            if (!Directory.Exists(folder))
-            {
-                monitor.Log($" NPC characteristics folder was not found for {sourceName}: {folder}", LogLevel.Trace);
-                return;
-            }
-
-            foreach (string file in Directory.GetFiles(folder, "*.json", SearchOption.TopDirectoryOnly))
-            {
-                try
-                {
-                    CharacterAiProfile profile = JsonSerializer.Deserialize<CharacterAiProfile>(File.ReadAllText(file), options);
-                    string fallbackName = Path.GetFileNameWithoutExtension(file);
-
-                    NormalizeProfile(fallbackName, profile, mirrorExtraPortraitsToPortraits: false);
-
-                    if (profile == null || string.IsNullOrWhiteSpace(profile.NpcName))
-                        continue;
-
-                    result[profile.NpcName] = profile;
-                }
-                catch (Exception ex)
-                {
-                    monitor.Log($" Skipped invalid NPC characteristics file '{Path.GetFileName(file)}' from {sourceName}: {ex.Message}", LogLevel.Warn);
-                }
-            }
-        }
-
-        private static void NormalizeProfile(string fallbackName, CharacterAiProfile profile, bool mirrorExtraPortraitsToPortraits = true, Func<string, bool> isRomanceableLookup = null)
-        {
-            if (profile == null)
-                return;
-
-            if (string.IsNullOrWhiteSpace(profile.NpcName))
-                profile.NpcName = fallbackName ?? "";
-
-            profile.NarrativeProfile ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            profile.RelationshipScaling ??= new Dictionary<string, CharacterRelationshipScalingProfile>(StringComparer.OrdinalIgnoreCase);
-            profile.DialogueModes ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            profile.TraitNarratives ??= new Dictionary<string, CharacterTraitNarrativeProfile>(StringComparer.OrdinalIgnoreCase);
-            profile.Portraits ??= new Dictionary<string, PortraitProfile>(StringComparer.OrdinalIgnoreCase);
-            profile.ExtraPortraits ??= new Dictionary<string, PortraitProfile>(StringComparer.OrdinalIgnoreCase);
-            profile.Family ??= new Dictionary<string, CharacterRelationshipProfile>(StringComparer.OrdinalIgnoreCase);
-            profile.Relationships ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            NormalizePortraitDictionary(profile.Portraits);
-            NormalizePortraitDictionary(profile.ExtraPortraits);
-
-            // New profile files use ExtraPortraits, but older test builds used Portraits.
-            // Keep both compatible internally when the mod actually consumes the loaded profile.
-            // Do not mirror while building the public asset, so CP authors see the clean ExtraPortraits format.
-            if (mirrorExtraPortraitsToPortraits)
-            {
-                foreach (var pair in profile.ExtraPortraits)
-                {
-                    if (!profile.Portraits.ContainsKey(pair.Key))
-                        profile.Portraits[pair.Key] = pair.Value;
-                }
-
-                // Vanilla portrait commands are always available in Stardew Valley,
-                // so ExtraPortraits should ADD options instead of replacing the common ones.
-                // This keeps CP authors from having to repeat $h/$s/$a/$l in every NPC profile.
-                bool isRomanceable = isRomanceableLookup?.Invoke(profile.NpcName) ?? false;
-                AddCommonVanillaPortraits(profile.Portraits, isRomanceable);
-            }
-        }
-
-        private static void AddCommonVanillaPortraits(Dictionary<string, PortraitProfile> portraits, bool isRomanceable)
-        {
-            if (portraits == null)
-                return;
-
-            // $h (happy, index 1) and $s (sad, index 2) exist for virtually every NPC, so they are
-            // always offered. $u (unique, index 3) is intentionally omitted.
-            AddCommonPortrait(portraits, "h", "$h", "happy or warmly pleased expression; smiling, amused, or genuinely positive");
-            AddCommonPortrait(portraits, "s", "$s", "sad, worried, hurt, disappointed, or emotionally softened expression");
-
-            // $a (angry) and $l (love/blush) are only reliably present on ROMANCEABLE NPCs. Non-
-            // romanceable NPCs (e.g. Pam, Gus, Marnie) usually lack these frames, so offering them
-            // made the AI pick a portrait that renders as an empty box. Only add them for romanceable
-            // characters; others can still declare extra frames explicitly via ExtraPortraits.
-            if (isRomanceable)
-            {
-                AddCommonPortrait(portraits, "a", "$a", "angry, irritated, defensive, or visibly frustrated expression");
-                AddCommonPortrait(portraits, "l", "$l", "blushing, shy, affectionate, or touched expression");
-            }
-        }
-
-        private static void AddCommonPortrait(Dictionary<string, PortraitProfile> portraits, string key, string command, string description)
-        {
-            if (portraits.ContainsKey(key))
-                return;
-
-            portraits[key] = new PortraitProfile
-            {
-                Command = command,
-                Description = description
-            };
-        }
-
-        private static void NormalizePortraitDictionary(Dictionary<string, PortraitProfile> portraits)
-        {
-            if (portraits == null)
-                return;
-
-            foreach (string key in portraits.Keys.ToList())
-            {
-                PortraitProfile portrait = portraits[key] ?? new PortraitProfile();
-
-                if (string.IsNullOrWhiteSpace(portrait.Command))
-                    portrait.Command = "$" + key;
-
-                if (string.IsNullOrWhiteSpace(portrait.Description))
-                    portrait.Description = key;
-
-                portraits[key] = portrait;
-            }
-        }
-
 
         public bool HasProfile(string npcName)
         {
-            return TryResolveProfile(npcName, null, out _);
+            return profileCatalog.HasProfile(npcName);
         }
 
-        // Resolves a character profile by internal name first, then by display name,
-        // then via the name-alias map (which maps profile/display names to internal
-        // dialogue names). This lets profiles saved under a display name (e.g. "Victoria",
-        // "Dale", "Aicha") match NPCs whose internal name differs (e.g. "ToriLK",
-        // "DaleWaede", "AichaSBV").
         public bool TryResolveProfile(string internalName, string displayName, out CharacterAiProfile profile)
         {
-            profile = null;
-            Dictionary<string, CharacterAiProfile> profileSnapshot = profiles;
-
-            // 1) Direct match on the internal name.
-            if (!string.IsNullOrWhiteSpace(internalName)
-                && profileSnapshot.TryGetValue(internalName, out profile) && profile != null && profile.Enabled)
-                return true;
-
-            // 2) Direct match on the display name.
-            if (!string.IsNullOrWhiteSpace(displayName)
-                && profileSnapshot.TryGetValue(displayName, out profile) && profile != null && profile.Enabled)
-                return true;
-
-            // 3) Reverse alias: a profile may be stored under a display name whose alias
-            //    points to this internal name (e.g. profile "Victoria" -> alias ToriLK).
-            if (!string.IsNullOrWhiteSpace(internalName)
-                && voiceSamples.TryReverseAlias(internalName, out string aliasDisplayName)
-                && profileSnapshot.TryGetValue(aliasDisplayName, out profile) && profile != null && profile.Enabled)
-                return true;
-
-            profile = null;
-            return false;
+            return profileCatalog.TryResolveProfile(internalName, displayName, out profile);
         }
 
         public void QueueConnectionTestFromConfigMenu()
@@ -316,7 +74,7 @@ namespace OutfitReactions.Ai
             if (HasInvalidAiProfileSelection(config))
                 return;
 
-            ActiveAiSettings ai = GetActiveSettings(config);
+            ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(config);
             string provider = string.IsNullOrWhiteSpace(ai.Provider) ? "Unknown" : ai.Provider.Trim();
             string model = string.IsNullOrWhiteSpace(ai.Model) ? "(empty model)" : ai.Model.Trim();
 
@@ -332,7 +90,7 @@ namespace OutfitReactions.Ai
                         return;
                     }
 
-                    if (string.IsNullOrWhiteSpace(ai.ApiKey) && !IsProviderLocal(ai))
+                    if (string.IsNullOrWhiteSpace(ai.ApiKey) && !ActiveAiSettingsResolver.IsLocal(ai))
                     {
                         monitor.Log($" AI connection test skipped: API key is empty for {provider}.", LogLevel.Info);
                         return;
@@ -349,7 +107,7 @@ namespace OutfitReactions.Ai
                         MaxCharacters = 120
                     };
 
-                    string prompt = IsProviderLocal(testAi)
+                    string prompt = ActiveAiSettingsResolver.IsLocal(testAi)
                         ? "Connection test. Return exactly one line beginning with '- ' and no explanation: - Connection successful."
                         : "Connection test. Return exactly one compact JSON object only with this exact shape: {\"text\":\"Connection successful.\",\"portrait\":\"\"}";
 
@@ -384,7 +142,7 @@ namespace OutfitReactions.Ai
             if (HasInvalidAiProfileSelection(config))
                 return false;
 
-            ActiveAiSettings ai = GetActiveSettings(config);
+            ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(config);
 
             if (context == null || string.IsNullOrWhiteSpace(context.NpcName))
                 return false;
@@ -392,7 +150,7 @@ namespace OutfitReactions.Ai
             if (!TryResolveProfile(context.NpcName, context.NpcDisplayName, out CharacterAiProfile profile) || profile == null || !profile.Enabled)
                 return false;
 
-            if (string.IsNullOrWhiteSpace(ai.ApiKey) && !IsProviderLocal(ai))
+            if (string.IsNullOrWhiteSpace(ai.ApiKey) && !ActiveAiSettingsResolver.IsLocal(ai))
             {
                 monitor.Log(" API key is empty for " + ai.Provider + ". Skipping built-in AI and using fallback.", LogLevel.Trace);
                 return false;
@@ -441,7 +199,7 @@ namespace OutfitReactions.Ai
             {
                 if (cancellationToken.IsCancellationRequested)
                     return false;
-                int seconds = GetActiveSettings(getConfig?.Invoke()).TimeoutSeconds;
+                int seconds = ActiveAiSettingsResolver.Resolve(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate outfit compliment: request timed out/canceled after {seconds}s. Try increasing the AI timeout or using a faster model.", LogLevel.Warn);
                 return false;
             }
@@ -465,7 +223,7 @@ namespace OutfitReactions.Ai
             if (HasInvalidAiProfileSelection(config))
                 return false;
 
-            ActiveAiSettings ai = GetActiveSettings(config);
+            ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(config);
 
             if (context == null || string.IsNullOrWhiteSpace(context.NpcName) || string.IsNullOrWhiteSpace(playerReply))
                 return false;
@@ -473,7 +231,7 @@ namespace OutfitReactions.Ai
             if (!TryResolveProfile(context.NpcName, context.NpcDisplayName, out CharacterAiProfile profile) || profile == null || !profile.Enabled)
                 return false;
 
-            if (string.IsNullOrWhiteSpace(ai.ApiKey) && !IsProviderLocal(ai))
+            if (string.IsNullOrWhiteSpace(ai.ApiKey) && !ActiveAiSettingsResolver.IsLocal(ai))
             {
                 monitor.Log(" API key is empty for " + ai.Provider + ". Skipping player-reply follow-up.", LogLevel.Trace);
                 return false;
@@ -569,7 +327,7 @@ namespace OutfitReactions.Ai
             {
                 if (cancellationToken.IsCancellationRequested)
                     return false;
-                int seconds = GetActiveSettings(getConfig?.Invoke()).TimeoutSeconds;
+                int seconds = ActiveAiSettingsResolver.Resolve(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate player-reply follow-up: request timed out/canceled after {seconds}s.", LogLevel.Warn);
                 return false;
             }
@@ -578,15 +336,6 @@ namespace OutfitReactions.Ai
                 monitor.Log(" Failed to generate player-reply follow-up: " + ex.Message, LogLevel.Warn);
                 return false;
             }
-        }
-
-        private static bool IsProviderLocal(ActiveAiSettings ai)
-        {
-            string provider = ai?.Provider ?? "";
-            string endpoint = ai?.Endpoint ?? "";
-            return provider.Equals("Local", StringComparison.OrdinalIgnoreCase)
-                || endpoint.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)
-                || endpoint.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool HasInvalidAiProfileSelection(ModConfig config)
@@ -609,193 +358,6 @@ namespace OutfitReactions.Ai
             return true;
         }
 
-        private static ActiveAiSettings GetActiveSettings(ModConfig config)
-        {
-            config ??= new ModConfig();
-            config.ApplyAiDefaultsAndLimits();
-
-            string provider = config.GetActiveProvider();
-            if (provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Gemini",
-                    Model = config.GetResolvedAiModelForProvider("Gemini"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Gemini"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Gemini"),
-                    TemperaturePercent = config.GeminiAiTemperaturePercent,
-                    TimeoutSeconds = config.GeminiAiTimeoutSeconds,
-                    MaxCharacters = config.GeminiAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "OpenAI",
-                    Model = config.GetResolvedAiModelForProvider("OpenAI"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("OpenAI"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("OpenAI"),
-                    TemperaturePercent = config.OpenAiAiTemperaturePercent,
-                    TimeoutSeconds = config.OpenAiAiTimeoutSeconds,
-                    MaxCharacters = config.OpenAiAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "OpenRouter",
-                    Model = config.GetResolvedAiModelForProvider("OpenRouter"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("OpenRouter"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("OpenRouter"),
-                    TemperaturePercent = config.OpenRouterAiTemperaturePercent,
-                    TimeoutSeconds = config.OpenRouterAiTimeoutSeconds,
-                    MaxCharacters = config.OpenRouterAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Local", StringComparison.OrdinalIgnoreCase) || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Local",
-                    Model = config.GetResolvedAiModelForProvider("Local"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Local"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Local"),
-                    TemperaturePercent = config.LocalAiTemperaturePercent,
-                    TimeoutSeconds = config.LocalAiTimeoutSeconds,
-                    MaxCharacters = config.LocalAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Mistral", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Mistral",
-                    Model = config.GetResolvedAiModelForProvider("Mistral"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Mistral"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Mistral"),
-                    TemperaturePercent = config.MistralAiTemperaturePercent,
-                    TimeoutSeconds = config.MistralAiTimeoutSeconds,
-                    MaxCharacters = config.MistralAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Groq",
-                    Model = config.GetResolvedAiModelForProvider("Groq"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Groq"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Groq"),
-                    TemperaturePercent = config.GroqAiTemperaturePercent,
-                    TimeoutSeconds = config.GroqAiTimeoutSeconds,
-                    MaxCharacters = config.GroqAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Together", StringComparison.OrdinalIgnoreCase) || provider.Equals("TogetherAI", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Together",
-                    Model = config.GetResolvedAiModelForProvider("Together"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Together"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Together"),
-                    TemperaturePercent = config.TogetherAiTemperaturePercent,
-                    TimeoutSeconds = config.TogetherAiTimeoutSeconds,
-                    MaxCharacters = config.TogetherAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Anthropic",
-                    Model = config.GetResolvedAiModelForProvider("Anthropic"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Anthropic"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Anthropic"),
-                    TemperaturePercent = config.AnthropicAiTemperaturePercent,
-                    TimeoutSeconds = config.AnthropicAiTimeoutSeconds,
-                    MaxCharacters = config.AnthropicAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("xAI", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "xAI",
-                    Model = config.GetResolvedAiModelForProvider("xAI"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("xAI"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("xAI"),
-                    TemperaturePercent = config.XAiTemperaturePercent,
-                    TimeoutSeconds = config.XAiTimeoutSeconds,
-                    MaxCharacters = config.XAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Cerebras",
-                    Model = config.GetResolvedAiModelForProvider("Cerebras"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Cerebras"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Cerebras"),
-                    TemperaturePercent = config.CerebrasAiTemperaturePercent,
-                    TimeoutSeconds = config.CerebrasAiTimeoutSeconds,
-                    MaxCharacters = config.CerebrasAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "Perplexity",
-                    Model = config.GetResolvedAiModelForProvider("Perplexity"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("Perplexity"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("Perplexity"),
-                    TemperaturePercent = config.PerplexityAiTemperaturePercent,
-                    TimeoutSeconds = config.PerplexityAiTimeoutSeconds,
-                    MaxCharacters = config.PerplexityAiMaxCharacters
-                };
-            }
-
-            if (provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ActiveAiSettings
-                {
-                    Provider = "DeepSeek",
-                    Model = config.GetResolvedAiModelForProvider("DeepSeek"),
-                    ApiKey = config.GetResolvedAiApiKeyForProvider("DeepSeek"),
-                    Endpoint = config.GetResolvedAiEndpointForProvider("DeepSeek"),
-                    TemperaturePercent = config.DeepSeekAiTemperaturePercent,
-                    TimeoutSeconds = config.DeepSeekAiTimeoutSeconds,
-                    MaxCharacters = config.DeepSeekAiMaxCharacters
-                };
-            }
-
-            // Fallback: Gemini (safe default — requires an API key to be set before use)
-            return new ActiveAiSettings
-            {
-                Provider = "Gemini",
-                Model = config.GetResolvedAiModelForProvider("Gemini"),
-                ApiKey = config.GetResolvedAiApiKeyForProvider("Gemini"),
-                Endpoint = config.GetResolvedAiEndpointForProvider("Gemini"),
-                TemperaturePercent = config.GeminiAiTemperaturePercent,
-                TimeoutSeconds = config.GeminiAiTimeoutSeconds,
-                MaxCharacters = config.GeminiAiMaxCharacters
-            };
-        }
-
         /// <summary>
         /// Last-resort salvage when both the follow-up attempt and its retry fail validation.
         /// Relaxes all length and #$b# requirements to extract any coherent spoken text so the
@@ -816,7 +378,7 @@ namespace OutfitReactions.Ai
                     string inlinePortraitFallback = PortraitResolver.ExtractLastAllowedPortraitKeyFromText(cleaned, profile);
                     cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
                     ModConfig config = getConfig?.Invoke() ?? new ModConfig();
-                    cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, IsProviderLocal(ai), config);
+                    cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
                     cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
                     if (!string.IsNullOrWhiteSpace(cleaned) &&
                         !DialogueValidator.LooksLikeInstructionLeak(cleaned) &&
@@ -844,7 +406,7 @@ namespace OutfitReactions.Ai
 
         private string BuildFollowUpRetryPrompt(CharacterAiProfile profile, OutfitAiContext context, ActiveAiSettings ai, string npcCompliment, string playerReply, string badResponse, string issue)
         {
-            bool localMode = IsProviderLocal(ai);
+            bool localMode = ActiveAiSettingsResolver.IsLocal(ai);
             StringBuilder builder = new();
 
             if (localMode)
@@ -905,7 +467,7 @@ namespace OutfitReactions.Ai
             string portraitCommands = PortraitResolver.BuildPortraitCommandList(profile);
 
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
-            bool localMode = IsProviderLocal(ai);
+            bool localMode = ActiveAiSettingsResolver.IsLocal(ai);
             bool strictLocalMode = localMode && config.LocalAiSafeMode;
 
             StringBuilder builder = new();
@@ -1013,7 +575,7 @@ namespace OutfitReactions.Ai
 
         public string BuildVoiceSampleReport()
         {
-            return voiceSamples.BuildReport(profiles.Keys.ToArray(), getConfig?.Invoke());
+            return voiceSamples.BuildReport(profileCatalog.GetNpcNames(), getConfig?.Invoke());
         }
 
         public string BuildVoiceSamplePreview(string npcName, string currentSeason)
@@ -1033,7 +595,7 @@ namespace OutfitReactions.Ai
 
         private string BuildPrompt(CharacterAiProfile profile, OutfitAiContext context, ModConfig config, ActiveAiSettings ai)
         {
-            if (IsProviderLocal(ai))
+            if (ActiveAiSettingsResolver.IsLocal(ai))
                 return BuildLocalPrompt(profile, context, ai);
 
             // PROMPT STRUCTURE (rewritten):
@@ -1363,19 +925,19 @@ namespace OutfitReactions.Ai
                 return false;
             }
 
-            AiComplimentResult parsed = IsProviderLocal(ai)
+            AiComplimentResult parsed = ActiveAiSettingsResolver.IsLocal(ai)
                 ? (AiResponseParser.ParseAiResult(raw) ?? AiResponseParser.ParseLocalDashLineStyleResult(raw, profile))
                 : AiResponseParser.ParseAiResult(raw);
             if (parsed == null)
             {
-                issue = IsProviderLocal(ai) ? "invalid local JSON or fallback text format" : "invalid JSON";
+                issue = ActiveAiSettingsResolver.IsLocal(ai) ? "invalid local JSON or fallback text format" : "invalid JSON";
                 return false;
             }
 
             string cleaned = DialogueValidator.CleanDialogueText(parsed.Text, ai.MaxCharacters);
             string inlinePortraitFallback = PortraitResolver.ExtractLastAllowedPortraitKeyFromText(cleaned, profile);
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
-            cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, IsProviderLocal(ai), config);
+            cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
             cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
             cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
             if (string.IsNullOrWhiteSpace(cleaned))
@@ -1390,7 +952,7 @@ namespace OutfitReactions.Ai
                 issue = validationIssue;
                 return false;
             }
-            if (IsProviderLocal(ai) && config.LocalAiSafeMode)
+            if (ActiveAiSettingsResolver.IsLocal(ai) && config.LocalAiSafeMode)
             {
                 string localIssue = ValidateLocalGeneratedDialogueText(cleaned, context, profile, config);
                 if (!string.IsNullOrWhiteSpace(localIssue))
@@ -1420,19 +982,19 @@ namespace OutfitReactions.Ai
                 return false;
             }
 
-            AiComplimentResult parsed = IsProviderLocal(ai)
+            AiComplimentResult parsed = ActiveAiSettingsResolver.IsLocal(ai)
                 ? (AiResponseParser.ParseAiResult(raw) ?? AiResponseParser.ParseLocalDashLineStyleResult(raw, profile))
                 : AiResponseParser.ParseAiResult(raw);
             if (parsed == null)
             {
-                issue = IsProviderLocal(ai) ? "invalid local JSON or fallback text format" : "invalid JSON";
+                issue = ActiveAiSettingsResolver.IsLocal(ai) ? "invalid local JSON or fallback text format" : "invalid JSON";
                 return false;
             }
 
             string cleaned = DialogueValidator.CleanDialogueText(parsed.Text, ai.MaxCharacters);
             string inlinePortraitFallback = PortraitResolver.ExtractLastAllowedPortraitKeyFromText(cleaned, profile);
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
-            cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, IsProviderLocal(ai), config);
+            cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
             cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
             cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
             if (string.IsNullOrWhiteSpace(cleaned))
