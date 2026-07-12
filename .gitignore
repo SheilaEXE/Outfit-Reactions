@@ -34,3 +34,5 @@ Thumbs.db
 OutfitReactions.local.props
 .tools/
 .recovered-dll/
+recovery-current/
+recovery-modentry/
