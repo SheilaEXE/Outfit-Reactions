@@ -23,6 +23,7 @@ namespace OutfitReactions.Ai
             // The personality leads so the model reads everything else through it,
             // instead of meeting dozens of generic rules before the character.
             StringBuilder builder = new();
+            int characterBlockStart = builder.Length;
 
             // ---------------------------------------------------------------
             // 1. CHARACTER FIRST — this is the strongest authority in the prompt.
@@ -31,17 +32,21 @@ namespace OutfitReactions.Ai
             builder.AppendLine();
             builder.AppendLine("WHO YOU ARE (read this first; it overrides every generic instruction below):");
 
-            string focusedProfile = CharacterPromptBuilder.BuildForOutfitCompliment(profile, context, includePlayerReplyMode: false, promptStyle: PromptStyle);
+            PromptSizeBreakdown profileDiagnostics = new();
+            string focusedProfile = CharacterPromptBuilder.BuildForOutfitCompliment(profile, context, includePlayerReplyMode: false, promptStyle: PromptStyle, diagnostics: profileDiagnostics);
             if (!string.IsNullOrWhiteSpace(focusedProfile))
                 builder.AppendLine(focusedProfile);
             builder.AppendLine();
 
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
             builder.AppendLine();
+            int characterBlockEnd = builder.Length;
 
             // Voice samples (MVP): a few REAL in-game lines from this NPC, used only to
             // anchor their voice/tone. Always below the personality in authority.
+            int voiceBlockStart = builder.Length;
             voiceSamples.AppendToPrompt(builder, context, config);
+            int voiceBlockEnd = builder.Length;
 
             // ---------------------------------------------------------------
             // 2. THE SCENE — the situation this specific character is reacting to.
@@ -49,16 +54,14 @@ namespace OutfitReactions.Ai
             builder.AppendLine("CURRENT SCENE");
             builder.AppendLine("Speaker: " + context.NpcDisplayName);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
-            CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
+            CharacterPromptBuilder.AppendCompactWornItemDeixisRule(builder);
             builder.AppendLine("Relationship status: " + context.RelationshipStatus + ". Heart level: " + context.RelationshipHearts + ". Is spouse: " + context.IsSpouse + ".");
             builder.AppendLine(BuildRelationshipDepthGuidance(context));
-            builder.AppendLine(context.IsSpouse
-                ? "This is a spouse reaction. It may be warm, affectionate, playful, shy, romantic, or emotionally present when appropriate, while staying in-character."
-                : "This is a nearby-NPC reaction. Keep the tone appropriate to the relationship and do not force romance unless the relationship context supports it.");
 
             // Scene grounding / technical-label safety (kept).
-            builder.AppendLine(BuildTechnicalContextLabelInstruction(context));
-            builder.AppendLine(BuildSceneGroundingInstruction(context));
+            builder.AppendLine(BuildCompactTechnicalContextLabelInstruction());
+            builder.AppendLine(BuildCompactSceneGroundingInstruction(context));
+            int sceneGroundingEnd = builder.Length;
 
             // Outfit / theme clues for this scene.
             // In special-item-only mode the reaction must focus exclusively on the special item
@@ -117,6 +120,7 @@ namespace OutfitReactions.Ai
                 AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
                 AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
             }
+            int outfitAndVisionEnd = builder.Length;
 
             // Location / time / season for this scene.
             builder.AppendLine("Location: " + context.LocationName);
@@ -134,6 +138,7 @@ namespace OutfitReactions.Ai
             string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
+            int environmentEnd = builder.Length;
 
             // Outfit memory + situational overrides (kept; these are scene facts).
             if (context.HasOutfitMemory && !context.VanillaHatHatOnlyMode && (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode))
@@ -151,26 +156,19 @@ namespace OutfitReactions.Ai
             if (!string.IsNullOrWhiteSpace(privateCandidateToneRule))
                 builder.AppendLine(privateCandidateToneRule);
             builder.AppendLine();
+            int sceneBlockEnd = builder.Length;
 
             // ---------------------------------------------------------------
             // 3. HOW TO REACT — one consolidated block. Each theme/accessory rule
             //    is now stated ONCE (previously each appeared multiple times).
             // ---------------------------------------------------------------
-            builder.AppendLine("HOW TO REACT (filtered through the personality above)");
-            builder.AppendLine("React directly to what the farmer is wearing, the visible concept/theme, the situation, or their overall vibe. It does NOT have to be praise: it may be dry, reluctant, amused, skeptical, confused, practical, awkward, flustered, impressed, or openly complimentary if that fits this NPC. Mention colors/fabric only when it sounds natural for this character, never as fashion analysis.");
-            builder.AppendLine("Recognizable theme/reference: if the outfit name, readable clue, full current outfit, noticed accessory, or visible concept points to a known character, franchise, mascot, creature, animal, food, object, or named style, this NPC may mention or allude to it ONLY when it fits their personality, knowledge, and relationship with the farmer. Geeky/playful/artistic/observant NPCs can be specific; others react more generally. Do not force recognition, but do not ignore clear clues (e.g. Sanrio, My Melody, Pikachu, Pokémon, lizard, dinosaur, frog, fairy, cat, rabbit, wings/angel) this NPC would naturally notice.");
-            builder.AppendLine("When a theme is recognizable, do more than a bland compliment: this NPC may joke, tease, ask why the farmer is wearing it, imagine a funny fitting situation, or find it strange, cute, ridiculous, dramatic, suspicious, practical, or oddly charming. Any place, activity, or topic this NPC brings up as a comparison must come from their OWN interests, job, and personality — never a generic Stardew topic (mines, slimes, monsters, the saloon, chickens, crops, farm chores) that this specific character would not naturally think about.");
-            if (context.IsAccessoryChange || context.IsOutfitChange)
-                builder.AppendLine("Combined accessory + outfit: if the noticed change is an accessory but the farmer still wears a recognizable saved outfit/theme, react to the combination as a whole — compare them, notice clashes or funny impossible hybrids, joke, or ask why that accessory is on that costume (e.g. wings on a Pikachu/animal/mascot outfit can be cute, cursed, dramatic, or weird). Do not treat the accessory as isolated when the full outfit gives a better reaction.");
-                builder.AppendLine("Occasion mismatch: judge whether the item fits the current occasion/place/moment using the Location, Festival, season, weather, and time. An event-specific item — bridal veil, party hat, graduation cap, formal/gala wear, holiday costume, swimsuit — worn with no matching occasion can be gently questioned, teased, or remarked on (a wedding veil with no wedding, a party hat with no party). Weigh against the NPC's personality; do not force it. If a matching occasion exists, the item fits.");
-            if (context.IsOutfitChange)
-                builder.AppendLine("Whole saved outfit focus: react to the complete look, not a tiny head-slot item. Do not make the line mainly about a hat, head accessory, hair bow, tiara, hair, or hair color unless the saved outfit/theme clearly revolves around it. Ignore generic head-slot IDs like 'pack0005 hat 2/3'.");
-            builder.AppendLine("Avoid formulaic openings: do not keep starting with 'Esse visual...', 'Essa roupa...', 'Esse look...', and do not make 'combina com você' / 'fica bem em você' the main point. Vary the opening and lead with this NPC's immediate reaction, a specific detail, a joke/question, a complaint, a guarded admission, or an imagined scenario that fits them. Do not produce a generic greeting or unrelated casual line, and do not start with 'hey', 'ei', or 'olha' unless it is natural for this exact moment.");
+            AppendCompactReactionGuidance(builder, context);
 
             // ---------------------------------------------------------------
             // 4. TECHNICAL / OUTPUT RULES — moved to the very end on purpose.
             // ---------------------------------------------------------------
             builder.AppendLine();
+            int reactionBlockEnd = builder.Length;
             builder.AppendLine("OUTPUT RULES (formatting only; never let these flatten the personality)");
             builder.AppendLine("Final dialogue language: " + context.TargetLanguage + ". Ignore any language written inside the character profile above; the final spoken line must use ONLY this language.");
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
@@ -194,7 +192,48 @@ namespace OutfitReactions.Ai
             }
             builder.AppendLine("Always return a portraits array with one portrait key per dialogue box (count the boxes created by #$b#); each key should match that box's tone. The portrait field is only a neutral/default fallback.");
 
-            return builder.ToString();
+            string prompt = builder.ToString();
+            List<KeyValuePair<string, int>> diagnosticBlocks = new()
+            {
+                new KeyValuePair<string, int>("character-profile-and-personality", characterBlockEnd - characterBlockStart),
+                new KeyValuePair<string, int>("voice-samples", voiceBlockEnd - voiceBlockStart),
+                new KeyValuePair<string, int>("scene-and-outfit-context", sceneBlockEnd - voiceBlockEnd),
+                new KeyValuePair<string, int>("scene.grounding-and-relationship", sceneGroundingEnd - voiceBlockEnd),
+                new KeyValuePair<string, int>("scene.outfit-vision-and-special-items", outfitAndVisionEnd - sceneGroundingEnd),
+                new KeyValuePair<string, int>("scene.location-season-weather", environmentEnd - outfitAndVisionEnd),
+                new KeyValuePair<string, int>("scene.memory-and-situational-overrides", sceneBlockEnd - environmentEnd),
+                new KeyValuePair<string, int>("reaction-guidance", reactionBlockEnd - sceneBlockEnd),
+                new KeyValuePair<string, int>("output-and-portrait-rules", prompt.Length - reactionBlockEnd)
+            };
+            diagnosticBlocks.AddRange(profileDiagnostics.Blocks);
+
+            PromptSizeDiagnostics.Log(
+                monitor,
+                "outfit-reaction",
+                context.NpcName,
+                ai.Provider,
+                ai.Model,
+                prompt.Length,
+                context.HasVisionImage,
+                diagnosticBlocks.ToArray());
+            return prompt;
+        }
+
+        private static void AppendCompactReactionGuidance(StringBuilder builder, OutfitAiContext context)
+        {
+            builder.AppendLine("HOW TO REACT (filtered through the personality above)");
+            builder.AppendLine("React directly to the farmer's current appearance, visible theme, situation, or overall vibe in this NPC's own voice. Praise is optional; dry, reluctant, amused, skeptical, confused, practical, awkward, flustered, impressed, critical, or warm reactions are all valid. Mention visual details only when natural, never as a fashion review.");
+            builder.AppendLine("Recognizable theme/reference: when a clear clue points to a known character, franchise, mascot, creature, animal, food, object, or named style, the NPC may recognize or allude to it only when their knowledge and personality support that. Do not force recognition, but do not ignore an obvious clue they would notice. Move beyond bland praise with a fitting joke, question, roast, concern, guarded admission, or imagined situation. Comparisons must come from this NPC's own interests, work, and personality, not generic Stardew topics they would not naturally use.");
+
+            if (context.IsAccessoryChange || context.IsOutfitChange)
+            {
+                builder.AppendLine("Combination and occasion: consider the changed item together with any recognizable outfit still being worn; notice a fitting combination, clash, or funny hybrid instead of isolating the accessory. Also consider whether event-specific clothing fits the current place, festival, season, weather, and time. A clear mismatch may be questioned or teased when this NPC would care; never force it, and do not call a fitting occasion mismatched.");
+            }
+
+            if (context.IsOutfitChange)
+                builder.AppendLine("Whole-outfit focus: react to the complete saved look. Do not center a tiny head-slot item, hair, or hair color unless the theme truly revolves around it; ignore generic/internal head-slot IDs.");
+
+            builder.AppendLine("Opening variety: avoid repeatedly starting with equivalents of 'Esse visual', 'Essa roupa', or 'Esse look', generic greetings, or making 'combina com você' the main point. Lead naturally with this NPC's immediate observation, question, joke, complaint, concern, or admission; use 'hey', 'ei', or 'olha' only when this exact moment calls for it.");
         }
 
         private string BuildLocalPrompt(CharacterAiProfile profile, OutfitAiContext context, ActiveAiSettings ai)
@@ -664,6 +703,22 @@ namespace OutfitReactions.Ai
                 return "Context guidance: the farmer is wearing " + outfitWord + " in a non-private place where others may see. A romantic partner may show concern, protectiveness, jealousy, awkward humor, or fluster if that fits their personality and heart level, but do not force a single reaction pattern.";
 
             return "Context guidance: " + outfitWord + " is not an ordinary everyday outfit in this place. React naturally to the situation — surprise, comedy, concern, bluntness, teasing, or warmth according to the NPC and relationship level. Do not treat it like a normal fashion review.";
+        }
+
+        private static string BuildCompactSceneGroundingInstruction(OutfitAiContext context)
+        {
+            string location = context == null ? "" : StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName);
+            string locationType = context == null ? "" : HumanizeTechnicalLabelForPrompt(context.LocationType);
+            return "SCENE GROUNDING: do not turn profile background into current scene facts or invent objects, props, positions, or actions. Mention a current object/place/action only when confirmed by the scene or visible/support data. Confirmed location: "
+                + StringUtils.FirstNonEmpty(location, "unknown")
+                + "; private location context: "
+                + StringUtils.FirstNonEmpty(locationType, "unknown")
+                + ". Use natural wording such as here, in this room, at home, inside, or outside. Hypothetical jokes are allowed when clearly hypothetical and drawn from this NPC's own interests; do not present another place or activity as the current scene.";
+        }
+
+        private static string BuildCompactTechnicalContextLabelInstruction()
+        {
+            return "Private routing labels (indoor/outdoor variant, NPC room, outfit/dialogue category, theme guidance, internal keys) are metadata: never say them. Naturalize only the location detail that matters to the dialogue.";
         }
 
         private static string BuildSceneGroundingInstruction(OutfitAiContext context)

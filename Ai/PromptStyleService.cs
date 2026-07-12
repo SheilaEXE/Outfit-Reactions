@@ -29,6 +29,11 @@ namespace OutfitReactions.Ai
 
         // NaturalReactionStyle uses {Change} and {OutfitFocusRule} placeholders
         // that are filled at build time by CharacterPromptBuilder.
+        // This compact built-in form keeps the unique honesty/focus rules. Theme recognition,
+        // occasion mismatch and opening variety are already covered by HOW TO REACT.
+        private const string CompactNaturalReactionStyle =
+            "This is an honest reaction, not a mandatory compliment. Match the NPC's established personality and relationship: blunt characters may criticize or mock; kind characters may be tactful or uncertain without becoming falsely positive; close partners may tease. Negative, confused, skeptical, indifferent, reluctant, and unimpressed reactions are valid when appropriate. React like a person seeing the farmer's {Change}, not like a fashion analyst. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they create a meaningful human reaction, never as a forced closing justification. For head items, respect the equipped/support data: a headband, tiara, bow, clip, flower, pin, or crown is not automatically a hat.";
+
         public static readonly string FallbackNaturalReactionStyle =
             "This is an honest REACTION, not a compliment. A compliment is only one of many possible reactions and is never required. React the way this specific person honestly would: if the look is good, they can like it; if it is strange, ugly, tacky, gross, confusing, ridiculous, or off-putting, they can say so in their own voice. Do not soften a genuinely weird or unappealing look into a polite compliment just to be nice. Flattering a clearly bizarre or ugly item when the NPC would not actually admire it reads as fake and breaks character. Match the honesty to the NPC's personality and relationship: a blunt NPC can be openly critical or mocking; a kind NPC can be diplomatically honest or visibly unsure rather than fake-positive; a close partner can tease or be playfully horrified. Negative, confused, and unimpressed reactions are fully allowed and often the correct choice for unusual or unflattering looks. React like a person seeing the farmer's {Change}, not like a fashion analyst or stylist reviewing a palette. Start from the NPC's own personality and relationship level, then react to the obvious concept, situation, mood, humor, surprise, concern, or relationship impact before mentioning visual details. If the look resembles a costume, animal suit, cosplay, pajamas, swimwear, work outfit, festival outfit, silly outfit, cute outfit, or something unusual, comment on what it seems to be first. If the outfit/change clues include a recognizable theme, character, franchise, creature, animal, object, food, fantasy archetype, or named inspiration, the NPC may mention or allude to that reference when it fits their knowledge and personality. Geeky, pop-culture-aware, playful, artistic, or highly observant NPCs can be more specific; others can react to the creature/theme more generally. Do not force every NPC to recognize every reference, but do not ignore clear clues like Sanrio, My Melody, Pikachu, Pokemon/Pokémon, lizard, dinosaur, frog, fairy, cat, rabbit, or other named themes when they would naturally affect the reaction. IMPORTANT — the outfit NAME is only a label/theme, not a guaranteed list of worn pieces. A themed name (e.g. 'Rabbit Outfit', 'Cat Costume', 'Demon Set') often implies a head piece like ears, horns, antennae, or a themed hat, but the farmer may have removed it. Only treat a head piece as worn if it appears in the equipped-items list. If the clues say no head piece is equipped (e.g. 'head/headwear: NONE equipped'), do NOT mention or describe ears, horns, a hat, or any head accessory the theme name suggests — the farmer is bare-headed right now. You may still reference the rest of the theme (the clothing/body that IS worn), just not the missing head piece. When a recognizable theme is present, do more than a generic 'it suits you' compliment. Choose the reaction angle from the NPC's personality: a joke, playful question, friendly roast, surprised confusion, dry sarcasm, affectionate teasing, practical concern, admiration, indifference, reluctant approval, or a small imagined scenario where that theme would fit. Only compare the look to farm life, pets, crops, monsters, caves, the saloon, the beach, festivals, the town, or daily chores when that topic naturally belongs to this NPC, the current location, the outfit theme, or the relationship context. Do not use mines, slimes, monsters, caves, the saloon, or farm chores as generic Stardew references for NPCs who would not think about them. If the noticed change is an accessory while the farmer is still wearing a themed saved outfit, treat the accessory as part of the whole current look. The NPC may compare the new accessory with the existing outfit theme, notice clashes or absurd combinations, and joke about mismatches like wings added to a Pikachu/animal/mascot/cosplay outfit. Do not respond as if the accessory exists alone when the full outfit context is available. Occasion mismatch: also judge whether the item makes sense for the CURRENT occasion, place, and moment (use the Location, Festival, season, weather, and time already provided). Items tied to a specific event — a bridal veil, a party hat, a graduation cap, formal/gala wear, holiday costumes, a swimsuit — worn with NO matching occasion happening can be gently questioned, teased, or remarked on. For example, a wedding veil when there is no wedding, or a party hat when there is no party, is odd and an observant or blunt NPC may point it out, ask about it, or joke. Do not force this every time; weigh it against the NPC's personality and how striking the mismatch is. If there IS a matching occasion (a festival, an actual wedding, a fitting location), the item fits and needs no such remark. The NPC may find a look cute, weird, ridiculous, ugly, funny, suspicious, adorable, dramatic, awkward, unnecessary, too flashy, practical, or oddly fitting if their personality supports it. Avoid making 'combina com você'/'it suits you' the main point; if that idea appears at all, keep it secondary to a concrete reaction, question, joke, reference, or situation. Opening variety is mandatory: do not reuse the same first words, opening phrase, sentence structure, or reaction angle across attempts. If a gruff NPC uses one, vary it or start directly with a concrete observation, complaint, warning, skeptical remark, or reluctant admission instead. Colors, texture, silhouette, balance, composition, or coordination may be mentioned only as small details when they sound natural for this NPC. Avoid making those analytic terms the structure of the line. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they add a real human reaction; never force them as a closing justification. Location/farm/town references may be hypothetical jokes or comparisons if phrased clearly as 'parece que', 'se você aparecesse...', 'dá pra imaginar...', or similar. For head items, respect support data: a headband, tiara, hairband, bow, clip, flower, pin, or crown should not be called a hat unless the metadata says it is a hat.";
 
@@ -61,6 +66,12 @@ namespace OutfitReactions.Ai
         public static readonly string FallbackAccessoryFocusGuidance =
             "Focus guidance: the NPC noticed a Fashion Sense accessory change. Accessories may be wings, backpacks, umbrellas, animated decorations, small earrings, or other extra visual pieces; ignore makeup-like accessories. Focus on the visible accessory if clear, but do NOT isolate it from the rest of the current outfit. If the saved outfit/theme is recognizable, compare the accessory with that theme and react to the combined look: funny mismatch, cute chaos, weird hybrid, dramatic upgrade, ugly clash, playful roast, or an in-world joke according to the NPC. This applies even when the outfit and accessory were equipped in the same Hand Mirror session: the changed accessory is the hook, and the saved outfit/theme is the thing it should be compared against. If it is not visually identifiable, use the clarification behavior instead of guessing.";
 
+        private const string CompactFashionSenseVisualSupportRule =
+            "Fashion Sense support data is authoritative for equipped item IDs and any confirmed hair or headwear color it explicitly states. The attached image may supply only clear, broad clothing/outfit colors. Never take outfit colors from hair, tiny head pieces, floor, background, scenery, lighting, furniture, or walls. Ignore generic/internal item IDs as dialogue content. Never mention Fashion Sense, APIs, filenames, IDs, or technical labels. Current equipped visual data: {VisualSummary}";
+
+        private const string CompactFashionSenseVisualSeparationRule =
+            "The hair entry is the farmer's hairstyle, not a hat or part of the outfit palette. Clearly visible large accessories may count as part of the overall look; makeup-like or unclear accessories should not. For a whole-outfit reaction, never infer hair or headwear colors from pixels. If a generic head-slot item is visually unclear, ignore it instead of guessing.";
+
         public static readonly string FallbackFashionSenseVisualSupportRule =
             "Fashion Sense API visual support data. This is AUTHORITATIVE for equipped item IDs and for any confirmed color it states. For broad outfit/clothing colors, the attached image may also be used when the color is clearly visible on the farmer; use ordinary broad words like pink, white, black, yellow, red, green, or brown, not over-specific pixel guesses. Never take colors from hair, tiny/generic head-slot items, floor, background, scenery, lighting, furniture, or walls. If this data states a confirmed hair color or confirmed hat/headwear color, use exactly that only for hair/hat-specific reactions; if it states none/untinted or gives no confirmed color for hair/hat, do not name that hair/hat color from the image. When the noticed change is a whole saved outfit, hair and generic head-slot IDs are intentionally omitted or should be ignored; focus on the saved outfit/theme and meaningful visible pieces instead. If an item clue looks like an internal/generic ID such as \"pack0005 hat 2\", do not treat it as meaningful dialogue content and do not call it a hat just because the slot says hat. Always ignore floor/background/scenery colors. Never mention Fashion Sense, API, internal IDs, filenames, or technical labels in dialogue: {VisualSummary}";
 
@@ -88,7 +99,7 @@ namespace OutfitReactions.Ai
         public string HatChangeMode       { get; private set; } = FallbackHatChangeMode;
         public string AccessoryChangeMode { get; private set; } = FallbackAccessoryChangeMode;
         public string OutfitChangeMode    { get; private set; } = FallbackOutfitChangeMode;
-        public string NaturalReactionStyle { get; private set; } = FallbackNaturalReactionStyle;
+        public string NaturalReactionStyle { get; private set; } = CompactNaturalReactionStyle;
 
         public string PlayerKnownAddressRule { get; private set; } = FallbackPlayerKnownAddressRule;
         public string PlayerUnknownAddressRule { get; private set; } = FallbackPlayerUnknownAddressRule;
@@ -99,8 +110,8 @@ namespace OutfitReactions.Ai
         public string HairFocusGuidance { get; private set; } = FallbackHairFocusGuidance;
         public string HatFocusGuidance { get; private set; } = FallbackHatFocusGuidance;
         public string AccessoryFocusGuidance { get; private set; } = FallbackAccessoryFocusGuidance;
-        public string FashionSenseVisualSupportRule { get; private set; } = FallbackFashionSenseVisualSupportRule;
-        public string FashionSenseVisualSeparationRule { get; private set; } = FallbackFashionSenseVisualSeparationRule;
+        public string FashionSenseVisualSupportRule { get; private set; } = CompactFashionSenseVisualSupportRule;
+        public string FashionSenseVisualSeparationRule { get; private set; } = CompactFashionSenseVisualSeparationRule;
         public string SpecialItemVisibleRule { get; private set; } = FallbackSpecialItemVisibleRule;
         public string SpecialItemRemovedRule { get; private set; } = FallbackSpecialItemRemovedRule;
         public string SpecialVanillaHatRule { get; private set; } = FallbackSpecialVanillaHatRule;
@@ -162,7 +173,11 @@ namespace OutfitReactions.Ai
                 HatChangeMode        = Coalesce(data.HatChangeMode,        FallbackHatChangeMode);
                 AccessoryChangeMode  = Coalesce(data.AccessoryChangeMode,  FallbackAccessoryChangeMode);
                 OutfitChangeMode     = Coalesce(data.OutfitChangeMode,     FallbackOutfitChangeMode);
-                NaturalReactionStyle = Coalesce(data.NaturalReactionStyle, FallbackNaturalReactionStyle);
+                NaturalReactionStyle = UseCompactBuiltInBlock(
+                    Coalesce(data.NaturalReactionStyle, FallbackNaturalReactionStyle),
+                    "This is an honest REACTION, not a compliment.",
+                    4000,
+                    CompactNaturalReactionStyle);
                 PlayerKnownAddressRule = Coalesce(data.PlayerKnownAddressRule, FallbackPlayerKnownAddressRule);
                 PlayerUnknownAddressRule = Coalesce(data.PlayerUnknownAddressRule, FallbackPlayerUnknownAddressRule);
                 PlayerGenderRule = Coalesce(data.PlayerGenderRule, FallbackPlayerGenderRule);
@@ -172,8 +187,16 @@ namespace OutfitReactions.Ai
                 HairFocusGuidance = Coalesce(data.HairFocusGuidance, FallbackHairFocusGuidance);
                 HatFocusGuidance = Coalesce(data.HatFocusGuidance, FallbackHatFocusGuidance);
                 AccessoryFocusGuidance = Coalesce(data.AccessoryFocusGuidance, FallbackAccessoryFocusGuidance);
-                FashionSenseVisualSupportRule = Coalesce(data.FashionSenseVisualSupportRule, FallbackFashionSenseVisualSupportRule);
-                FashionSenseVisualSeparationRule = Coalesce(data.FashionSenseVisualSeparationRule, FallbackFashionSenseVisualSeparationRule);
+                FashionSenseVisualSupportRule = UseCompactBuiltInBlock(
+                    Coalesce(data.FashionSenseVisualSupportRule, FallbackFashionSenseVisualSupportRule),
+                    "Fashion Sense API visual support data.",
+                    900,
+                    CompactFashionSenseVisualSupportRule);
+                FashionSenseVisualSeparationRule = UseCompactBuiltInBlock(
+                    Coalesce(data.FashionSenseVisualSeparationRule, FallbackFashionSenseVisualSeparationRule),
+                    "IMPORTANT: the 'hair' entry",
+                    900,
+                    CompactFashionSenseVisualSeparationRule);
                 SpecialItemVisibleRule = Coalesce(data.SpecialItemVisibleRule, FallbackSpecialItemVisibleRule);
                 SpecialItemRemovedRule = Coalesce(data.SpecialItemRemovedRule, FallbackSpecialItemRemovedRule);
                 SpecialVanillaHatRule = Coalesce(data.SpecialVanillaHatRule, FallbackSpecialVanillaHatRule);
@@ -196,7 +219,7 @@ namespace OutfitReactions.Ai
             HatChangeMode        = FallbackHatChangeMode;
             AccessoryChangeMode  = FallbackAccessoryChangeMode;
             OutfitChangeMode     = FallbackOutfitChangeMode;
-            NaturalReactionStyle = FallbackNaturalReactionStyle;
+            NaturalReactionStyle = CompactNaturalReactionStyle;
             PlayerKnownAddressRule = FallbackPlayerKnownAddressRule;
             PlayerUnknownAddressRule = FallbackPlayerUnknownAddressRule;
             PlayerGenderRule = FallbackPlayerGenderRule;
@@ -206,8 +229,8 @@ namespace OutfitReactions.Ai
             HairFocusGuidance = FallbackHairFocusGuidance;
             HatFocusGuidance = FallbackHatFocusGuidance;
             AccessoryFocusGuidance = FallbackAccessoryFocusGuidance;
-            FashionSenseVisualSupportRule = FallbackFashionSenseVisualSupportRule;
-            FashionSenseVisualSeparationRule = FallbackFashionSenseVisualSeparationRule;
+            FashionSenseVisualSupportRule = CompactFashionSenseVisualSupportRule;
+            FashionSenseVisualSeparationRule = CompactFashionSenseVisualSeparationRule;
             SpecialItemVisibleRule = FallbackSpecialItemVisibleRule;
             SpecialItemRemovedRule = FallbackSpecialItemRemovedRule;
             SpecialVanillaHatRule = FallbackSpecialVanillaHatRule;
@@ -217,6 +240,19 @@ namespace OutfitReactions.Ai
 
         private static string Coalesce(string value, string fallback)
             => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+        private static string UseCompactBuiltInBlock(string value, string legacyPrefix, int legacyMinimumLength, string compact)
+        {
+            if (!string.IsNullOrWhiteSpace(value)
+                && value.Length >= legacyMinimumLength
+                && value.StartsWith(legacyPrefix, StringComparison.Ordinal))
+            {
+                return compact;
+            }
+
+            // Preserve genuinely customized prompt blocks from content authors.
+            return value;
+        }
 
         // ── Internal DTO ──────────────────────────────────────────────────────
 

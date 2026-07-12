@@ -238,6 +238,15 @@ namespace OutfitReactions.Ai
             }
 
             string prompt = BuildPlayerReplyFollowUpPrompt(profile, context, ai, npcCompliment, playerReply);
+            PromptSizeDiagnostics.Log(
+                monitor,
+                "player-reply-follow-up",
+                context.NpcName,
+                ai.Provider,
+                ai.Model,
+                prompt.Length,
+                context.HasVisionImage,
+                new KeyValuePair<string, int>("complete-follow-up-prompt", prompt.Length));
 
             try
             {
@@ -276,6 +285,15 @@ namespace OutfitReactions.Ai
                             monitor.Log($" Follow-up attempt {attempt}/{maxRetries} failed ({lastIssue}). Retrying with corrective prompt.", LogLevel.Warn);
 
                             string retryPrompt = BuildFollowUpRetryPrompt(profile, context, ai, npcCompliment, playerReply, lastRaw, lastIssue);
+                            PromptSizeDiagnostics.Log(
+                                monitor,
+                                "player-reply-retry",
+                                context.NpcName,
+                                ai.Provider,
+                                ai.Model,
+                                retryPrompt.Length,
+                                false,
+                                new KeyValuePair<string, int>("complete-retry-prompt", retryPrompt.Length));
                             string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), null, cancellationToken).GetAwaiter().GetResult();
 
                             if (string.IsNullOrWhiteSpace(retryRaw))

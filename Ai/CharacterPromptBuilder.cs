@@ -11,17 +11,18 @@ namespace OutfitReactions.Ai
     internal static class CharacterPromptBuilder
     {
         private const int DialogueModeMaxChars = 1500;
-        public static string BuildForOutfitCompliment(CharacterAiProfile profile, OutfitAiContext context, bool includePlayerReplyMode = false, PromptStyleService promptStyle = null)
+        public static string BuildForOutfitCompliment(CharacterAiProfile profile, OutfitAiContext context, bool includePlayerReplyMode = false, PromptStyleService promptStyle = null, PromptSizeBreakdown diagnostics = null)
         {
             if (profile == null)
                 return "";
 
-            return BuildNarrativeV2Profile(profile, context, includePlayerReplyMode, promptStyle);
+            return BuildNarrativeV2Profile(profile, context, includePlayerReplyMode, promptStyle, diagnostics);
         }
 
-        private static string BuildNarrativeV2Profile(CharacterAiProfile profile, OutfitAiContext context, bool includePlayerReplyMode, PromptStyleService promptStyle)
+        private static string BuildNarrativeV2Profile(CharacterAiProfile profile, OutfitAiContext context, bool includePlayerReplyMode, PromptStyleService promptStyle, PromptSizeBreakdown diagnostics)
         {
             StringBuilder builder = new();
+            int checkpoint = builder.Length;
             string npcName = !string.IsNullOrWhiteSpace(profile.NpcName) ? profile.NpcName : context?.NpcDisplayName ?? "NPC";
 
             builder.AppendLine("FOCUSED CHARACTER PROFILE FOR THIS OUTFIT VISUAL-REACTION SCENE");
@@ -41,11 +42,21 @@ namespace OutfitReactions.Ai
                 if (AppendNarrativeSectionByKey(builder, profile, key))
                     emittedNarrative.Add(key);
             }
+            diagnostics?.Add("profile.identity-and-core-narrative", builder.Length - checkpoint);
+            checkpoint = builder.Length;
 
             AppendRelationshipSection(builder, profile, context);
+            diagnostics?.Add("profile.relationship", builder.Length - checkpoint);
+            checkpoint = builder.Length;
             AppendDialogueModeSection(builder, profile, context, includePlayerReplyMode, promptStyle);
+            diagnostics?.Add("profile.dialogue-mode", builder.Length - checkpoint);
+            checkpoint = builder.Length;
             AppendRelevantTraits(builder, profile, context, includePlayerReplyMode);
+            diagnostics?.Add("profile.selected-traits", builder.Length - checkpoint);
+            checkpoint = builder.Length;
             AppendSpeechHesitationRestraint(builder, profile, context, includePlayerReplyMode);
+            diagnostics?.Add("profile.speech-restraint", builder.Length - checkpoint);
+            checkpoint = builder.Length;
 
             // 2. Every remaining narrative key, free-form per NPC, in the ficha's own order.
             //    Guardrail-style keys (HardLimits, WhatMustNeverBeLost, ...) are pushed to the
@@ -87,10 +98,15 @@ namespace OutfitReactions.Ai
                 foreach (string key in guardrails)
                     AppendNarrativeSectionByKey(builder, profile, key);
             }
+            diagnostics?.Add("profile.remaining-narrative-and-guardrails", builder.Length - checkpoint);
+            checkpoint = builder.Length;
 
             AppendNaturalReactionStyle(builder, context, includePlayerReplyMode, promptStyle);
+            diagnostics?.Add("profile.natural-reaction-style", builder.Length - checkpoint);
+            checkpoint = builder.Length;
 
             builder.AppendLine("Scene-use rule: keep the full personality available, but only bring forward the parts that naturally fit this short outfit/hair/hat/accessory visual reaction, the relationship, the location, and the farmer's reply if present. The outfit is the topic, but the NPC personality is the strongest authority.");
+            diagnostics?.Add("profile.scene-use-rule", builder.Length - checkpoint);
             return builder.ToString().Trim();
         }
 
@@ -681,6 +697,14 @@ namespace OutfitReactions.Ai
                 return;
 
             builder.AppendLine("Spatial reference rule for clothing/accessories/items the farmer is currently wearing: these are physically close to the FARMER, right in front of the NPC, not far away. If the target language marks spatial distance in demonstratives (e.g. Portuguese 'isso'/'aí' for near-the-listener vs 'aquilo'/'ali' for far-from-both), use the near-listener form for anything worn on the farmer's body right now (e.g. 'isso aí na sua cabeça', not 'aquilo ali'). Reserve the far/distant form only for something genuinely far away, not for what the farmer is wearing.");
+        }
+
+        public static void AppendCompactWornItemDeixisRule(StringBuilder builder)
+        {
+            if (builder == null)
+                return;
+
+            builder.AppendLine("Worn-item spatial rule: clothing and accessories on the farmer are near the listener, not far away. In languages with distance-sensitive demonstratives, use the near-listener form for worn items and reserve distant forms for genuinely distant objects.");
         }
 
         private static string ApplyPromptTokens(string template, OutfitAiContext context, Dictionary<string, string> extraTokens)
