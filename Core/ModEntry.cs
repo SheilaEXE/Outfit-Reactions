@@ -769,6 +769,7 @@ public sealed partial class ModEntry : Mod
 
 	private void OnDayStarted(object sender, DayStartedEventArgs e)
 	{
+		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
 		otherNpcClothesReactionSystem?.Reset();
 		Farmer player = Game1.player;
@@ -900,10 +901,10 @@ public sealed partial class ModEntry : Mod
 			{
 				((Mod)this).Monitor.Log("[CLOTHES SPOUSE] Re-prioritized outfit dialogue for " + ((Character)npc).Name + " at click time.", (LogLevel)2);
 			}
-			else
-			{
-				KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "AI queue was not available on click.");
-			}
+		}
+		else
+		{
+			KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "AI queue was not available on click.");
 		}
 		return flag;
 	}

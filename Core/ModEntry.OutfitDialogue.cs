@@ -576,6 +576,10 @@ public sealed partial class ModEntry : Mod
 			"Mistral" => Config.MistralAiTimeoutSeconds, 
 			"Groq" => Config.GroqAiTimeoutSeconds, 
 			"Together" => Config.TogetherAiTimeoutSeconds, 
+			"Anthropic" => Config.AnthropicAiTimeoutSeconds,
+			"xAI" => Config.XAiTimeoutSeconds,
+			"Cerebras" => Config.CerebrasAiTimeoutSeconds,
+			"Perplexity" => Config.PerplexityAiTimeoutSeconds,
 			"Local" => Config.LocalAiTimeoutSeconds, 
 			_ => Config.DeepSeekAiTimeoutSeconds, 
 		};
