@@ -387,7 +387,12 @@ namespace OutfitReactions
                 return false;
 
             if (pending.DialogueWasConsumed)
-                return false;
+            {
+                // Once the click has started built-in AI generation, keep Stardew's normal
+                // dialogue stack inaccessible until our final line has actually opened.
+                // The stack itself remains untouched and will be available afterwards.
+                return pending.WaitingForOwnAiFinalDialogue;
+            }
 
             // The player engaged this NPC — the peeking "game" is over; the full reaction takes over.
             // First carry over whether they were ever caught peeking, so the AI can flavor the line.
@@ -925,7 +930,10 @@ namespace OutfitReactions
                     npc.movementPause = 6;
 
                 npc.Sprite?.StopAnimation();
-                if (FacePlayerIfSafe(npc))
+                bool facedPlayer = pending.IsRomanticPartner
+                    ? FaceRomanticPartnerTowardPlayer(npc)
+                    : FacePlayerIfSafe(npc);
+                if (facedPlayer)
                     pending.WasLookingAtPlayer = true;
 
                 return;
@@ -1091,7 +1099,10 @@ namespace OutfitReactions
                     npc.movementPause = 6;
 
                 npc.Sprite?.StopAnimation();
-                FacePlayerIfSafe(npc);
+                if (pending.IsRomanticPartner)
+                    FaceRomanticPartnerTowardPlayer(npc);
+                else
+                    FacePlayerIfSafe(npc);
                 return;
             }
 
@@ -1298,6 +1309,18 @@ namespace OutfitReactions
         private bool FacePlayerIfSafe(NPC npc)
         {
             return peekingController.FacePlayerIfSafe(npc);
+        }
+
+        private static bool FaceRomanticPartnerTowardPlayer(NPC npc)
+        {
+            if (npc == null || Game1.player == null || npc.currentLocation != Game1.player.currentLocation)
+                return false;
+
+            // A preserved schedule controller can keep isMoving() true even while movementPause
+            // holds the NPC in place. Romantic partners are already paused before this call, so
+            // updating only their facing direction is safe and does not replace the controller.
+            npc.faceGeneralDirection(Game1.player.getStandingPosition(), 0, false, false);
+            return true;
         }
 
         private bool FaceDirectionIfSafe(NPC npc, int direction)
