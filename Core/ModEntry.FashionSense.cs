@@ -128,27 +128,11 @@ public sealed partial class ModEntry : Mod
 		if (Context.IsWorldReady && Config.Enabled)
 		{
 			UpdateReactionActiveModDataFlag();
-			SpouseOutfitReactionCoordinator.AdvanceTimers();
-			if (spouseProximityState.PendingBubbleTimer > 0)
-			{
-				spouseProximityState.PendingBubbleTimer--;
-			}
 			RefreshCurrentSavedOutfitNoticeCandidate();
 			PollVanillaHatAndPantsChange();
-			NPC spouse = GetSpouse();
-			NPC datingNpc = GetDatingNpc();
-			NPC val = spouse ?? datingNpc;
-			SpouseOutfitReactionCoordinator.Update(val, spouse, changedClothes && lastFashionSenseChangeInfo != null);
 			UpdatePendingOwnAiGenerations();
 			UpdatePendingOwnAiPlayerReplyGenerations();
-			object obj = ((val != null) ? ((Character)val).Name : null);
-			if (obj == null)
-			{
-				Farmer player = Game1.player;
-				obj = ((player != null) ? player.spouse : null);
-			}
-			string spouseName = (string)obj;
-			otherNpcClothesReactionSystem?.Update(spouseName);
+			otherNpcClothesReactionSystem?.Update();
 		}
 	}
 

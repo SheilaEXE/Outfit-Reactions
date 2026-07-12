@@ -625,7 +625,7 @@ public sealed partial class ModEntry : Mod
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
-		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore);
+		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner);
 		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
 		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
 		helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -686,16 +686,12 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (TryPrioritizeSpouseOutfitDialogueForClick(npc))
-		{
-			return true;
-		}
 		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
 	}
 
 	internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
 	{
-		return SpouseOutfitReactionCoordinator.TryHandleInteraction(npc);
+		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
 	}
 
 	private bool TryHandleOutfitDialogueOrBlockNpcInteractionCore(NPC npc)

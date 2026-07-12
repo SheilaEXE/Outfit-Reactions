@@ -1277,14 +1277,16 @@ public sealed partial class ModEntry : Mod
 			FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName);
 			return;
 		}
-		npc.CurrentDialogue.Clear();
 		string text = (pending.IsSpouseDialogue ? "OutfitReactions_SpousePlayerReplyFollowUp" : "OutfitReactions_GlobalPlayerReplyFollowUp");
 		npc.CurrentDialogue.Push(new Dialogue(npc, text, generated));
 		outfitReplyConversationHistory.Append(pending.NpcName, "NPC", generated);
 		Game1.activeClickableMenu = null;
 		Game1.afterDialogues = delegate
 		{
-			ShowPlayerReplyChoiceMenu(npc, pending.IsSpouseDialogue, generated, pending.OnFinished);
+			// The generated follow-up is the final line of this outfit interaction.
+			// Finish only our temporary reply flow; any game/mod dialogue already
+			// queued beneath this line remains available for a later interaction.
+			FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName);
 		};
 		((Character)npc).faceGeneralDirection(((Character)Game1.player).getStandingPosition(), 0, false);
 		Game1.drawDialogue(npc);

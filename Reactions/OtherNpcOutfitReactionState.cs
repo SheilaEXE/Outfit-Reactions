@@ -11,6 +11,7 @@ namespace OutfitReactions
         public int DialogueCountAfterPush { get; set; }
         public int OriginalFacingDirection { get; set; }
         public bool WasLookingAtPlayer { get; set; }
+        public bool IsRomanticPartner { get; set; }
 
         // Set when the walking peeking mechanic armed the reaction and when the player caught it.
         public bool CameFromPeeking { get; set; }

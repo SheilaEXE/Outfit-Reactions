@@ -146,6 +146,25 @@ public sealed partial class ModEntry : Mod
 		}
 	}
 
+	private bool IsRomanticOutfitPartner(NPC npc)
+	{
+		if (npc == null || Game1.player == null || string.IsNullOrWhiteSpace(((Character)npc).Name))
+			return false;
+
+		// Krobus is a roommate, not a romantic partner for outfit-reaction behavior.
+		if (((Character)npc).Name.Equals("Krobus", StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		if (!string.IsNullOrWhiteSpace(Game1.player.spouse)
+			&& ((Character)npc).Name.Equals(Game1.player.spouse, StringComparison.OrdinalIgnoreCase))
+			return true;
+
+		Friendship friendship = null;
+		return Game1.player.friendshipData != null
+			&& Game1.player.friendshipData.TryGetValue(((Character)npc).Name, out friendship)
+			&& IsDatingOrEngagedFriendship(friendship);
+	}
+
 	private IEnumerable<int> GetRelationshipHeartThresholds(string status, int hearts)
 	{
 		int[] thresholds = ((!string.Equals(status, "Spouse", StringComparison.OrdinalIgnoreCase)) ? new int[6] { 10, 8, 6, 5, 4, 2 } : new int[7] { 14, 12, 10, 8, 6, 4, 2 });

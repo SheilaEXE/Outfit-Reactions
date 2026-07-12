@@ -196,6 +196,7 @@ namespace OutfitReactions
         public bool EnableNpcOutfitReactions { get; set; } = true;
         public int NpcOutfitReactionChance { get; set; } = 30;
         public int NpcRepeatedVisualNoticeChance { get; set; } = 15;
+        public bool RomanticPartnersAlwaysNoticeOutfitChanges { get; set; } = true;
         public bool EnableDebugLogging { get; set; } = false;
 
         // How NPCs react when the farmer is wearing a vanilla hat (Game1.player.hat):

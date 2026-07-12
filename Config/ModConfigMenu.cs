@@ -585,6 +585,14 @@ namespace OutfitReactions
 
             configMenu.AddBoolOption(
                 mod: mod.ModManifest,
+                name: () => T("gmcm.option.romantic-partners-always-notice.name"),
+                tooltip: () => T("gmcm.option.romantic-partners-always-notice.tooltip"),
+                getValue: () => mod.Config.RomanticPartnersAlwaysNoticeOutfitChanges,
+                setValue: value => mod.Config.RomanticPartnersAlwaysNoticeOutfitChanges = value
+            );
+
+            configMenu.AddBoolOption(
+                mod: mod.ModManifest,
                 name: () => T("gmcm.option.debug-logging.name"),
                 tooltip: () => T("gmcm.option.debug-logging.tooltip"),
                 getValue: () => mod.Config.EnableDebugLogging,

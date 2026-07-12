@@ -32,6 +32,8 @@
   "gmcm.option.npc-reaction-chance.tooltip": "Chance for each nearby NPC to notice the player's appearance.",
   "gmcm.option.npc-repeated-visual-chance.name": "Repeated visual notice chance",
   "gmcm.option.npc-repeated-visual-chance.tooltip": "Chance for an NPC to react to a visual they have already seen before (lower keeps repeats from being noticed as often). Requires NPC memory.",
+  "gmcm.option.romantic-partners-always-notice.name": "Romantic partners always notice changes",
+  "gmcm.option.romantic-partners-always-notice.tooltip": "If enabled, every dating partner and spouse always notices a valid change while nearby and in line of sight. Krobus continues using the normal chances.",
   "gmcm.option.debug-logging.name": "Enable debug logging",
   "gmcm.option.debug-logging.tooltip": "Show detailed operational logs (reaction flow, AI requests, NPC notices) in the SMAPI console. Leave off for a clean console; turn on only when troubleshooting.",
   "gmcm.option.vanilla-hat-mode.name": "Vanilla hat reaction",
