@@ -1,5 +1,6 @@
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.Locations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -158,6 +159,9 @@ namespace OutfitReactions
                     continue;
 
                 bool romanticPartner = isRomanticPartner?.Invoke(npc) == true;
+                float npcNoticeDistance = romanticPartner
+                    ? Math.Min(noticeDistance, RomanticPendingCancelDistance)
+                    : noticeDistance;
 
                 if (pendingPrompts.ContainsKey(npc.Name))
                     continue;
@@ -219,7 +223,7 @@ namespace OutfitReactions
                 if (chance <= 0)
                     continue;
 
-                if (DistanceToPlayer(npc) > noticeDistance)
+                if (DistanceToPlayer(npc) > npcNoticeDistance)
                     continue;
 
                 // Only notice if the NPC is roughly facing the player AND has an unobstructed line of
@@ -959,6 +963,16 @@ namespace OutfitReactions
                 return;
             }
 
+            // Inside the farmhouse, romantic partners may still notice the outfit, emote, and
+            // keep their dialogue pending, but Outfit Reactions must not interrupt their indoor
+            // activity or force a waiting pose. Using the location type also covers compatible
+            // farmhouse replacements which inherit Stardew's FarmHouse class.
+            if (pending.IsRomanticPartner && npc.currentLocation is FarmHouse)
+            {
+                pending.NoticePauseActive = false;
+                return;
+            }
+
             if (pending.IgnoreRomanticDistanceForPublicMultiKiss)
             {
                 // Lots of Kisses owns the interruption hold and blush sequence. Once it releases
@@ -1002,7 +1016,7 @@ namespace OutfitReactions
             {
                 // A partner who noticed while already walking keeps their original controller
                 // and schedule until naturally reaching the player. Once the close hold starts,
-                // latch it until interaction or the 1000f cancellation boundary.
+                // latch it until interaction or the romantic cancellation boundary.
                 if (pending.NoticePauseActive)
                 {
                     pending.NoticePauseActive = distance < RomanticPendingCancelDistance;
@@ -1180,8 +1194,10 @@ namespace OutfitReactions
             if (pending.PostDialogueLingerTimer > 0)
                 pending.PostDialogueLingerTimer--;
 
+            bool romanticPartnerInsideFarmHouse = pending.IsRomanticPartner
+                && npc.currentLocation is FarmHouse;
             bool shouldFinish = pending.IsRomanticPartner
-                ? (!sameLocation || distance >= RomanticPendingCancelDistance)
+                ? (romanticPartnerInsideFarmHouse || !sameLocation || distance >= RomanticPendingCancelDistance)
                 : hasCapturedSpecialAction
                 ? (!sameLocation || distance >= NpcSpecialActionRestoreDistance)
                 : (!sameLocation || distance >= PostDialogueLingerDistance || pending.PostDialogueLingerTimer <= 0);
@@ -1318,11 +1334,11 @@ namespace OutfitReactions
 
             if (pending.IsRomanticPartner)
             {
-                // Moving beyond 1000f cancels only this pending opportunity. Do not mark the
+                // Moving beyond the romantic wait range cancels only this pending opportunity. Do not mark the
                 // outfit as consumed: approaching again should run the configured chance anew.
                 reactedNpcsThisOutfit.Remove(npc.Name);
                 rollCooldowns.Remove(npc.Name);
-                if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Romantic partner {npc.Name} moved out of the 1000f wait range; released and made eligible to notice again.", LogLevel.Info);
+                if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Romantic partner {npc.Name} moved out of the {RomanticPendingCancelDistance:F0}f wait range; released and made eligible to notice again.", LogLevel.Info);
             }
             else
             {
