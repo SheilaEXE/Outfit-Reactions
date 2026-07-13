@@ -478,6 +478,7 @@ namespace OutfitReactions
             }
 
             pending.RomanticHoldSuspendedForKiss = true;
+            pending.ExternalKissProtectionTimer = 90;
             pending.NoticePauseActive = false;
             npc.movementPause = 0;
 
@@ -932,7 +933,15 @@ namespace OutfitReactions
 
             if (pending.RomanticHoldSuspendedForKiss)
             {
-                if (Game1.freezeControls)
+                if (pending.ExternalKissProtectionTimer > 0)
+                    pending.ExternalKissProtectionTimer--;
+
+                // freezeControls can end before the partner's kiss pose does. Keep the
+                // outfit hold suspended through both the grace window and the NPC's real
+                // visual pause, so StopAnimation below can't overwrite the kiss frame.
+                if (pending.ExternalKissProtectionTimer > 0
+                    || Game1.freezeControls
+                    || npc.movementPause > 6)
                     return;
 
                 // The external kiss has ended. Resume the same pending outfit wait without
