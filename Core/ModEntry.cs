@@ -691,6 +691,12 @@ public sealed partial class ModEntry : Mod
 
 	internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
 	{
+		if (Game1.player?.modData != null && Game1.player.modData.ContainsKey(AutoKissClickActiveModDataKey))
+		{
+			// Lots of Kisses marks its simulated checkAction click with this flag.
+			// Let the kiss pass through without starting/consuming the pending outfit dialogue.
+			return false;
+		}
 		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
 			return false;
 		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;

@@ -912,6 +912,12 @@ namespace OutfitReactions
                 return;
             }
 
+            // Vanilla's kiss animation temporarily freezes controls. Do not refresh the outfit
+            // hold pose or call StopAnimation during that window; once the kiss ends, the pending
+            // romantic reaction resumes waiting without having queued any dialogue.
+            if (pending.IsRomanticPartner && Game1.freezeControls)
+                return;
+
             float distance = DistanceToPlayer(npc);
 
             // Kiss-style notice pause: don't delete or replace npc.controller. Let the NPC keep
