@@ -695,6 +695,7 @@ public sealed partial class ModEntry : Mod
 		{
 			// Lots of Kisses marks its simulated checkAction click with this flag.
 			// Let the kiss pass through without starting/consuming the pending outfit dialogue.
+			otherNpcClothesReactionSystem?.SuspendRomanticHoldForExternalKiss(npc);
 			return false;
 		}
 		if (ShouldDeferOutfitReactionForActiveFestivalActivity())

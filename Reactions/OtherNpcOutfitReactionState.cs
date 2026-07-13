@@ -13,6 +13,7 @@ namespace OutfitReactions
         public bool WasLookingAtPlayer { get; set; }
         public bool IsRomanticPartner { get; set; }
         public bool WasMovingWhenNoticed { get; set; }
+        public bool RomanticHoldSuspendedForKiss { get; set; }
 
         // Set when the walking peeking mechanic armed the reaction and when the player caught it.
         public bool CameFromPeeking { get; set; }

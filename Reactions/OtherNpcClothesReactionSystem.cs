@@ -467,6 +467,24 @@ namespace OutfitReactions
             return true;
         }
 
+        public void SuspendRomanticHoldForExternalKiss(NPC npc)
+        {
+            if (npc == null
+                || !pendingPrompts.TryGetValue(npc.Name, out PendingPrompt pending)
+                || pending == null
+                || !pending.IsRomanticPartner)
+            {
+                return;
+            }
+
+            pending.RomanticHoldSuspendedForKiss = true;
+            pending.NoticePauseActive = false;
+            npc.movementPause = 0;
+
+            if (ModEntry.DebugLog)
+                monitor?.Log($"[NPC OUTFIT] Suspended romantic outfit hold for Lots of Kisses animation with {npc.Name}.", LogLevel.Info);
+        }
+
         private void UpdateRollCooldowns()
         {
             if (rollCooldowns.Count <= 0)
@@ -910,6 +928,17 @@ namespace OutfitReactions
             {
                 pending.NoticePauseActive = false;
                 return;
+            }
+
+            if (pending.RomanticHoldSuspendedForKiss)
+            {
+                if (Game1.freezeControls)
+                    return;
+
+                // The external kiss has ended. Resume the same pending outfit wait without
+                // consuming it or touching the schedule controller.
+                pending.RomanticHoldSuspendedForKiss = false;
+                pending.NoticePauseActive = true;
             }
 
             // Vanilla's kiss animation temporarily freezes controls. Do not refresh the outfit
