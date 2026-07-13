@@ -388,6 +388,11 @@ namespace OutfitReactions
             if (!pendingPrompts.TryGetValue(npc.Name, out PendingPrompt pending) || pending == null)
                 return false;
 
+            // The public multi-kiss interruption keeps an outfit reaction pending while the
+            // partner resumes their route, even beyond the normal romantic 1000f boundary.
+            // The exception ends only when the player deliberately clicks to read this reaction.
+            pending.IgnoreRomanticDistanceForPublicMultiKiss = false;
+
             if (pending.DialogueWasConsumed)
             {
                 // Once the click has started built-in AI generation, keep Stardew's normal
@@ -524,6 +529,21 @@ namespace OutfitReactions
                     continue;
                 }
 
+                if (pending.IsRomanticPartner
+                    && npc.modData.ContainsKey(ModEntry.PublicMultiKissInterruptionModDataKey)
+                    && !pending.IgnoreRomanticDistanceForPublicMultiKiss)
+                {
+                    // Latch the exception because Lots of Kisses removes its transient marker
+                    // after the blush emote. Outfit Reactions keeps the pending dialogue until
+                    // the player clicks it, but no longer holds or poses the walking partner.
+                    pending.IgnoreRomanticDistanceForPublicMultiKiss = true;
+                    pending.NoticePauseActive = false;
+                    pending.RomanticHoldSuspendedForKiss = false;
+                    pending.ExternalKissProtectionTimer = 0;
+                    pending.WasLookingAtPlayer = false;
+                    pending.SpecialActionSnapshot = null;
+                }
+
                 if (pending.PendingBubbleCooldown > 0)
                     pending.PendingBubbleCooldown--;
 
@@ -542,7 +562,11 @@ namespace OutfitReactions
                 // from feeling like an instant/direct dialogue with no reaction beat.
                 if (!pending.DialogueQueued)
                 {
-                    if (Game1.player == null || npc.currentLocation != Game1.player.currentLocation || DistanceToPlayer(npc) > cancelDistance)
+                    bool invalidLocation = Game1.player == null || npc.currentLocation != Game1.player.currentLocation;
+                    bool beyondCancelDistance = !invalidLocation
+                        && !pending.IgnoreRomanticDistanceForPublicMultiKiss
+                        && DistanceToPlayer(npc) > cancelDistance;
+                    if (invalidLocation || beyondCancelDistance)
                     {
                         CancelPendingPrompt(npc, pending);
                         pendingPrompts.Remove(npcName);
@@ -591,7 +615,11 @@ namespace OutfitReactions
                 }
 
                 // If the farmer moved too far away or changed maps, cancel this pending reaction.
-                if (Game1.player == null || npc.currentLocation != Game1.player.currentLocation || DistanceToPlayer(npc) > cancelDistance)
+                bool queuedInvalidLocation = Game1.player == null || npc.currentLocation != Game1.player.currentLocation;
+                bool queuedBeyondCancelDistance = !queuedInvalidLocation
+                    && !pending.IgnoreRomanticDistanceForPublicMultiKiss
+                    && DistanceToPlayer(npc) > cancelDistance;
+                if (queuedInvalidLocation || queuedBeyondCancelDistance)
                 {
                     CancelPendingPrompt(npc, pending);
                     pendingPrompts.Remove(npcName);
@@ -927,6 +955,15 @@ namespace OutfitReactions
 
             if (npc.currentLocation != Game1.player.currentLocation)
             {
+                pending.NoticePauseActive = false;
+                return;
+            }
+
+            if (pending.IgnoreRomanticDistanceForPublicMultiKiss)
+            {
+                // Lots of Kisses owns the interruption hold and blush sequence. Once it releases
+                // the NPC, let the schedule continue without Outfit Reactions refreshing a pause,
+                // facing direction, or animation while its dialogue remains pending.
                 pending.NoticePauseActive = false;
                 return;
             }

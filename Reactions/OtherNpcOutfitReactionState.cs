@@ -15,6 +15,7 @@ namespace OutfitReactions
         public bool WasMovingWhenNoticed { get; set; }
         public bool RomanticHoldSuspendedForKiss { get; set; }
         public int ExternalKissProtectionTimer { get; set; }
+        public bool IgnoreRomanticDistanceForPublicMultiKiss { get; set; }
 
         // Set when the walking peeking mechanic armed the reaction and when the player caught it.
         public bool CameFromPeeking { get; set; }

@@ -330,6 +330,7 @@ public sealed partial class ModEntry : Mod
 	internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
 
 	private const string AutoKissClickActiveModDataKey = "NatrollEXE.LotsOfKisses/AutoKissClickActive";
+	internal const string PublicMultiKissInterruptionModDataKey = "NatrollEXE.LotsOfKisses/PublicMultiKissInterruption";
 
 	private FashionSenseSnapshot fsSnapshotBefore = null;
 
