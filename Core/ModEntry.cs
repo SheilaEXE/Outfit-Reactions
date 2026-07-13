@@ -691,7 +691,50 @@ public sealed partial class ModEntry : Mod
 
 	internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
 	{
+		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+			return false;
 		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
+	}
+
+	private bool ShouldDeferOutfitReactionForActiveFestivalActivity()
+	{
+		if (!Game1.eventUp)
+			return false;
+
+		if (Game1.currentMinigame != null)
+		{
+			if (DebugLog)
+				((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred pending festival outfit reaction because a minigame is active.", (LogLevel)2);
+			return true;
+		}
+
+		object currentEvent = Game1.CurrentEvent;
+		if (currentEvent == null)
+			return false;
+
+		try
+		{
+			Type eventType = currentEvent.GetType();
+			string[] timerNames = new string[] { "festivalTimer", "FestivalTimer", "competitionTimer", "CompetitionTimer", "contestTimer", "ContestTimer", "eggHuntTimer", "EggHuntTimer" };
+			foreach (string timerName in timerNames)
+			{
+				object value = eventType.GetProperty(timerName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(currentEvent)
+					?? eventType.GetField(timerName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(currentEvent);
+				if ((value is int intTimer && intTimer > 0) || (value is float floatTimer && floatTimer > 0f) || (value is double doubleTimer && doubleTimer > 0d))
+				{
+					if (DebugLog)
+						((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred pending festival outfit reaction because a festival competition timer is active.", (LogLevel)2);
+					return true;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			if (DebugLog)
+				((Mod)this).Monitor.Log("[NPC OUTFIT] Could not inspect festival activity timer safely: " + ex.Message, (LogLevel)1);
+		}
+
+		return false;
 	}
 
 	private bool TryHandleOutfitDialogueOrBlockNpcInteractionCore(NPC npc)

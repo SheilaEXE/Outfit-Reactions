@@ -43,6 +43,7 @@ namespace OutfitReactions
         private const int PostDialogueLingerTicks = 360;           // ~6 seconds
         private const float NpcSpecialActionRestoreDistance = 300f;
         private const int PendingBubbleCooldownTicks = 240;
+        private const float RomanticWalkingHoldDistance = 600f;
         private const float RomanticPendingCancelDistance = 1000f;
 
         private readonly HashSet<string> reactedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +128,7 @@ namespace OutfitReactions
             if (hasNoticeableCurrentFashionSenseAppearance?.Invoke() != true)
                 return;
 
-            if (Game1.eventUp || Game1.activeClickableMenu != null)
+            if (Game1.activeClickableMenu != null)
                 return;
 
             float noticeDistance = Math.Max(64f, config.OutfitNoticeDistance);
@@ -243,7 +244,7 @@ namespace OutfitReactions
                     continue;
                 }
 
-                TryStartReaction(npc, config, romanticPartner);
+                TryStartReaction(npc, config, romanticPartner, npcIsWalking);
             }
         }
 
@@ -267,7 +268,7 @@ namespace OutfitReactions
             return true;
         }
 
-        private void TryStartReaction(NPC npc, ModConfig config, bool romanticPartner)
+        private void TryStartReaction(NPC npc, ModConfig config, bool romanticPartner, bool wasMovingWhenNoticed)
         {
             if (npc == null)
                 return;
@@ -277,6 +278,7 @@ namespace OutfitReactions
                 OriginalFacingDirection = npc.FacingDirection,
                 WasLookingAtPlayer = false,
                 IsRomanticPartner = romanticPartner,
+                WasMovingWhenNoticed = wasMovingWhenNoticed,
                 NoticeDelayTimer = 75,
                 DialogueQueued = false,
                 NoticePauseActive = false,
@@ -916,7 +918,19 @@ namespace OutfitReactions
             // walking normally, but if they naturally get adjacent to the farmer while the outfit
             // compliment is pending, hold them briefly with movementPause and make them look at her.
             if (pending.IsRomanticPartner)
-                pending.NoticePauseActive = distance < RomanticPendingCancelDistance;
+            {
+                // A partner who noticed while already walking keeps their original controller
+                // and schedule until naturally reaching the player. Once the close hold starts,
+                // latch it until interaction or the 1000f cancellation boundary.
+                if (pending.NoticePauseActive)
+                {
+                    pending.NoticePauseActive = distance < RomanticPendingCancelDistance;
+                }
+                else if (!pending.WasMovingWhenNoticed || distance <= RomanticWalkingHoldDistance)
+                {
+                    pending.NoticePauseActive = true;
+                }
+            }
             else if (distance <= OutfitNoticePauseDistance)
                 pending.NoticePauseActive = true;
             else if (distance >= OutfitNoticeReleaseDistance)
@@ -962,7 +976,7 @@ namespace OutfitReactions
             if (npc.currentLocation != Game1.player.currentLocation)
                 return;
 
-            if (Game1.activeClickableMenu != null || Game1.eventUp)
+            if (Game1.activeClickableMenu != null)
                 return;
 
             float noticeDistance = Math.Max(64f, config.OutfitNoticeDistance);
