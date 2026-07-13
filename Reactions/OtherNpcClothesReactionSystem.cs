@@ -43,8 +43,8 @@ namespace OutfitReactions
         private const int PostDialogueLingerTicks = 360;           // ~6 seconds
         private const float NpcSpecialActionRestoreDistance = 300f;
         private const int PendingBubbleCooldownTicks = 240;
-        private const float RomanticWalkingHoldDistance = 600f;
-        private const float RomanticPendingCancelDistance = 1000f;
+        private const float RomanticWalkingHoldDistance = 300f;
+        private const float RomanticPendingCancelDistance = 500f;
 
         private readonly HashSet<string> reactedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PendingPrompt> pendingPrompts = new(StringComparer.OrdinalIgnoreCase);
