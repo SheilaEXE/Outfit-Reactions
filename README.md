@@ -4,6 +4,8 @@ Um mod para **Stardew Valley** que faz NPCs comentarem sobre as roupas do seu pe
 
 Feito por **NatrollEXE**.
 
+> **O Outfit Reactions não substitui nem remove diálogos do jogo base ou de outros mods.** Ele apenas adiciona uma fala extra de reação ao visual do jogador quando as condições do mod são atendidas; os diálogos que o NPC já teria continuam disponíveis normalmente.
+
 ---
 
 ## ✨ Funcionalidades
