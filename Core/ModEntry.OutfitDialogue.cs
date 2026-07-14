@@ -796,7 +796,7 @@ public sealed partial class ModEntry : Mod
 		}
 		bool flag4 = false;
 		string secretId = null;
-		if (!flag3 && !string.IsNullOrWhiteSpace(text) && !flag2 && Config.EnablePlayerReplyMenuAfterOutfitCompliment && specialItemReactionService != null)
+		if (!flag3 && !string.IsNullOrWhiteSpace(text) && !flag2 && specialItemReactionService != null)
 		{
 			FashionSenseChangeInfo effectiveFashionSenseChangeInfoForNpc2 = GetEffectiveFashionSenseChangeInfoForNpc(npc);
 			if (TryResolveSpecialItemNoticeForNpc(npc, effectiveFashionSenseChangeInfoForNpc2, requireNpcMemoryForRemoval: false, out var notice2) && notice2 != null && notice2.HasSecret && !notice2.WasRemoved && !specialItemReactionService.NpcAlreadyKnowsSecret(notice2.SecretId, ((Character)npc).Name))
