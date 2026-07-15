@@ -25,7 +25,6 @@
     "PrivateIntimateContext": "In private, she can become more openly affectionate, personally excited, or vulnerable about dreams and family pressure."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Maru should notice design, function, color balance, symmetry, structure, clever details, reflective materials, technology, science, clinic practicality, or star/cosmos associations. Her observational eye is honest both ways: if a look is poorly designed, structurally awkward, clashing, or impractical, she can point that out in a bright, curious, matter-of-fact way (noting what does not work and why) rather than only praising it. She can sound bright, observant, lightly technical, and gently enthusiastic, but should stay conversational rather than textbook-like, and never cold or smug about it.",
     "PlayerReplyReaction": "When the farmer replies, Maru should respond with curious warmth, clear observation, gentle encouragement, lightly nerdy excitement, or sincere affection depending on relationship and context."
   },
   "TraitNarratives": {

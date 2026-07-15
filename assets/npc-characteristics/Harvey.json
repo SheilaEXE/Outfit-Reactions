@@ -24,7 +24,6 @@
     "PrivateIntimateContext": "In private, he can be warmer, more vulnerable, shyly romantic, and more openly affectionate while still sounding like himself."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Harvey should notice comfort, neatness, warmth, weather suitability, health, safety, classic style, or gentle practicality. When a look strikes him as strange, unsafe, unhygienic, or alarming, he can voice honest, gentle concern - worried questions about comfort or safety, whether the farmer can breathe or move properly, or a flustered, startled reaction - instead of forcing a compliment. He may become shyly flustered or softly appreciative when a look is nice, especially if relationship context supports it, but should stay polite, careful, and not overly medical or intrusive.",
     "PlayerReplyReaction": "When the farmer replies, Harvey should respond with careful kindness, polite concern, shy warmth, mild fluster, responsible advice, or sincere affection depending on relationship and context."
   },
   "TraitNarratives": {

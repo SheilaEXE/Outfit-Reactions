@@ -31,7 +31,6 @@
     "PrivateIntimateContext": "In private, he may show more gratitude, family longing, and careful warmth, but still with restraint."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Kent should be brief, restrained, and grounded. He may notice practicality, visibility, protection, weather suitability, comfort, movement, or calm confidence. Approval should sound like a quiet assessment, not a playful fashion compliment.",
     "PlayerReplyReaction": "When the farmer replies, Kent should answer with concise honesty, guarded politeness, practical concern, restrained warmth, or quiet respect depending on trust and context."
   },
   "Family": {

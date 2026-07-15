@@ -11,10 +11,8 @@ Created by **NatrollEXE**.
 ## ✨ Features
 
 * **AI-powered reactions**: spouses and nearby NPCs react to your current outfit using AI, generating unique lines whenever you change clothes.
-* **Vanilla and modded clothing support**: content packs can add focused reactions for hats, shirts, pants, and shoes from the base game, other mods, or Fashion Sense.
-* **Special items with secrets**: a special-item system (`assets/special-reactions`) for creating unique reactions to memorable clothing pieces. Currently includes the Lucky Purple Shorts.
+* **Vanilla and modded clothing support**: content packs can add focused reactions for hats, shirts, pants, and shoes from the base game, or other mods.
 * **Outfit memory**: NPCs remember outfits and special items they have seen before, reacting with familiarity instead of repeating a first-time reaction.
-* **Weather and location awareness**: reactions can consider whether the NPC is indoors or outdoors, whether it is sunny or raining, the time of day, and festival dates.
 * **Custom content packs** can expand or customize NPC characteristics (`assets/npc-characteristics`) without requiring Content Patcher.
 * **Configurable through Generic Mod Config Menu** (optional), with combined or special-item-focused reaction modes, multiple AI profiles, and more.
 
@@ -23,14 +21,14 @@ Created by **NatrollEXE**.
 * [SMAPI](https://smapi.io/) 4.0.0+
 * [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/9969) 7.5.0+ (required)
 * [Generic Mod Config Menu](https://www.nexusmods.com/stardewvalley/mods/5098) (optional, but recommended for easy configuration)
-* An API key from a compatible AI provider, such as [OpenRouter](https://openrouter.ai/) or Google Gemini, to generate reactions.
+* A personal API key from a compatible AI provider. Profile 1 is enabled by default with Google Gemini and the `gemini-3.1-flash-lite` model, so new players only need to add their own Gemini API key.
 
 ## 🔧 Installation
 
 1. Install [SMAPI](https://smapi.io/).
 2. Download and install Fashion Sense.
 3. Download the latest Outfit Reactions release and extract its folder into your `Mods` directory.
-4. Configure your AI API key through Generic Mod Config Menu, or by editing the `config.json` generated after the first launch.
+4. Open Generic Mod Config Menu and paste your Gemini API key into Profile 1. The provider and recommended low-cost model are already selected. Advanced users can choose a different provider or model instead.
 
 ## ⚙️ Configuration
 
@@ -40,6 +38,8 @@ The mod can be configured through Generic Mod Config Menu, including:
 * Reaction modes for vanilla hats and special items, either combined with the full outfit or focused only on the special item.
 * Visual analysis (vision) for models that support it.
 * Additional reaction frequency and behavior settings.
+
+> **Dialogue quality depends on the AI model you choose.** Outfit Reactions provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
 
 ## 🧩 Creating Custom Content
 
@@ -87,9 +87,6 @@ Then add one or more `.json` files inside `assets/special-reactions`. File names
   "Items": {
     "YourName.RubyBoots": {
       "DisplayName": "Ruby Boots",
-      "LocalizedNames": {
-        "pt-BR": "Botas de Rubi"
-      },
       "MatchNames": [
         "Ruby Boots"
       ],
@@ -118,7 +115,7 @@ Supported `ItemType` values are:
 * `Pants`
 * `Shoes` (`Boots` is also accepted as an alias)
 
-`MatchIds` is the most reliable option for modded items. It may contain an `ItemId`, a `QualifiedItemId`, or an exact Fashion Sense appearance ID. `MatchNames` can contain display names and internal names, including localized alternatives.
+`MatchIds` is the most reliable option for modded items. It may contain an `ItemId`, a `QualifiedItemId`, or an exact Fashion Sense appearance ID. When a stable ID is available, authors do not need to list the item's translated names for every language. `MatchNames` remains available as an optional fallback and may contain display names, internal names, or localized alternatives.
 
 Content-pack definitions take priority over Outfit Reactions' built-in visual reactions. To intentionally replace an existing definition, use the same entry ID or match the same equipped item. If two content packs define the same entry ID, Outfit Reactions logs which pack won.
 

@@ -32,7 +32,6 @@
     "PrivateIntimateContext": "For Vincent, this only means a calm, safe, non-romantic one-on-one moment; he can be more chatty while remaining childlike."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Vincent should react like a young child with simple, excited, innocent observations. He may notice bright colors, capes, bugs, toys, snacks, school-like details, costumes, funny hats, or whether something looks cool, silly, or magical. If a look is scary, gross, or monstrous (like a creepy mask or something icky), he reacts like a real kid would: blurting out that it is scary, gross, or weird, being spooked, or backing away, even if part of him also thinks it is kind of cool. He is blunt and does not fake a nice comment about something that creeps him out or grosses him out.",
     "PlayerReplyReaction": "When the farmer replies, Vincent should respond briefly and childishly with curiosity, excitement, confusion, honesty, or happy familiarity."
   },
   "Family": {
