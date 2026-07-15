@@ -49,6 +49,7 @@ namespace OutfitReactions
         private const float RomanticPendingCancelDistance = 500f;
 
         private readonly HashSet<string> reactedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> festivalRollAttemptedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PendingPrompt> pendingPrompts = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> rollCooldowns = new(StringComparer.OrdinalIgnoreCase);
 
@@ -88,6 +89,7 @@ namespace OutfitReactions
                 ClearAllPendingPrompts(removeQueuedDialogues: true);
 
             reactedNpcsThisOutfit.Clear();
+            festivalRollAttemptedNpcsThisOutfit.Clear();
             pendingPrompts.Clear();
             rollCooldowns.Clear();
             peekingController.Clear();
@@ -98,6 +100,7 @@ namespace OutfitReactions
             ClearAllPendingPrompts(removeQueuedDialogues: true);
 
             reactedNpcsThisOutfit.Clear();
+            festivalRollAttemptedNpcsThisOutfit.Clear();
             pendingPrompts.Clear();
             rollCooldowns.Clear();
             peekingController.Clear();
@@ -482,6 +485,59 @@ namespace OutfitReactions
 
             if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Queued outfit dialogue for {npc.Name} at click time.", LogLevel.Info);
             return true;
+        }
+
+        public bool TryPrioritizeFestivalDialogueForClick(NPC npc)
+        {
+            if (npc == null)
+                return false;
+
+            // A successful festival roll may already be generating its dialogue. Keep that
+            // existing reaction prioritized without rolling again on subsequent input events.
+            if (pendingPrompts.ContainsKey(npc.Name))
+                return TryPrioritizePendingDialogueForClick(npc);
+
+            ModConfig config = getConfig?.Invoke();
+            if (config == null
+                || !config.EnableNpcOutfitReactions
+                || hasNoticeableCurrentFashionSenseAppearance?.Invoke() != true
+                || !IsValidNpc(npc)
+                || canNoticeCurrentOutfitNotice?.Invoke(npc) != true
+                || reactedNpcsThisOutfit.Contains(npc.Name)
+                || festivalRollAttemptedNpcsThisOutfit.Contains(npc.Name))
+            {
+                return false;
+            }
+
+            // Festivals get one independent attempt per NPC for the current visual. A failed
+            // roll immediately gives the click back to Stardew's normal festival dialogue.
+            festivalRollAttemptedNpcsThisOutfit.Add(npc.Name);
+            int chance = Math.Clamp(config.FestivalNpcOutfitReactionChance, 0, 100);
+            if (chance <= 0 || random.Next(100) >= chance)
+            {
+                if (ModEntry.DebugLog)
+                    monitor?.Log($"[FESTIVAL OUTFIT] {npc.Name} did not notice the current visual on interaction ({chance}% chance).", LogLevel.Info);
+                return false;
+            }
+
+            PendingPrompt pending = new PendingPrompt
+            {
+                OriginalFacingDirection = npc.FacingDirection,
+                IsRomanticPartner = isRomanticPartner?.Invoke(npc) == true,
+                NoticeDelayTimer = 0,
+                DialogueQueued = false,
+                NoticePauseActive = false,
+                PendingBubbleCooldown = 0,
+                SuppressNoticeEmote = true
+            };
+
+            reactedNpcsThisOutfit.Add(npc.Name);
+            pendingPrompts[npc.Name] = pending;
+
+            if (ModEntry.DebugLog)
+                monitor?.Log($"[FESTIVAL OUTFIT] {npc.Name} noticed the current visual on interaction without an emote; normal look-and-restore behavior remains active.", LogLevel.Info);
+
+            return TryPrioritizePendingDialogueForClick(npc);
         }
 
         public void SuspendRomanticHoldForExternalKiss(NPC npc)
@@ -1076,6 +1132,9 @@ namespace OutfitReactions
             if (npc == null || pending == null || config == null || Game1.player == null)
                 return;
 
+            if (pending.SuppressNoticeEmote)
+                return;
+
             if (npc.currentLocation != Game1.player.currentLocation)
                 return;
 
@@ -1227,7 +1286,10 @@ namespace OutfitReactions
 
             bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
             if (!restoredSpecialAction)
+            {
                 npc.movementPause = 0;
+                FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
+            }
 
             pending.PostDialogueLingerActive = false;
             pending.WaitingForPostDialogueRestore = false;

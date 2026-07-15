@@ -680,7 +680,7 @@ public sealed partial class ModEntry : Mod
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
-		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => ShouldDeferAutomaticOutfitReaction(logDecision: false));
+		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => IsActiveFestivalEventForOutfitReaction() || ShouldDeferAutomaticOutfitReaction(logDecision: false));
 		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
 		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
 		helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -959,8 +959,11 @@ public sealed partial class ModEntry : Mod
 			NPC npcBeingInteractedWith = GetNpcBeingInteractedWith();
 			if (npcBeingInteractedWith != null)
 			{
-				bool outfitClickConsumed = TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith);
-				if (!outfitClickConsumed)
+				bool festivalInteraction = IsActiveFestivalEventForOutfitReaction();
+				bool outfitClickConsumed = festivalInteraction
+					? otherNpcClothesReactionSystem?.TryPrioritizeFestivalDialogueForClick(npcBeingInteractedWith) ?? false
+					: TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith);
+				if (!outfitClickConsumed && !festivalInteraction)
 				{
 					outfitClickConsumed = otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npcBeingInteractedWith) ?? false;
 				}
@@ -968,7 +971,7 @@ public sealed partial class ModEntry : Mod
 				// Festival dialogue can be opened directly by the event before NPC.checkAction runs.
 				// Consume only the click claimed by an outfit reaction; the festival's original
 				// dialogue stack stays untouched and remains available on the next interaction.
-				if (outfitClickConsumed && IsActiveFestivalEventForOutfitReaction())
+				if (outfitClickConsumed && festivalInteraction)
 				{
 					((Mod)this).Helper.Input.Suppress(e.Button);
 					if (DebugLog)

@@ -46,6 +46,7 @@ namespace OutfitReactions
         public bool PostDialogueOutfitWasRead { get; set; }
         public bool WaitingForOwnAiFinalDialogue { get; set; }
         public bool EmoteFired { get; set; }
+        public bool SuppressNoticeEmote { get; set; }
 
         // Restore the first-talk flag if the outfit reaction is cancelled before being read.
         public bool HasFriendshipEntry { get; set; }

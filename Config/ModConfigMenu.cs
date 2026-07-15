@@ -555,6 +555,18 @@ namespace OutfitReactions
                 formatValue: value => $"{value}%"
             );
 
+            configMenu.AddNumberOption(
+                mod: mod.ModManifest,
+                name: () => T("gmcm.option.festival-npc-reaction-chance.name"),
+                tooltip: () => T("gmcm.option.festival-npc-reaction-chance.tooltip"),
+                getValue: () => mod.Config.FestivalNpcOutfitReactionChance,
+                setValue: value => mod.Config.FestivalNpcOutfitReactionChance = value,
+                min: 0,
+                max: 100,
+                interval: 5,
+                formatValue: value => $"{value}%"
+            );
+
             configMenu.AddBoolOption(
                 mod: mod.ModManifest,
                 name: () => T("gmcm.option.romantic-partners-always-notice.name"),

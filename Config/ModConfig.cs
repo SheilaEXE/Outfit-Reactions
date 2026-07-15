@@ -191,6 +191,7 @@ namespace OutfitReactions
         public bool EnableNpcOutfitReactions { get; set; } = true;
         public int NpcOutfitReactionChance { get; set; } = 30;
         public int NpcRepeatedVisualNoticeChance { get; set; } = 15;
+        public int FestivalNpcOutfitReactionChance { get; set; } = 30;
         public bool RomanticPartnersAlwaysNoticeOutfitChanges { get; set; } = true;
         public bool EnableDebugLogging { get; set; } = false;
 
@@ -384,6 +385,8 @@ namespace OutfitReactions
             AiTimeoutSeconds = Clamp(AiTimeoutSeconds, 3, 120);
             AiTemperaturePercent = Clamp(AiTemperaturePercent, 0, 200);
             NpcOutfitReactionChance = Clamp(NpcOutfitReactionChance, 0, 100);
+            NpcRepeatedVisualNoticeChance = Clamp(NpcRepeatedVisualNoticeChance, 0, 100);
+            FestivalNpcOutfitReactionChance = Clamp(FestivalNpcOutfitReactionChance, 0, 100);
             OutfitNoticeDistance = Clamp(OutfitNoticeDistance, 64, 3000);
             OutfitCancelDistance = Clamp(OutfitCancelDistance, 64, 5000);
 
