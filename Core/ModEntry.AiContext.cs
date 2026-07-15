@@ -185,7 +185,7 @@ public sealed partial class ModEntry : Mod
 			FestivalContext = GetFestivalContextForAiPrompt(),
 			FarmerBirthdayContext = GetFarmerBirthdayContextForAiPrompt(),
 			Season = currentSeason,
-			Weather = GetCurrentWeatherForAiPrompt(),
+			Weather = GetCurrentWeatherForAiPrompt(currentLocation),
 			Time = timeOfDay,
 			DayOfSeason = Game1.dayOfMonth,
 			Year = Game1.year,
@@ -609,39 +609,35 @@ public sealed partial class ModEntry : Mod
 
 	private string GetDayPartForAiPrompt(int time)
 	{
+		if (time >= 2400)
+		{
+			return "late night / after midnight";
+		}
+		if (time < 700)
+		{
+			return "dawn / very early morning";
+		}
+		if (time < 900)
+		{
+			return "early morning";
+		}
 		if (time < 1200)
 		{
 			return "morning";
+		}
+		if (time < 1400)
+		{
+			return "midday / early afternoon";
 		}
 		if (time < 1800)
 		{
 			return "afternoon";
 		}
+		if (time < 2100)
+		{
+			return "evening";
+		}
 		return "night";
-	}
-
-	private string GetFestivalContextForAiPrompt()
-	{
-		bool flag = false;
-		try
-		{
-			if (typeof(Utility).GetMethod("isFestivalDay", BindingFlags.Static | BindingFlags.Public, null, new Type[2]
-			{
-				typeof(int),
-				typeof(string)
-			}, null)?.Invoke(null, new object[2]
-			{
-				Game1.dayOfMonth,
-				Game1.currentSeason
-			}) is bool flag2)
-			{
-				flag = flag2;
-			}
-		}
-		catch
-		{
-		}
-		return flag ? "Today is a festival day in the current season. A subtle outfit reaction may reference the festive atmosphere if it fits naturally." : "Today is not a festival day.";
 	}
 
 	private string GetFarmerBirthdayContextForAiPrompt()
@@ -655,9 +651,9 @@ public sealed partial class ModEntry : Mod
 		return (farmerBirthdayDay == Game1.dayOfMonth && text.Equals(Game1.currentSeason, StringComparison.OrdinalIgnoreCase)) ? "Today is the farmer's birthday. The compliment may feel a little more special if it fits the NPC and relationship." : ("Today is not the farmer's birthday. Farmer birthday is configured as " + text + " " + farmerBirthdayDay + ".");
 	}
 
-	private string GetCurrentWeatherForAiPrompt()
+	private string GetCurrentWeatherForAiPrompt(GameLocation location)
 	{
-		return Game1.isGreenRain ? "green rain" : (Game1.isLightning ? "storm / thunderstorm" : (Game1.isRaining ? "rain" : (Game1.isSnowing ? "snow" : (Game1.isDebrisWeather ? "windy / debris weather" : "sunny / clear"))));
+		return Game1.IsGreenRainingHere(location) ? "green rain" : (Game1.IsLightningHere(location) ? "storm / thunderstorm" : (Game1.IsRainingHere(location) ? "rain" : (Game1.IsSnowingHere(location) ? "snow" : (Game1.IsDebrisWeatherHere(location) ? "windy / debris weather" : "sunny / clear"))));
 	}
 
 	private static string BuildSafeOutfitNameHint(string rawName)

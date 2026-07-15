@@ -129,7 +129,7 @@ namespace OutfitReactions.Ai
             if (!string.IsNullOrWhiteSpace(context.LocationType))
                 builder.AppendLine("Private location flags, for context only. Do not say these labels: locationType=" + HumanizeTechnicalLabelForPrompt(context.LocationType) + ", indoors=" + context.IsIndoors + ", outdoors=" + context.IsOutdoors + ".");
             builder.AppendLine("Private room/home context: farmer is in the speaking NPC's personal room = " + context.IsNpcRoom + "; farmer is in this marriage candidate's home/private indoor space = " + context.IsNpcPersonalLocation + ". Do not say NPC room or internal labels; phrase naturally if relevant.");
-            builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ". Time: " + context.Time + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")") + ".");
+            builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ". Time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")") + ".");
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FestivalContext))
                 builder.AppendLine("Festival context: " + context.FestivalContext);
@@ -328,7 +328,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Private location flags, for context only. Do not say these labels: locationType=" + HumanizeTechnicalLabelForPrompt(context.LocationType) + ", npcRoom=" + context.IsNpcRoom + ", npcPersonalLocation=" + context.IsNpcPersonalLocation);
             builder.AppendLine("Season/day/year: " + context.Season + " " + context.DayOfSeason + ", year " + context.Year);
             builder.AppendLine("Authoritative current season only: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". Outfit seasonal clues are not the current date.");
-            builder.AppendLine("Weather: " + context.Weather + ", time: " + context.Time + ", day period: " + context.DayPart);
+            builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + ", day period: " + context.DayPart);
             AppendWeatherLocationRule(builder, context);
             string contextNaturalization = BuildNaturalContextHint(context);
             if (!string.IsNullOrWhiteSpace(contextNaturalization))
@@ -392,6 +392,13 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Weather/location rule: the NPC and farmer are currently INDOORS, sheltered from the weather above. If the weather is rain, storm, snow, or similar, that is happening OUTSIDE the building — refer to it as 'lá fora'/'outside', never as happening 'here'/'aqui dentro' in the current room. Only mention the weather at all if it is natural for the moment (e.g. commenting on the outfit choice given what it's like outside).");
             else if (context.IsOutdoors)
                 builder.AppendLine("Weather/location rule: the NPC and farmer are currently OUTDOORS, directly exposed to the weather described above. It is natural to reference it as happening right here/around them if relevant.");
+        }
+
+        private static string FormatTimeForPrompt(int time)
+        {
+            int hours = Math.Max(0, time) / 100;
+            int minutes = Math.Clamp(Math.Max(0, time) % 100, 0, 59);
+            return $"{hours:00}:{minutes:00}";
         }
 
                 private static void AppendProfanityIntensityRule(StringBuilder builder, OutfitAiContext context)
