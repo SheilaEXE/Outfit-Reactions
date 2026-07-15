@@ -213,7 +213,9 @@ namespace OutfitReactions.Ai
             }
             else
             {
-                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. Return portraits as one key per dialogue box, starting at box 1; the array may have 1, 2, 3, or more keys depending on the number of #$b# boxes. No markdown. No explanation. No narration. No analysis.";
+                // Portrait-per-box is intentionally optional for now so the model can decide
+                // whether an expression should stay the same or change during the dialogue.
+                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate. No markdown. No explanation. No narration. No analysis.";
 
                 double temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0;
                 if (provider.Equals("Local", StringComparison.OrdinalIgnoreCase))
@@ -373,7 +375,7 @@ namespace OutfitReactions.Ai
                 model = ai.Model,
                 max_tokens = maxTokens,
                 temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
-                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. Return portraits as one key per dialogue box, starting at box 1; the array may have 1, 2, 3, or more keys depending on the number of #$b# boxes. No markdown. No explanation. No narration. No analysis.",
+                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate. No markdown. No explanation. No narration. No analysis.",
                 messages = new[]
                 {
                     new { role = "user", content = userContent }
@@ -454,7 +456,7 @@ namespace OutfitReactions.Ai
                 {
                     parts = new[]
                     {
-                        new { text = "You return one compact JSON object only. No markdown. No introduction. No explanation. Shape example: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[\"actual portrait for box 1\"],\"needsClarification\":false}. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array must have one key per dialogue box, matching the natural number of boxes in the text." }
+                        new { text = "You return one compact JSON object only. No markdown. No introduction. No explanation. Shape example: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[],\"needsClarification\":false}. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate." }
                     }
                 },
                 contents = new[]

@@ -182,7 +182,7 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
             builder.AppendLine("Use #$b# dialogue box breaks whenever they improve pacing. Do not force a fixed number of boxes; one, two, or several are all valid when the scene supports them.");
             builder.AppendLine("Do not mention metadata, mods, AI, APIs, Fashion Sense, JSON, or internal keys.");
-            builder.AppendLine("Return JSON only with keys text, portrait, portraits, and needsClarification. Example shape only: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[\"actual portrait for box 1\"],\"needsClarification\":false}. If text has more dialogue boxes, portraits must have one key for each box, in order, starting at box 1.");
+            builder.AppendLine("Return JSON only with keys text, portrait, portraits, and needsClarification. Example shape only: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[],\"needsClarification\":false}. The portraits array may be empty; if you use it, let expressions stay the same or change only when that feels natural.");
             builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field contains only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Do not wrap the JSON in markdown and do not explain anything.");
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             if (profile.Portraits != null)
@@ -190,7 +190,7 @@ namespace OutfitReactions.Ai
                 foreach (var pair in profile.Portraits)
                     builder.AppendLine("- " + pair.Key + ": " + pair.Value?.Description);
             }
-            builder.AppendLine("Always return a portraits array with one portrait key per dialogue box (count the boxes created by #$b#); each key should match that box's tone. The portrait field is only a neutral/default fallback.");
+            builder.AppendLine("Portrait selection is optional. The portraits array may be empty, reuse an expression, or change expressions naturally as the dialogue develops. The portrait field is only a neutral/default fallback.");
 
             string prompt = builder.ToString();
             List<KeyValuePair<string, int>> diagnosticBlocks = new()
@@ -248,8 +248,8 @@ namespace OutfitReactions.Ai
             StringBuilder builder = new();
             builder.AppendLine("LOCAL JSON MODE.");
             builder.AppendLine("Return exactly one compact JSON object and nothing else.");
-            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array length must match the number of dialogue boxes in text. Put one portrait key for each dialogue box, in order, whatever the natural number of boxes is.");
-            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Always fill portraits with one portrait key per dialogue box, in the same order as the boxes, starting with box 1; each key must match that box's tone and any *action* cues.");
+            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array may be empty; portrait changes are optional and should happen only when they feel natural.");
+            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
             builder.AppendLine("Do not add markdown, explanations, headings, analysis, context summaries, or extra options.");
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
@@ -310,7 +310,7 @@ namespace OutfitReactions.Ai
             // PORTRAIT_SCORE_SYSTEM removed: mandatory portrait restriction for private/revealing outfits disabled.
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             builder.AppendLine(CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 1000));
-            builder.AppendLine("Always return a portraits array with one portrait key per dialogue box (count the boxes created by #$b#); each key should match that box's tone. Use the portrait field only as a neutral/default fallback key. Do NOT place portrait commands inside the text. Use only keys from the list above, or leave empty if truly unsure.");
+            builder.AppendLine("The portraits array is optional. Reuse an expression or change it only when the dialogue naturally calls for that. Use the portrait field only as a neutral/default fallback key. Do NOT place portrait commands inside the text. Use only keys from the list above, or leave portraits empty.");
             builder.AppendLine("Do not put portrait words like portrait:, expression:, or emotion: inside the spoken dialogue text. Use only the JSON portrait and portraits fields for portrait keys.");
             builder.AppendLine();
             builder.AppendLine("NPC: " + context.NpcDisplayName);
