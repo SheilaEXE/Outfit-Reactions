@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions.Ai
 {
@@ -29,16 +30,16 @@ namespace OutfitReactions.Ai
 
         public async Task<string> GenerateRawAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, OutfitVisionImage visionImage = null, CancellationToken cancellationToken = default)
         {
-            string provider = (ai.Provider ?? "DeepSeek").Trim();
+            IAiProvider provider = AiProviderRegistry.Get(ai.Provider);
             using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(ai.TimeoutSeconds, 3, 120)));
 
             try
             {
-                if (provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
+                if (provider.Transport == AiTransportKind.GeminiGenerateContent)
                     return await GenerateGeminiAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
 
-                if (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase))
+                if (provider.Transport == AiTransportKind.AnthropicMessages)
                     return await GenerateAnthropicAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
 
                 return await GenerateOpenAiCompatibleAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
@@ -53,10 +54,10 @@ namespace OutfitReactions.Ai
                     + "Do not mention seeing an image, screenshot, PNG, pixels, or attachment. "
                     + "Do not invent exact visual details, scene objects, props, or current actions that are not explicitly stated.";
 
-                if (provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
+                if (provider.Transport == AiTransportKind.GeminiGenerateContent)
                     return await GenerateGeminiAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
 
-                if (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase))
+                if (provider.Transport == AiTransportKind.AnthropicMessages)
                     return await GenerateAnthropicAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
 
                 return await GenerateOpenAiCompatibleAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
@@ -65,102 +66,13 @@ namespace OutfitReactions.Ai
 
         private static string NormalizeEndpoint(ActiveAiSettings ai)
         {
-            string provider = ai.Provider ?? "DeepSeek";
-            string custom = (ai.Endpoint ?? "").Trim().TrimEnd('/');
-
-            if (provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(custom))
-                    return "https://api.deepseek.com/chat/completions";
-
-                if (custom.EndsWith("/v1/chat/completions", StringComparison.OrdinalIgnoreCase)
-                    && custom.StartsWith("https://api.deepseek.com", StringComparison.OrdinalIgnoreCase))
-                    return "https://api.deepseek.com/chat/completions";
-
-                if (custom.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-                    return custom;
-
-                if (custom.Equals("https://api.deepseek.com/v1", StringComparison.OrdinalIgnoreCase))
-                    return "https://api.deepseek.com/chat/completions";
-
-                if (custom.Equals("https://api.deepseek.com", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/chat/completions";
-
-                return custom + "/chat/completions";
-            }
-
-            if (provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(custom))
-                    return "https://api.openai.com/v1/responses";
-
-                if (custom.EndsWith("/responses", StringComparison.OrdinalIgnoreCase)
-                    || custom.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-                    return custom;
-
-                if (custom.Equals("https://api.openai.com", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/v1/responses";
-
-                if (custom.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/responses";
-
-                return custom + "/responses";
-            }
-
-            if (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(custom))
-                    return "https://openrouter.ai/api/v1/chat/completions";
-
-                if (custom.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-                    return custom;
-
-                if (custom.Equals("https://openrouter.ai", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/api/v1/chat/completions";
-
-                if (custom.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase) || custom.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/chat/completions";
-
-                return custom + "/chat/completions";
-            }
-
-            if (provider.Equals("Local", StringComparison.OrdinalIgnoreCase) || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(custom))
-                    return "http://localhost:11434/v1/chat/completions";
-
-                if (custom.EndsWith("/v1/chat/completions", StringComparison.OrdinalIgnoreCase))
-                    return custom;
-
-                if (custom.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-                {
-                    string baseUrl = custom.Substring(0, custom.Length - "/chat/completions".Length).TrimEnd('/');
-                    if (baseUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-                        return custom;
-
-                    // LM Studio and Ollama use the OpenAI-compatible /v1/chat/completions path.
-                    return baseUrl + "/v1/chat/completions";
-                }
-
-                if (custom.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-                    return custom + "/chat/completions";
-
-                return custom + "/v1/chat/completions";
-            }
-
-            if (string.IsNullOrWhiteSpace(custom))
-                return "https://api.openai.com/v1/responses";
-
-            if (custom.EndsWith("/responses", StringComparison.OrdinalIgnoreCase)
-                || custom.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-                return custom;
-
-            return custom + "/chat/completions";
+            IAiProvider provider = AiProviderRegistry.Get(ai?.Provider);
+            return provider.ResolveEndpoint(ai?.Endpoint, ai?.Model);
         }
 
         private async Task<string> GenerateOpenAiCompatibleAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
-            string provider = ai.Provider ?? "DeepSeek";
+            IAiProvider provider = AiProviderRegistry.Get(ai.Provider);
             string endpoint = NormalizeEndpoint(ai);
             if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" HTTP endpoint: {endpoint}", LogLevel.Info);
 
@@ -203,13 +115,15 @@ namespace OutfitReactions.Ai
                     };
                 }
 
-                requestJson = JsonSerializer.Serialize(new
+                Dictionary<string, object> responsesBody = new(StringComparer.OrdinalIgnoreCase)
                 {
-                    model = ai.Model,
-                    input,
-                    temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
-                    max_output_tokens = maxTokens
-                });
+                    ["model"] = ai.Model,
+                    ["input"] = input,
+                    ["temperature"] = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
+                    ["max_output_tokens"] = maxTokens
+                };
+                provider.ConfigureRequestBody(responsesBody, ai.Model);
+                requestJson = JsonSerializer.Serialize(responsesBody);
             }
             else
             {
@@ -218,7 +132,7 @@ namespace OutfitReactions.Ai
                 string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate. No markdown. No explanation. No narration. No analysis.";
 
                 double temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0;
-                if (provider.Equals("Local", StringComparison.OrdinalIgnoreCase))
+                if (provider.IsLocal)
                     temperature = Math.Min(temperature, 0.25);
 
                 object userContent = prompt;
@@ -249,50 +163,8 @@ namespace OutfitReactions.Ai
                     ["stream"] = false
                 };
 
-                // Disable model "thinking"/reasoning where supported, to keep reactions fast and
-                // cheap (a quick outfit comment never needs chain-of-thought). There's no universal
-                // switch, and some strict APIs reject unknown body fields with a 400 — so we apply
-                // each opt-out ONLY to the provider that understands it, instead of spraying all of
-                // them at everyone:
-                //  - DeepSeek official (v4-flash/v4-pro default to thinking ON): thinking={type:"disabled"}.
-                //  - Qwen (DashScope official): enable_thinking=false (top-level).
-                //  - Self-hosted OpenAI-compatible (vLLM/SGLang) + many gateways: nested
-                //    chat_template_kwargs.enable_thinking=false (safe; passed to the chat template).
-                // Mistral standard models have no thinking mode; OpenAI/Anthropic are handled in their
-                // own methods. Thinking-only models (deepseek-reasoner, *-thinking, o1/o3) can't be
-                // turned off by any field — that's a model choice, not a parameter.
-                bool isDeepSeek = provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase);
-                bool isQwenOfficial = provider.IndexOf("Qwen", StringComparison.OrdinalIgnoreCase) >= 0
-                    || provider.IndexOf("DashScope", StringComparison.OrdinalIgnoreCase) >= 0
-                    || provider.IndexOf("Alibaba", StringComparison.OrdinalIgnoreCase) >= 0;
-                bool isGenericCompatible = provider.Equals("Local", StringComparison.OrdinalIgnoreCase)
-                    || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase)
-                    || provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase)
-                    || provider.Equals("Groq", StringComparison.OrdinalIgnoreCase)
-                    || provider.Equals("Together", StringComparison.OrdinalIgnoreCase)
-                    || provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase);
-                bool isOpenRouter = provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase);
-
-                if (isDeepSeek)
-                    chatBody["thinking"] = new Dictionary<string, object> { ["type"] = "disabled" };
-                if (isQwenOfficial)
-                    chatBody["enable_thinking"] = false;
-                if (isGenericCompatible)
-                    chatBody["chat_template_kwargs"] = new Dictionary<string, object> { ["enable_thinking"] = false };
-                // OpenRouter has its OWN reasoning control and ignores chat_template_kwargs. Its
-                // documented disable signal is reasoning={enabled:false} (it maps this to whatever
-                // the underlying model needs). On routes whose upstream forces reasoning on (e.g.
-                // o3, grok-3-mini), OpenRouter silently ignores this rather than erroring for the
-                // {enabled:false} form, so it's safe to always send for OpenRouter.
-                if (isOpenRouter)
-                    chatBody["reasoning"] = new Dictionary<string, object> { ["enabled"] = false };
-
-                // DeepSeek supports JSON mode. Each model manages its own reasoning, so we no
-                // longer send an explicit thinking switch.
-                if (provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
-                {
-                    chatBody["response_format"] = new { type = "json_object" };
-                }
+                // Only the selected provider adds its supported reasoning or JSON options.
+                provider.ConfigureRequestBody(chatBody, ai.Model);
                 // Local/OpenAI-compatible servers are intentionally left in plain text mode.
                 // Many local models follow a simple dash-line-style "- dialogue" line more reliably than JSON mode.
 
@@ -303,26 +175,19 @@ namespace OutfitReactions.Ai
             request.Content = new StringContent(requestJson, Encoding.UTF8, "application/json");
             if (!string.IsNullOrWhiteSpace(ai.ApiKey))
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ai.ApiKey.Trim());
-
-            if (provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
-            {
-                request.Headers.TryAddWithoutValidation("HTTP-Referer", "https://www.nexusmods.com/stardewvalley/mods/");
-                request.Headers.TryAddWithoutValidation("X-Title", "Outfit Compliments");
-            }
+            provider.ConfigureRequestHeaders(request);
 
             using HttpResponseMessage response = await Http.SendAsync(request, token);
             string json = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"{provider} HTTP {(int)response.StatusCode}.");
+                throw new InvalidOperationException($"{provider.Id} HTTP {(int)response.StatusCode}.");
 
             return ExtractOpenAiCompatibleText(json);
         }
 
         private async Task<string> GenerateAnthropicAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
-            string endpoint = !string.IsNullOrWhiteSpace(ai.Endpoint)
-                ? ai.Endpoint.Trim()
-                : "https://api.anthropic.com/v1/messages";
+            string endpoint = AiProviderRegistry.Get("Anthropic").ResolveEndpoint(ai.Endpoint, ai.Model);
 
             if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" HTTP endpoint: {endpoint}", LogLevel.Info);
 
@@ -416,9 +281,7 @@ namespace OutfitReactions.Ai
 
         private async Task<string> GenerateGeminiAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
-            string endpoint = !string.IsNullOrWhiteSpace(ai.Endpoint)
-                ? ai.Endpoint.Trim()
-                : $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(ai.Model)}:generateContent";
+            string endpoint = AiProviderRegistry.Get("Gemini").ResolveEndpoint(ai.Endpoint, ai.Model);
 
             if (!endpoint.Contains("?key=", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(ai.ApiKey))
                 endpoint += (endpoint.Contains("?") ? "&" : "?") + "key=" + Uri.EscapeDataString(ai.ApiKey.Trim());
@@ -537,14 +400,7 @@ namespace OutfitReactions.Ai
             if (ai == null || visionImage == null || !visionImage.IsUsable)
                 return false;
 
-            string provider = ai.Provider ?? "";
-            return provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("Local", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase)
-                || provider.Equals("xAI", StringComparison.OrdinalIgnoreCase);
+            return AiProviderRegistry.Get(ai.Provider).SupportsVision;
         }
 
         private static string ExtractOpenAiCompatibleText(string json)

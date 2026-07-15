@@ -1,5 +1,6 @@
 using System;
 using StardewModdingAPI;
+using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions
 {
@@ -23,35 +24,11 @@ namespace OutfitReactions
                 }
             );
 
-            string[] providers = new[] { "Gemini", "OpenAI", "OpenRouter", "Mistral", "Groq", "Together", "Anthropic", "xAI", "Cerebras", "Perplexity", "DeepSeek", "Local" };
+            string[] providers = new System.Collections.Generic.List<string>(AiProviderRegistry.ProviderIds).ToArray();
 
             string NormalizeProvider(string provider)
             {
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
-                    return "Gemini";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
-                    return "OpenAI";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
-                    return "OpenRouter";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("Mistral", StringComparison.OrdinalIgnoreCase))
-                    return "Mistral";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-                    return "Groq";
-                if (!string.IsNullOrWhiteSpace(provider) && (provider.Equals("Together", StringComparison.OrdinalIgnoreCase) || provider.Equals("TogetherAI", StringComparison.OrdinalIgnoreCase) || provider.Equals("Together AI", StringComparison.OrdinalIgnoreCase)))
-                    return "Together";
-                if (!string.IsNullOrWhiteSpace(provider) && (provider.Equals("Local", StringComparison.OrdinalIgnoreCase) || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase)))
-                    return "Local";
-                if (!string.IsNullOrWhiteSpace(provider) && (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase) || provider.Equals("Claude", StringComparison.OrdinalIgnoreCase)))
-                    return "Anthropic";
-                if (!string.IsNullOrWhiteSpace(provider) && (provider.Equals("xAI", StringComparison.OrdinalIgnoreCase) || provider.Equals("Grok", StringComparison.OrdinalIgnoreCase)))
-                    return "xAI";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
-                    return "Cerebras";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-                    return "Perplexity";
-                if (!string.IsNullOrWhiteSpace(provider) && provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
-                    return "DeepSeek";
-                return "Gemini";
+                return AiProviderRegistry.Normalize(provider);
             }
 
             string ActiveProvider()
@@ -61,14 +38,7 @@ namespace OutfitReactions
 
             string FormatProvider(string provider)
             {
-                string normalized = NormalizeProvider(provider);
-                if (normalized.Equals("Local", StringComparison.OrdinalIgnoreCase))
-                    return "Local / OpenAI Compatible";
-                if (normalized.Equals("Together", StringComparison.OrdinalIgnoreCase))
-                    return "Together AI";
-                if (normalized.Equals("xAI", StringComparison.OrdinalIgnoreCase))
-                    return "xAI (Grok)";
-                return normalized;
+                return AiProviderRegistry.Get(provider).DisplayName;
             }
 
             string GetSlotModel(int slot)
@@ -236,7 +206,6 @@ namespace OutfitReactions
                     case "Anthropic": return mod.Config.AnthropicAiTemperaturePercent;
                     case "xAI": return mod.Config.XAiTemperaturePercent;
                     case "Cerebras": return mod.Config.CerebrasAiTemperaturePercent;
-                    case "Perplexity": return mod.Config.PerplexityAiTemperaturePercent;
                     default: return mod.Config.DeepSeekAiTemperaturePercent;
                 }
             }
@@ -255,7 +224,6 @@ namespace OutfitReactions
                     case "Anthropic": mod.Config.AnthropicAiTemperaturePercent = value; break;
                     case "xAI": mod.Config.XAiTemperaturePercent = value; break;
                     case "Cerebras": mod.Config.CerebrasAiTemperaturePercent = value; break;
-                    case "Perplexity": mod.Config.PerplexityAiTemperaturePercent = value; break;
                     default: mod.Config.DeepSeekAiTemperaturePercent = value; break;
                 }
             }
@@ -274,7 +242,6 @@ namespace OutfitReactions
                     case "Anthropic": return mod.Config.AnthropicAiTimeoutSeconds;
                     case "xAI": return mod.Config.XAiTimeoutSeconds;
                     case "Cerebras": return mod.Config.CerebrasAiTimeoutSeconds;
-                    case "Perplexity": return mod.Config.PerplexityAiTimeoutSeconds;
                     default: return mod.Config.DeepSeekAiTimeoutSeconds;
                 }
             }
@@ -293,7 +260,6 @@ namespace OutfitReactions
                     case "Anthropic": mod.Config.AnthropicAiTimeoutSeconds = value; break;
                     case "xAI": mod.Config.XAiTimeoutSeconds = value; break;
                     case "Cerebras": mod.Config.CerebrasAiTimeoutSeconds = value; break;
-                    case "Perplexity": mod.Config.PerplexityAiTimeoutSeconds = value; break;
                     default: mod.Config.DeepSeekAiTimeoutSeconds = value; break;
                 }
             }
@@ -312,7 +278,6 @@ namespace OutfitReactions
                     case "Anthropic": return mod.Config.AnthropicAiMaxCharacters;
                     case "xAI": return mod.Config.XAiMaxCharacters;
                     case "Cerebras": return mod.Config.CerebrasAiMaxCharacters;
-                    case "Perplexity": return mod.Config.PerplexityAiMaxCharacters;
                     default: return mod.Config.DeepSeekAiMaxCharacters;
                 }
             }
@@ -331,7 +296,6 @@ namespace OutfitReactions
                     case "Anthropic": mod.Config.AnthropicAiMaxCharacters = value; break;
                     case "xAI": mod.Config.XAiMaxCharacters = value; break;
                     case "Cerebras": mod.Config.CerebrasAiMaxCharacters = value; break;
-                    case "Perplexity": mod.Config.PerplexityAiMaxCharacters = value; break;
                     default: mod.Config.DeepSeekAiMaxCharacters = value; break;
                 }
             }
@@ -409,6 +373,14 @@ namespace OutfitReactions
                 tooltip: () => T("gmcm.option.expressive-actions.tooltip"),
                 getValue: () => mod.Config.EnableExpressiveAsteriskActions,
                 setValue: value => mod.Config.EnableExpressiveAsteriskActions = value
+            );
+
+            configMenu.AddBoolOption(
+                mod: mod.ModManifest,
+                name: () => T("gmcm.option.profanity-filter.name"),
+                tooltip: () => T("gmcm.option.profanity-filter.tooltip"),
+                getValue: () => mod.Config.EnableProfanityFilter,
+                setValue: value => mod.Config.EnableProfanityFilter = value
             );
 
             configMenu.AddBoolOption(

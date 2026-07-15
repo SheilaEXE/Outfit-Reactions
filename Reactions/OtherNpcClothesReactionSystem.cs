@@ -25,6 +25,7 @@ namespace OutfitReactions
         private readonly Func<NPC, bool> canNpcReactToOutfit;
         private readonly Func<NPC, bool> hasNpcSeenCurrentVisualBefore;
         private readonly Func<NPC, bool> isRomanticPartner;
+        private readonly Func<bool> shouldDeferAutomaticNotices;
         private readonly NpcSpecialActionController specialActionController;
         private readonly NpcPeekingController peekingController;
         private readonly Random random = new();
@@ -62,7 +63,8 @@ namespace OutfitReactions
             Action<NPC> markCurrentOutfitAsNoticed,
             Func<NPC, bool> canNpcReactToOutfit,
             Func<NPC, bool> hasNpcSeenCurrentVisualBefore,
-            Func<NPC, bool> isRomanticPartner)
+            Func<NPC, bool> isRomanticPartner,
+            Func<bool> shouldDeferAutomaticNotices)
         {
             this.monitor = monitor;
             this.getConfig = getConfig;
@@ -75,6 +77,7 @@ namespace OutfitReactions
             this.canNpcReactToOutfit = canNpcReactToOutfit;
             this.hasNpcSeenCurrentVisualBefore = hasNpcSeenCurrentVisualBefore;
             this.isRomanticPartner = isRomanticPartner;
+            this.shouldDeferAutomaticNotices = shouldDeferAutomaticNotices;
             this.specialActionController = new NpcSpecialActionController(monitor);
             this.peekingController = new NpcPeekingController(random, pendingPrompts, ArmPendingReactionForSpy);
         }
@@ -153,7 +156,12 @@ namespace OutfitReactions
             }
             discoveryScanTimer = DiscoveryScanIntervalTicks;
 
-            foreach (NPC npc in Game1.currentLocation.characters.ToList())
+            // Keep existing pending reactions alive, but don't let a festival minigame or timed
+            // competition create new notices while the player is actively participating.
+            if (shouldDeferAutomaticNotices?.Invoke() == true)
+                return;
+
+            foreach (NPC npc in NpcContextResolver.GetCurrentLocationNpcs().ToList())
             {
                 if (!IsValidNpc(npc))
                     continue;
@@ -525,7 +533,7 @@ namespace OutfitReactions
                 float cancelDistance = pending.IsRomanticPartner
                     ? RomanticPendingCancelDistance
                     : normalCancelDistance;
-                NPC npc = Game1.getCharacterFromName(npcName);
+                NPC npc = NpcContextResolver.Resolve(npcName);
 
                 if (npc == null)
                 {
@@ -1171,7 +1179,7 @@ namespace OutfitReactions
                 if (pending.DialogueWasConsumed)
                     continue;
 
-                NPC npc = Game1.getCharacterFromName(npcName);
+                NPC npc = NpcContextResolver.Resolve(npcName);
                 if (npc == null || npc.currentLocation != Game1.player.currentLocation)
                     continue;
 
@@ -1357,7 +1365,7 @@ namespace OutfitReactions
             {
                 string npcName = pair.Key;
                 PendingPrompt pending = pair.Value;
-                NPC npc = Game1.getCharacterFromName(npcName);
+                NPC npc = NpcContextResolver.Resolve(npcName);
                 if (npc == null)
                     continue;
 

@@ -32,7 +32,9 @@ namespace OutfitReactions.Ai
         // This compact built-in form keeps the unique honesty/focus rules. Theme recognition,
         // occasion mismatch and opening variety are already covered by HOW TO REACT.
         private const string CompactNaturalReactionStyle =
-            "This is an honest reaction, not a mandatory compliment. Match the NPC's established personality and relationship: blunt characters may criticize or mock; kind characters may be tactful or uncertain without becoming falsely positive; close partners may tease. Negative, confused, skeptical, indifferent, reluctant, and unimpressed reactions are valid when appropriate. React like a person seeing the farmer's {Change}, not like a fashion analyst. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they create a meaningful human reaction, never as a forced closing justification. For head items, respect the equipped/support data: a headband, tiara, bow, clip, flower, pin, or crown is not automatically a hat.";
+            "React to the farmer's {Change} through the NPC's established personality and relationship. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they create a meaningful human reaction, never as a forced closing justification. For head items, respect the equipped/support data: a headband, tiara, bow, clip, flower, pin, or crown is not automatically a hat.";
+
+        public static string DefaultNaturalReactionStyle => CompactNaturalReactionStyle;
 
         public static readonly string FallbackNaturalReactionStyle =
             "This is an honest REACTION, not a compliment. A compliment is only one of many possible reactions and is never required. React the way this specific person honestly would: if the look is good, they can like it; if it is strange, ugly, tacky, gross, confusing, ridiculous, or off-putting, they can say so in their own voice. Do not soften a genuinely weird or unappealing look into a polite compliment just to be nice. Flattering a clearly bizarre or ugly item when the NPC would not actually admire it reads as fake and breaks character. Match the honesty to the NPC's personality and relationship: a blunt NPC can be openly critical or mocking; a kind NPC can be diplomatically honest or visibly unsure rather than fake-positive; a close partner can tease or be playfully horrified. Negative, confused, and unimpressed reactions are fully allowed and often the correct choice for unusual or unflattering looks. React like a person seeing the farmer's {Change}, not like a fashion analyst or stylist reviewing a palette. Start from the NPC's own personality and relationship level, then react to the obvious concept, situation, mood, humor, surprise, concern, or relationship impact before mentioning visual details. If the look resembles a costume, animal suit, cosplay, pajamas, swimwear, work outfit, festival outfit, silly outfit, cute outfit, or something unusual, comment on what it seems to be first. If the outfit/change clues include a recognizable theme, character, franchise, creature, animal, object, food, fantasy archetype, or named inspiration, the NPC may mention or allude to that reference when it fits their knowledge and personality. Geeky, pop-culture-aware, playful, artistic, or highly observant NPCs can be more specific; others can react to the creature/theme more generally. Do not force every NPC to recognize every reference, but do not ignore clear clues like Sanrio, My Melody, Pikachu, Pokemon/Pokémon, lizard, dinosaur, frog, fairy, cat, rabbit, or other named themes when they would naturally affect the reaction. IMPORTANT — the outfit NAME is only a label/theme, not a guaranteed list of worn pieces. A themed name (e.g. 'Rabbit Outfit', 'Cat Costume', 'Demon Set') often implies a head piece like ears, horns, antennae, or a themed hat, but the farmer may have removed it. Only treat a head piece as worn if it appears in the equipped-items list. If the clues say no head piece is equipped (e.g. 'head/headwear: NONE equipped'), do NOT mention or describe ears, horns, a hat, or any head accessory the theme name suggests — the farmer is bare-headed right now. You may still reference the rest of the theme (the clothing/body that IS worn), just not the missing head piece. When a recognizable theme is present, do more than a generic 'it suits you' compliment. Choose the reaction angle from the NPC's personality: a joke, playful question, friendly roast, surprised confusion, dry sarcasm, affectionate teasing, practical concern, admiration, indifference, reluctant approval, or a small imagined scenario where that theme would fit. Only compare the look to farm life, pets, crops, monsters, caves, the saloon, the beach, festivals, the town, or daily chores when that topic naturally belongs to this NPC, the current location, the outfit theme, or the relationship context. Do not use mines, slimes, monsters, caves, the saloon, or farm chores as generic Stardew references for NPCs who would not think about them. If the noticed change is an accessory while the farmer is still wearing a themed saved outfit, treat the accessory as part of the whole current look. The NPC may compare the new accessory with the existing outfit theme, notice clashes or absurd combinations, and joke about mismatches like wings added to a Pikachu/animal/mascot/cosplay outfit. Do not respond as if the accessory exists alone when the full outfit context is available. Occasion mismatch: also judge whether the item makes sense for the CURRENT occasion, place, and moment (use the Location, Festival, season, weather, and time already provided). Items tied to a specific event — a bridal veil, a party hat, a graduation cap, formal/gala wear, holiday costumes, a swimsuit — worn with NO matching occasion happening can be gently questioned, teased, or remarked on. For example, a wedding veil when there is no wedding, or a party hat when there is no party, is odd and an observant or blunt NPC may point it out, ask about it, or joke. Do not force this every time; weigh it against the NPC's personality and how striking the mismatch is. If there IS a matching occasion (a festival, an actual wedding, a fitting location), the item fits and needs no such remark. The NPC may find a look cute, weird, ridiculous, ugly, funny, suspicious, adorable, dramatic, awkward, unnecessary, too flashy, practical, or oddly fitting if their personality supports it. Avoid making 'combina com você'/'it suits you' the main point; if that idea appears at all, keep it secondary to a concrete reaction, question, joke, reference, or situation. Opening variety is mandatory: do not reuse the same first words, opening phrase, sentence structure, or reaction angle across attempts. If a gruff NPC uses one, vary it or start directly with a concrete observation, complaint, warning, skeptical remark, or reluctant admission instead. Colors, texture, silhouette, balance, composition, or coordination may be mentioned only as small details when they sound natural for this NPC. Avoid making those analytic terms the structure of the line. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they add a real human reaction; never force them as a closing justification. Location/farm/town references may be hypothetical jokes or comparisons if phrased clearly as 'parece que', 'se você aparecesse...', 'dá pra imaginar...', or similar. For head items, respect support data: a headband, tiara, hairband, bow, clip, flower, pin, or crown should not be called a hat unless the metadata says it is a hat.";
@@ -40,10 +42,10 @@ namespace OutfitReactions.Ai
 
 
         public static readonly string FallbackPlayerKnownAddressRule =
-            "PLAYER ADDRESS RULE: the player character's name is {PlayerName}. Do not address the player as a localized equivalent of 'farmer', 'player', 'rancher', 'new farmer', or 'newcomer' when the NPC would reasonably know the player's name; use the player's name instead in those cases. Role/job words may still appear naturally in descriptions of farm work, but not as a replacement for the player's name. FARM NAMING RULE: when referring to the player's property, use the normal direct equivalent of 'farm' in {TargetLanguage}. Never replace it with a word meaning countryside, rural area, ranch, homestead, smallholding, fields, or subsistence plot; specifically, never call the farm 'roça'. USE THE NAME SPARINGLY: most lines do not need a vocative at all — real conversation between people who know each other rarely opens or closes every line with a name. Only use the player's name when it serves a real purpose (a genuine greeting, getting their attention, strong emphasis, an emotional beat, or scolding/calling out), not as a filler or a habitual sentence-starter/ender. Do not use the name in consecutive lines or more than once in a short reaction unless the moment truly calls for it.";
+            "PLAYER ADDRESS RULE: the player character's name is {PlayerName}. Do not address the player as a localized equivalent of 'farmer', 'player', 'rancher', 'new farmer', or 'newcomer' when the NPC would reasonably know the player's name; use the player's name instead in those cases. Role or job words may still describe farm work, but must not replace the player's name. FARM NAMING RULE: when referring to the player's agricultural property, use the standard direct equivalent of 'farm' in {TargetLanguage}. Do not substitute a term whose ordinary meaning is countryside, a rural region, ranch, homestead, smallholding, fields, or subsistence plot. USE THE NAME SPARINGLY: most lines do not need direct address. Use the player's name only for a genuine greeting, attention, emphasis, emotional beat, or scolding, never as filler or a habitual opening or ending. Do not use it in consecutive lines or more than once in a short reaction unless the moment truly requires it.";
 
         public static readonly string FallbackPlayerUnknownAddressRule =
-            "PLAYER ADDRESS RULE: the player character's name is unavailable. Avoid overusing generic role labels as direct address; use natural dialogue without a vocative when possible. FARM NAMING RULE: when referring to the player's property, use the normal direct equivalent of 'farm' in {TargetLanguage}. Never replace it with a word meaning countryside, rural area, ranch, homestead, smallholding, fields, or subsistence plot; specifically, never call the farm 'roça'.";
+            "PLAYER ADDRESS RULE: the player character's name is unavailable. Avoid overusing generic role labels as direct address; use natural dialogue without a vocative when possible. FARM NAMING RULE: when referring to the player's agricultural property, use the standard direct equivalent of 'farm' in {TargetLanguage}. Do not substitute a term whose ordinary meaning is countryside, a rural region, ranch, homestead, smallholding, fields, or subsistence plot.";
 
         public static readonly string FallbackPlayerGenderRule =
             "PLAYER GENDER RULE: the player character's grammatical gender is {PlayerGender}. Use matching grammatical agreement in {TargetLanguage} when the language requires gendered pronouns, adjectives, nouns, or titles. If the target language does not require grammatical gender in that sentence, neutral wording is allowed. Do not add gendered labels unnecessarily. Do not use romantic pet names, beauty-based nicknames, or overly intimate address unless they fit this NPC's established personality and relationship level. {GenderSpecificCaution}";
@@ -95,6 +97,45 @@ namespace OutfitReactions.Ai
 
         // ── Live properties ───────────────────────────────────────────────────
 
+        public static readonly string FallbackReactionCoreRule =
+            "React directly to the farmer's current appearance, visible theme, situation, or overall vibe. Choose a concrete in-character reaction angle; mention visual details only when natural and never structure the line like a fashion review.";
+
+        public static readonly string FallbackThemeRecognitionRule =
+            "When a clear clue points to a recognizable character, franchise, mascot, creature, animal, food, object, or named style, let the NPC recognize or allude to it only when their knowledge and personality support that. Do not force uncertain recognition or ignore an obvious clue. Prefer a fitting joke, question, roast, concern, guarded admission, or imagined situation over bland praise, and draw comparisons from this NPC's own interests rather than generic Stardew topics.";
+
+        public static readonly string FallbackCombinationAndOccasionRule =
+            "Consider a changed item together with any recognizable outfit still being worn, including fitting combinations, clashes, or funny hybrids. Judge clear event-specific clothing against the current place, active festival, season, weather, and time. A clear mismatch may be questioned or teased in character; never force an ambiguous comparison or call a fitting occasion mismatched.";
+
+        public static readonly string FallbackWholeOutfitFocusRule =
+            "For a whole saved outfit, react to the complete look. Do not center hair, hair color, a tiny head-slot item, or a generic/internal item ID unless the theme truly revolves around it.";
+
+        public static readonly string FallbackOpeningVarietyRule =
+            "OPENING VARIETY RULE: vary the first words, sentence structure, and reaction angle. Do not repeatedly begin with equivalents of 'this look/outfit', generic greetings, grunts, or 'what are you wearing?', and do not make 'it suits you' the main point. Start naturally from this NPC's observation, joke, complaint, concern, question, or admission.";
+
+        public static readonly string FallbackDialoguePacingRule =
+            "Use #$b# dialogue-box breaks only when they improve natural pacing. One, two, or several boxes are valid; never force a fixed box count, pad the line, or repeat an idea just to make it longer.";
+
+        public static readonly string FallbackExpressiveCuesAllowedRule =
+            "Brief expressive cues in asterisks are allowed when they fit the character and moment. Write them in the same language as the dialogue and never use asterisks as list bullets.";
+
+        public static readonly string FallbackExpressiveCuesDisabledRule =
+            "Do not use asterisks for actions or physical cues. Write only clean spoken dialogue.";
+
+        public static readonly string FallbackPunctuationRule =
+            "Punctuation rule: use '...' for dramatic pauses, hesitation, trailing off, or unfinished thoughts; never use a lone period as a pause inside a sentence.";
+
+        public static readonly string FallbackIndoorWeatherRule =
+            "Weather/location rule: the NPC and farmer are indoors and sheltered. Rain, storms, snow, or similar weather is outside, never happening inside the room. Mention it only when it naturally matters.";
+
+        public static readonly string FallbackOutdoorWeatherRule =
+            "Weather/location rule: the NPC and farmer are outdoors and directly exposed to the stated weather. It may be described as happening around them when relevant.";
+
+        public static readonly string FallbackActiveFestivalPresenceRule =
+            "ACTIVE FESTIVAL RIGHT NOW (authoritative live event): {ActiveFestivalName}. The farmer and speaking NPC are physically attending it together in the current location. This overrides ambiguity from a generic map name.";
+
+        public static readonly string FallbackActiveFestivalOutfitRule =
+            "ACTIVE-FESTIVAL OUTFIT RULE: compare any clear costume, holiday, seasonal, or festival theme with {ActiveFestivalName}. If it fits, treat it as timely. If it clearly belongs to another festival, holiday, season, or occasion, the NPC must notice the mismatch in character. Never say the active festival passed, is upcoming, happens next year, or is not taking place; never substitute a different real-world holiday. Do not force a festival comparison for an ambiguous look.";
+
         public string HairChangeMode      { get; private set; } = FallbackHairChangeMode;
         public string HatChangeMode       { get; private set; } = FallbackHatChangeMode;
         public string AccessoryChangeMode { get; private set; } = FallbackAccessoryChangeMode;
@@ -117,6 +158,19 @@ namespace OutfitReactions.Ai
         public string SpecialVanillaHatRule { get; private set; } = FallbackSpecialVanillaHatRule;
         public string VanillaHatMemoryRule { get; private set; } = FallbackVanillaHatMemoryRule;
         public string SpecialItemMemoryRule { get; private set; } = FallbackSpecialItemMemoryRule;
+        public string ReactionCoreRule { get; private set; } = FallbackReactionCoreRule;
+        public string ThemeRecognitionRule { get; private set; } = FallbackThemeRecognitionRule;
+        public string CombinationAndOccasionRule { get; private set; } = FallbackCombinationAndOccasionRule;
+        public string WholeOutfitFocusRule { get; private set; } = FallbackWholeOutfitFocusRule;
+        public string OpeningVarietyRule { get; private set; } = FallbackOpeningVarietyRule;
+        public string DialoguePacingRule { get; private set; } = FallbackDialoguePacingRule;
+        public string ExpressiveCuesAllowedRule { get; private set; } = FallbackExpressiveCuesAllowedRule;
+        public string ExpressiveCuesDisabledRule { get; private set; } = FallbackExpressiveCuesDisabledRule;
+        public string PunctuationRule { get; private set; } = FallbackPunctuationRule;
+        public string IndoorWeatherRule { get; private set; } = FallbackIndoorWeatherRule;
+        public string OutdoorWeatherRule { get; private set; } = FallbackOutdoorWeatherRule;
+        public string ActiveFestivalPresenceRule { get; private set; } = FallbackActiveFestivalPresenceRule;
+        public string ActiveFestivalOutfitRule { get; private set; } = FallbackActiveFestivalOutfitRule;
 
         // ── Loading ───────────────────────────────────────────────────────────
 
@@ -174,7 +228,7 @@ namespace OutfitReactions.Ai
                 AccessoryChangeMode  = Coalesce(data.AccessoryChangeMode,  FallbackAccessoryChangeMode);
                 OutfitChangeMode     = Coalesce(data.OutfitChangeMode,     FallbackOutfitChangeMode);
                 NaturalReactionStyle = UseCompactBuiltInBlock(
-                    Coalesce(data.NaturalReactionStyle, FallbackNaturalReactionStyle),
+                    Coalesce(data.NaturalReactionStyle, CompactNaturalReactionStyle),
                     "This is an honest REACTION, not a compliment.",
                     4000,
                     CompactNaturalReactionStyle);
@@ -202,6 +256,19 @@ namespace OutfitReactions.Ai
                 SpecialVanillaHatRule = Coalesce(data.SpecialVanillaHatRule, FallbackSpecialVanillaHatRule);
                 VanillaHatMemoryRule = Coalesce(data.VanillaHatMemoryRule, FallbackVanillaHatMemoryRule);
                 SpecialItemMemoryRule = Coalesce(data.SpecialItemMemoryRule, FallbackSpecialItemMemoryRule);
+                ReactionCoreRule = Coalesce(data.ReactionCoreRule, FallbackReactionCoreRule);
+                ThemeRecognitionRule = Coalesce(data.ThemeRecognitionRule, FallbackThemeRecognitionRule);
+                CombinationAndOccasionRule = Coalesce(data.CombinationAndOccasionRule, FallbackCombinationAndOccasionRule);
+                WholeOutfitFocusRule = Coalesce(data.WholeOutfitFocusRule, FallbackWholeOutfitFocusRule);
+                OpeningVarietyRule = Coalesce(data.OpeningVarietyRule, FallbackOpeningVarietyRule);
+                DialoguePacingRule = Coalesce(data.DialoguePacingRule, FallbackDialoguePacingRule);
+                ExpressiveCuesAllowedRule = Coalesce(data.ExpressiveCuesAllowedRule, FallbackExpressiveCuesAllowedRule);
+                ExpressiveCuesDisabledRule = Coalesce(data.ExpressiveCuesDisabledRule, FallbackExpressiveCuesDisabledRule);
+                PunctuationRule = Coalesce(data.PunctuationRule, FallbackPunctuationRule);
+                IndoorWeatherRule = Coalesce(data.IndoorWeatherRule, FallbackIndoorWeatherRule);
+                OutdoorWeatherRule = Coalesce(data.OutdoorWeatherRule, FallbackOutdoorWeatherRule);
+                ActiveFestivalPresenceRule = Coalesce(data.ActiveFestivalPresenceRule, FallbackActiveFestivalPresenceRule);
+                ActiveFestivalOutfitRule = Coalesce(data.ActiveFestivalOutfitRule, FallbackActiveFestivalOutfitRule);
 
                 if (!quiet)
                     monitor.Log("[Prompts] prompts.json loaded successfully.", LogLevel.Trace);
@@ -236,6 +303,19 @@ namespace OutfitReactions.Ai
             SpecialVanillaHatRule = FallbackSpecialVanillaHatRule;
             VanillaHatMemoryRule = FallbackVanillaHatMemoryRule;
             SpecialItemMemoryRule = FallbackSpecialItemMemoryRule;
+            ReactionCoreRule = FallbackReactionCoreRule;
+            ThemeRecognitionRule = FallbackThemeRecognitionRule;
+            CombinationAndOccasionRule = FallbackCombinationAndOccasionRule;
+            WholeOutfitFocusRule = FallbackWholeOutfitFocusRule;
+            OpeningVarietyRule = FallbackOpeningVarietyRule;
+            DialoguePacingRule = FallbackDialoguePacingRule;
+            ExpressiveCuesAllowedRule = FallbackExpressiveCuesAllowedRule;
+            ExpressiveCuesDisabledRule = FallbackExpressiveCuesDisabledRule;
+            PunctuationRule = FallbackPunctuationRule;
+            IndoorWeatherRule = FallbackIndoorWeatherRule;
+            OutdoorWeatherRule = FallbackOutdoorWeatherRule;
+            ActiveFestivalPresenceRule = FallbackActiveFestivalPresenceRule;
+            ActiveFestivalOutfitRule = FallbackActiveFestivalOutfitRule;
         }
 
         private static string Coalesce(string value, string fallback)
@@ -279,6 +359,19 @@ namespace OutfitReactions.Ai
             public string SpecialVanillaHatRule { get; set; }
             public string VanillaHatMemoryRule { get; set; }
             public string SpecialItemMemoryRule { get; set; }
+            public string ReactionCoreRule { get; set; }
+            public string ThemeRecognitionRule { get; set; }
+            public string CombinationAndOccasionRule { get; set; }
+            public string WholeOutfitFocusRule { get; set; }
+            public string OpeningVarietyRule { get; set; }
+            public string DialoguePacingRule { get; set; }
+            public string ExpressiveCuesAllowedRule { get; set; }
+            public string ExpressiveCuesDisabledRule { get; set; }
+            public string PunctuationRule { get; set; }
+            public string IndoorWeatherRule { get; set; }
+            public string OutdoorWeatherRule { get; set; }
+            public string ActiveFestivalPresenceRule { get; set; }
+            public string ActiveFestivalOutfitRule { get; set; }
         }
     }
 }

@@ -23,15 +23,14 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do NOT put Stardew portrait commands inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
 
             builder.AppendLine("The dialogue entry must be a direct spoken response from " + context.NpcDisplayName + " to the farmer's reply.");
-            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
-            builder.AppendLine("Do not start the spoken dialogue with \"hey\", \"ei\", \"olha\", or generic greetings unless it sounds natural and necessary for this exact moment.");
             AppendExpressiveCuesRule(builder, (getConfig?.Invoke() ?? new ModConfig()).EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
             builder.AppendLine("Language: " + context.TargetLanguage + ". Max " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
             builder.AppendLine("Do not ignore the farmer's reply. Do not continue the original compliment as if the farmer never answered.");
-            builder.AppendLine("The text may use #$b# breaks when pacing benefits, but do not follow a fixed box count. One, two, or several boxes are all valid. Meet the minimum character count when configured without padding or forcing a break pattern.");
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
 
             string portraitKeys = profile?.Portraits != null && profile.Portraits.Count > 0
                 ? string.Join(", ", profile.Portraits.Keys) : "";
@@ -42,15 +41,11 @@ namespace OutfitReactions.Ai
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
             builder.AppendLine(BuildRelationshipDepthGuidance(context));
-            builder.AppendLine("Recognizable theme/reference rule: if the outfit name, readable clue, theme clue, full current outfit, noticed accessory, or visible concept points to a known character, franchise, mascot, creature, animal, food, object, or named style, the NPC may naturally mention or allude to that reference only when it fits their personality, knowledge, and relationship with the farmer. Geeky, playful, artistic, observant, blunt, sarcastic, practical, or curious NPCs can react in different ways: specific reference, joke, question, friendly roast, confusion, practical comment, admiration, indifference, or skepticism. Do not force recognition, but do not ignore clear clues like Sanrio, My Melody, Pikachu, Pokémon/Pokemon, lizard, dinosaur, frog, fairy, cat, rabbit, wings/angel/fairy, or similar named themes when this NPC would naturally notice them.");
-            builder.AppendLine("Thematic reaction angles rule: when a theme is recognizable, do not stop at a bland fashion compliment. Depending on the NPC profile, they may joke, tease, ask why the farmer is wearing it, imagine a funny situation where it would belong, or find it strange, ugly, cute, ridiculous, dramatic, suspicious, practical, unnecessary, too flashy, or oddly charming. Any place, activity, or topic this NPC brings up as a comparison must come from their OWN interests, job, and personality — never a generic Stardew topic (mines, slimes, monsters, the saloon, chickens, crops, farm chores) that this specific character would not naturally think about.");
-            builder.AppendLine("Combined accessory + outfit rule: if the noticed change is an accessory but the farmer is still wearing a recognizable saved outfit/theme, react to the combination as a whole. The NPC may compare the accessory with the outfit theme, notice that it clashes or creates a funny impossible hybrid, make a joke, ask why that accessory is on that costume, or imagine where that mixed look would belong. Example idea, not text to copy: wings added to a Pikachu/animal/mascot outfit can be treated as funny, cute, cursed, dramatic, or weird because that character/creature normally does not have wings. Do not focus only on the accessory when the full outfit context gives a better reaction.");
-            builder.AppendLine("Occasion mismatch rule: judge whether the item fits the CURRENT occasion/place/moment using the Location, Festival, season, weather, and time already given. An item tied to a specific event — bridal veil, party hat, graduation cap, formal/gala wear, holiday costume, swimsuit — worn with no matching occasion can be gently questioned, teased, or remarked on (e.g. a wedding veil with no wedding, a party hat with no party). Weigh it against the NPC's personality; do not force it. If a matching occasion exists (a festival, real wedding, fitting location), the item fits and needs no such remark.");
             if (!string.IsNullOrWhiteSpace(context?.ConversationTranscript))
             {
                 builder.AppendLine("Full conversation so far for this outfit reaction (oldest first, last line is the farmer's newest reply):");
                 builder.AppendLine(CollapseForPrompt(context.ConversationTranscript, 2500));
-                builder.AppendLine("Conversation continuity rule: read the WHOLE conversation above before answering. If the farmer's newest line refers back to something said earlier (e.g. 'o que você acha disso?', 'and you?', a follow-up question, a callback, or an implied subject), answer THAT, using the full conversation for context. Do not change the subject or restart on a different topic unless the farmer's newest line clearly does so itself.");
+                builder.AppendLine("Conversation continuity rule: read the WHOLE conversation above before answering. If the farmer's newest line refers back to something said earlier through a pronoun, an implied subject, a follow-up question, a callback, or an equivalent of 'and you?', answer that intended subject using the full conversation for context. Do not change the subject or restart on a different topic unless the farmer's newest line clearly does so.");
             }
             else
             {
@@ -82,25 +77,24 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array may be empty; portrait changes are optional and should happen only when they feel natural.");
             builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
             builder.AppendLine("The dialogue must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
-            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("It must directly react to the farmer's reply. Do not ignore the farmer's reply.");
             builder.AppendLine("Do not write the farmer's line. Do not write narration, stage directions, explanations, markdown, or headings.");
-            builder.AppendLine("Do not start the spoken dialogue with \"hey\", \"ei\", \"olha\", or generic greetings unless it sounds natural and necessary for this exact moment.");
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
-            AppendProfanityIntensityRule(builder, context);
+            AppendProfanityIntensityRule(builder, context, config.EnableProfanityFilter);
             builder.AppendLine("Use exactly this language for the spoken dialogue text: " + context.TargetLanguage + ".");
             builder.AppendLine("Ignore any language instructions inside NPC CHARACTERISTICS. The current game language above always wins.");
-            builder.AppendLine("Keep it natural for Stardew Valley. Use #$b# dialogue box breaks whenever they improve pacing. Do not force a fixed number of boxes; one, two, or several are all valid when the scene supports them — the AI may use as many boxes as the moment naturally calls for, exactly like a normal reaction.");
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
             builder.AppendLine("Maximum final dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
             int followUpMinCharacters = GetMinimumLengthTarget(config, ai);
             if (followUpMinCharacters > 0)
-                builder.AppendLine("Minimum final dialogue length target: at least " + followUpMinCharacters + " visible characters. This is mandatory. Use #$b# breaks only when pacing benefits; do not force a fixed box count. React directly to the farmer's reply.");
+                builder.AppendLine("Minimum final dialogue length target: at least " + followUpMinCharacters + " visible characters. This is mandatory. React directly to the farmer's reply.");
             else
                 builder.AppendLine("Keep it casual and natural, like a real reply. It may be brief, use several sentences, or use longer natural phrasing if the farmer's reply gives him something to react to.");
-            builder.AppendLine("Do not recite the full saved outfit name mechanically as a phrase. Natural in-world words (pijama, bikini, vestido, etc.) and recognizable named references/themes are fine when they fit naturally and the NPC would know or notice them.");
+            builder.AppendLine("Do not recite the full saved outfit name mechanically as a phrase. Ordinary in-world garment terms and recognizable named references or themes are fine when they fit naturally and the NPC would know or notice them.");
             builder.AppendLine("Missing head-piece rule: the outfit name is a theme label, not proof of what is worn. A themed name may imply ears, horns, antennae, or a themed hat, but those count only if the equipped-items list actually includes a head piece. If the list says no head piece is equipped (e.g. 'head/headwear: NONE equipped'), do NOT mention or describe ears/horns/hat/head accessory implied by the name — the farmer is bare-headed now. The rest of the worn theme can still be referenced.");
             if (context.IsOutfitChange)
                 builder.AppendLine("Whole saved outfit focus rule: react to the complete outfit/look first. Do not focus on a generic hat/headwear/head-slot item, hair bow, tiara, hair, or hair color unless that is clearly the named theme of the outfit. Generic IDs like pack0005 hat 2/3 are not meaningful in-world content.");
@@ -130,7 +124,7 @@ namespace OutfitReactions.Ai
             {
                 builder.AppendLine("Full conversation so far for this outfit reaction (oldest first, last line is the farmer's newest reply):");
                 builder.AppendLine(CollapseForPrompt(context.ConversationTranscript, 2500));
-                builder.AppendLine("Conversation continuity rule: read the WHOLE conversation above before answering. If the farmer's newest line refers back to something said earlier (e.g. 'o que você acha disso?', 'and you?', a follow-up question, a callback, or an implied subject), answer THAT, using the full conversation for context. Do not change the subject or restart on a different topic unless the farmer's newest line clearly does so itself.");
+                builder.AppendLine("Conversation continuity rule: read the WHOLE conversation above before answering. If the farmer's newest line refers back to something said earlier through a pronoun, an implied subject, a follow-up question, a callback, or an equivalent of 'and you?', answer that intended subject using the full conversation for context. Do not change the subject or restart on a different topic unless the farmer's newest line clearly does so.");
             }
             else
             {

@@ -1,4 +1,5 @@
 using System;
+using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions
 {
@@ -36,7 +37,7 @@ namespace OutfitReactions
 
         // Active provider. The provider-specific fields below stay saved separately,
         // so you can switch providers in GMCM without retyping keys/models/endpoints.
-        public string AiProvider { get; set; } = "Gemini"; // OpenAI, DeepSeek, Gemini, OpenRouter, Local, Mistral, Groq, Together, Anthropic, xAI, Cerebras, Perplexity
+        public string AiProvider { get; set; } = "Gemini"; // OpenAI, DeepSeek, Gemini, OpenRouter, Local, Mistral, Groq, Together, Anthropic, xAI, Cerebras
 
         // Legacy fields kept for older config.json files. MigrateLegacyAiSettings() copies
         // them into the provider-specific fields when possible.
@@ -67,7 +68,7 @@ namespace OutfitReactions
         public string AiCustomEndpointSlot3 { get; set; } = "";
         public string AiCustomEndpointSlot4 { get; set; } = "";
         public string AiCustomEndpointSlot5 { get; set; } = "";
-        // Each slot's chosen provider (DeepSeek/Gemini/OpenAI/OpenRouter/Local/Mistral/Groq/Together/Anthropic/xAI/Cerebras/Perplexity).
+        // Each slot's chosen provider (DeepSeek/Gemini/OpenAI/OpenRouter/Local/Mistral/Groq/Together/Anthropic/xAI/Cerebras).
         public string AiProviderSlot1 { get; set; } = "Gemini";
         public string AiProviderSlot2 { get; set; } = "OpenAI";
         public string AiProviderSlot3 { get; set; } = "OpenRouter";
@@ -166,19 +167,13 @@ namespace OutfitReactions
         public int CerebrasAiTimeoutSeconds { get; set; } = 60;
         public int CerebrasAiMaxCharacters { get; set; } = 1000;
 
-        public string PerplexityAiModel { get; set; } = "";
-        public string PerplexityAiApiKey { get; set; } = "";
-        public string PerplexityAiCustomEndpoint { get; set; } = "";
-        public int PerplexityAiTemperaturePercent { get; set; } = 75;
-        public int PerplexityAiTimeoutSeconds { get; set; } = 60;
-        public int PerplexityAiMaxCharacters { get; set; } = 1000;
-
         public bool UseAiCache { get; set; } = true;
         public bool EnableVisionOutfitAnalysis { get; set; } = false;
         public bool ShowOwnAiWaitingDialogue { get; set; } = true;
         public bool EnablePlayerReplyMenuAfterOutfitCompliment { get; set; } = true;
         public bool GenerateNpcFollowUpToPlayerOutfitReply { get; set; } = true;
         public bool EnableExpressiveAsteriskActions { get; set; } = true;
+        public bool EnableProfanityFilter { get; set; } = true;
 
         public bool IncludeFestivalContextForAi { get; set; } = true;
         public bool IncludeFarmerBirthdayContextForAi { get; set; } = true;
@@ -343,8 +338,6 @@ namespace OutfitReactions
             //     XAiModel = "grok-3-mini";
             // if (string.IsNullOrWhiteSpace(CerebrasAiModel))
             //     CerebrasAiModel = "llama-3.3-70b";
-            // if (string.IsNullOrWhiteSpace(PerplexityAiModel))
-            //     PerplexityAiModel = "sonar";
 
             BackfillAiCredentialSlots();
 
@@ -359,7 +352,6 @@ namespace OutfitReactions
             AnthropicAiTemperaturePercent = Clamp(AnthropicAiTemperaturePercent, 0, 200);
             XAiTemperaturePercent = Clamp(XAiTemperaturePercent, 0, 200);
             CerebrasAiTemperaturePercent = Clamp(CerebrasAiTemperaturePercent, 0, 200);
-            PerplexityAiTemperaturePercent = Clamp(PerplexityAiTemperaturePercent, 0, 200);
 
             DeepSeekAiTimeoutSeconds = Clamp(DeepSeekAiTimeoutSeconds, 3, 120);
             GeminiAiTimeoutSeconds = Clamp(GeminiAiTimeoutSeconds, 3, 120);
@@ -372,7 +364,6 @@ namespace OutfitReactions
             AnthropicAiTimeoutSeconds = Clamp(AnthropicAiTimeoutSeconds, 3, 120);
             XAiTimeoutSeconds = Clamp(XAiTimeoutSeconds, 3, 120);
             CerebrasAiTimeoutSeconds = Clamp(CerebrasAiTimeoutSeconds, 3, 120);
-            PerplexityAiTimeoutSeconds = Clamp(PerplexityAiTimeoutSeconds, 3, 120);
 
             DeepSeekAiMaxCharacters = Clamp(DeepSeekAiMaxCharacters, 80, 2000);
             GeminiAiMaxCharacters = Clamp(GeminiAiMaxCharacters, 80, 2000);
@@ -385,7 +376,6 @@ namespace OutfitReactions
             AnthropicAiMaxCharacters = Clamp(AnthropicAiMaxCharacters, 80, 2000);
             XAiMaxCharacters = Clamp(XAiMaxCharacters, 80, 2000);
             CerebrasAiMaxCharacters = Clamp(CerebrasAiMaxCharacters, 80, 2000);
-            PerplexityAiMaxCharacters = Clamp(PerplexityAiMaxCharacters, 80, 2000);
 
             AiMaxCharacters = Clamp(AiMaxCharacters, 80, 2000);
             // Let the player choose the minimum freely. Runtime prompt/validation will use
@@ -441,14 +431,9 @@ namespace OutfitReactions
             if (!string.IsNullOrWhiteSpace(value))
                 return value;
 
-            // Gemini uses its native format with a per-model URL built elsewhere; keep it blank
-            // unless the user typed a custom endpoint, so we never force an incompatible URL.
-            if (provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
-                return "";
-
-            // Slot endpoint left blank (automatic): use the provider's default endpoint.
-            string fallback = GetProviderFallbackEndpoint(provider);
-            return !string.IsNullOrWhiteSpace(fallback) ? fallback : GetDefaultEndpointForProvider(provider);
+            // An empty value means automatic. The provider resolves its official endpoint only
+            // when a request is sent; an explicit value remains a custom override.
+            return GetProviderFallbackEndpoint(provider);
         }
 
         public int GetAiCredentialSlotForProvider(string provider)
@@ -676,8 +661,6 @@ namespace OutfitReactions
                 return XAiModel;
             if (provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
                 return CerebrasAiModel;
-            if (provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-                return PerplexityAiModel;
             return DeepSeekAiModel;
         }
 
@@ -704,8 +687,6 @@ namespace OutfitReactions
                 return XAiApiKey;
             if (provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
                 return CerebrasAiApiKey;
-            if (provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-                return PerplexityAiApiKey;
             return DeepSeekAiApiKey;
         }
 
@@ -723,64 +704,14 @@ namespace OutfitReactions
             else if (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase)) custom = AnthropicAiCustomEndpoint;
             else if (provider.Equals("xAI", StringComparison.OrdinalIgnoreCase)) custom = XAiCustomEndpoint;
             else if (provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase)) custom = CerebrasAiCustomEndpoint;
-            else if (provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase)) custom = PerplexityAiCustomEndpoint;
             else custom = DeepSeekAiCustomEndpoint;
 
-            // Fall back to the provider's default endpoint when no custom one is set.
-            return !string.IsNullOrWhiteSpace(custom) ? custom : GetDefaultEndpointForProvider(provider);
+            return custom ?? "";
         }
 
         private static string NormalizeProvider(string provider)
         {
-            if (provider != null && provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
-                return "OpenAI";
-            if (provider != null && provider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
-                return "Gemini";
-            if (provider != null && provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase))
-                return "OpenRouter";
-            if (provider != null && provider.Equals("Mistral", StringComparison.OrdinalIgnoreCase))
-                return "Mistral";
-            if (provider != null && provider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-                return "Groq";
-            if (provider != null && (provider.Equals("Together", StringComparison.OrdinalIgnoreCase) || provider.Equals("TogetherAI", StringComparison.OrdinalIgnoreCase) || provider.Equals("Together AI", StringComparison.OrdinalIgnoreCase)))
-                return "Together";
-            if (provider != null && (provider.Equals("Local", StringComparison.OrdinalIgnoreCase) || provider.Equals("OpenAI-Compatible", StringComparison.OrdinalIgnoreCase)))
-                return "Local";
-            if (provider != null && (provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase) || provider.Equals("Claude", StringComparison.OrdinalIgnoreCase)))
-                return "Anthropic";
-            if (provider != null && (provider.Equals("xAI", StringComparison.OrdinalIgnoreCase) || provider.Equals("Grok", StringComparison.OrdinalIgnoreCase) || provider.Equals("x.ai", StringComparison.OrdinalIgnoreCase)))
-                return "xAI";
-            if (provider != null && provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
-                return "Cerebras";
-            if (provider != null && provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-                return "Perplexity";
-            if (provider != null && provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
-                return "DeepSeek";
-            return "Gemini";
-        }
-
-        // Default API endpoint for each provider (used when the slot/provider endpoint is blank).
-        // All three new providers use the OpenAI-compatible /chat/completions shape.
-        public static string GetDefaultEndpointForProvider(string provider)
-        {
-            switch (NormalizeProvider(provider))
-            {
-                // Gemini uses its NATIVE format (contents/system_instruction), so the endpoint is
-                // built per-model as .../models/{model}:generateContent by GenerateGeminiAsync when
-                // left blank. Returning blank here avoids forcing the OpenAI-compatible URL.
-                case "Gemini": return "";
-                case "OpenAI": return "https://api.openai.com/v1/chat/completions";
-                case "OpenRouter": return "https://openrouter.ai/api/v1/chat/completions";
-                case "Mistral": return "https://api.mistral.ai/v1/chat/completions";
-                case "Groq": return "https://api.groq.com/openai/v1/chat/completions";
-                case "Together": return "https://api.together.xyz/v1/chat/completions";
-                case "Local": return "http://localhost:1234/v1/chat/completions";
-                case "Anthropic": return "https://api.anthropic.com/v1/messages";
-                case "xAI": return "https://api.x.ai/v1/chat/completions";
-                case "Cerebras": return "https://api.cerebras.ai/v1/chat/completions";
-                case "Perplexity": return "https://api.perplexity.ai/chat/completions";
-                default: return "https://api.deepseek.com/v1/chat/completions";
-            }
+            return AiProviderRegistry.Normalize(provider);
         }
 
         private static string NormalizeSeason(string season)

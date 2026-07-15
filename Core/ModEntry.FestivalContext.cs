@@ -1,6 +1,7 @@
 using StardewValley;
 using StardewValley.GameData;
 using StardewValley.TokenizableStrings;
+using OutfitReactions.Ai;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,6 +33,8 @@ public sealed partial class ModEntry
                 .Where(festival => festival.ContainsDay(currentDayIndex))
                 .OrderBy(festival => festival.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
+
+            string activeFestivalName = ResolveActiveFestivalName(today);
 
             FestivalOccurrence previous = festivals
                 .Where(festival => festival.EndDayIndex < currentDayIndex)
@@ -68,6 +71,13 @@ public sealed partial class ModEntry
 
             StringBuilder context = new StringBuilder();
             context.Append("Authoritative festival calendar (localized and mod-aware). ");
+            if (!string.IsNullOrWhiteSpace(activeFestivalName))
+            {
+                string presenceRule = outfitAiService?.PromptStyle?.ActiveFestivalPresenceRule
+                    ?? PromptStyleService.FallbackActiveFestivalPresenceRule;
+                context.Append(ApplyActiveFestivalPromptName(presenceRule, PromptStyleService.FallbackActiveFestivalPresenceRule, activeFestivalName)).Append(' ');
+            }
+
             if (today.Count > 0)
             {
                 context.Append("TODAY: ")
@@ -104,7 +114,16 @@ public sealed partial class ModEntry
                     .Append(". ");
             }
 
-            context.Append("This is calendar awareness only: do not claim the NPC or farmer is attending a festival unless the current location supports that. Mention a festival only when it naturally matters to the outfit, timing, or conversation.");
+            if (!string.IsNullOrWhiteSpace(activeFestivalName))
+            {
+                string outfitRule = outfitAiService?.PromptStyle?.ActiveFestivalOutfitRule
+                    ?? PromptStyleService.FallbackActiveFestivalOutfitRule;
+                context.Append(ApplyActiveFestivalPromptName(outfitRule, PromptStyleService.FallbackActiveFestivalOutfitRule, activeFestivalName));
+            }
+            else
+            {
+                context.Append("This is calendar awareness only: do not claim the NPC or farmer is attending a festival unless the current location supports that. Mention a festival only when it naturally matters to the outfit, timing, or conversation.");
+            }
             return context.ToString();
         }
         catch (Exception ex)
@@ -113,6 +132,58 @@ public sealed partial class ModEntry
                 Monitor.Log("[FESTIVAL CONTEXT] Could not build the festival calendar: " + ex.Message, StardewModdingAPI.LogLevel.Warn);
             return "Festival calendar information is currently unavailable.";
         }
+    }
+
+    private static string ApplyActiveFestivalPromptName(string template, string fallback, string activeFestivalName)
+    {
+        string rule = string.IsNullOrWhiteSpace(template)
+            ? fallback
+            : template.Trim();
+        return rule.Replace("{ActiveFestivalName}", activeFestivalName ?? "current in-game festival", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolveActiveFestivalName(IReadOnlyList<FestivalOccurrence> festivalsToday)
+    {
+        if (!Game1.eventUp || Game1.CurrentEvent == null)
+            return "";
+
+        string eventId = Game1.CurrentEvent.id ?? "";
+        bool isFestivalEvent = Game1.CurrentEvent.isFestival
+            || eventId.StartsWith("festival_", StringComparison.OrdinalIgnoreCase);
+        if (!isFestivalEvent)
+            return "";
+
+        try
+        {
+            Match dateMatch = Regex.Match(
+                eventId,
+                "(?:^|_)((?:spring|summer|fall|winter)(?:[1-9]|1[0-9]|2[0-8]))$",
+                RegexOptions.IgnoreCase);
+            if (dateMatch.Success)
+            {
+                string activeDateKey = dateMatch.Groups[1].Value;
+                Dictionary<string, string> festivalDates = DataLoader.Festivals_FestivalDates(Game1.temporaryContent);
+                KeyValuePair<string, string> matchingFestival = festivalDates.FirstOrDefault(pair =>
+                    string.Equals(pair.Key, activeDateKey, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(matchingFestival.Key))
+                {
+                    string resolvedName = ResolveFestivalName(matchingFestival.Value, matchingFestival.Key);
+                    if (!string.IsNullOrWhiteSpace(resolvedName))
+                        return resolvedName;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (DebugLog)
+                Monitor.Log("[FESTIVAL CONTEXT] Could not resolve the active festival name from event '" + eventId + "': " + ex.Message, StardewModdingAPI.LogLevel.Trace);
+        }
+
+        // Modded festival IDs don't always contain the vanilla season/day suffix. In that case,
+        // the enabled festival calendar for today is the safest localized, mod-aware fallback.
+        FestivalOccurrence activeToday = festivalsToday?.FirstOrDefault(festival => !festival.IsPassive)
+            ?? festivalsToday?.FirstOrDefault();
+        return activeToday?.Name ?? "current in-game festival";
     }
 
     private List<FestivalOccurrence> LoadFestivalCalendar()

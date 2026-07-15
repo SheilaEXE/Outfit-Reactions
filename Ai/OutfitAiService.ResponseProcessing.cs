@@ -31,7 +31,7 @@ namespace OutfitReactions.Ai
                     cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
                     ModConfig config = getConfig?.Invoke() ?? new ModConfig();
                     cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
-                    cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
+                    cleaned = SanitizeContextInappropriateProfanity(cleaned, context, config.EnableProfanityFilter);
                     if (!string.IsNullOrWhiteSpace(cleaned) &&
                         !DialogueValidator.LooksLikeInstructionLeak(cleaned) &&
                         !DialogueValidator.LooksLikeCopiedFormatExample(cleaned))
@@ -82,7 +82,7 @@ namespace OutfitReactions.Ai
             string inlinePortraitFallback = PortraitResolver.ExtractLastAllowedPortraitKeyFromText(cleaned, profile);
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
             cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
-            cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
+            cleaned = SanitizeContextInappropriateProfanity(cleaned, context, config.EnableProfanityFilter);
             cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
             if (string.IsNullOrWhiteSpace(cleaned))
             {
@@ -139,7 +139,7 @@ namespace OutfitReactions.Ai
             string inlinePortraitFallback = PortraitResolver.ExtractLastAllowedPortraitKeyFromText(cleaned, profile);
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
             cleaned = PortraitResolver.SanitizeInlinePortraitCommands(cleaned, profile, ActiveAiSettingsResolver.IsLocal(ai), config);
-            cleaned = SanitizeContextInappropriateProfanity(cleaned, context);
+            cleaned = SanitizeContextInappropriateProfanity(cleaned, context, config.EnableProfanityFilter);
             cleaned = DialogueValidator.RestoreEllipsesAndNormalise(cleaned);
             if (string.IsNullOrWhiteSpace(cleaned))
             {

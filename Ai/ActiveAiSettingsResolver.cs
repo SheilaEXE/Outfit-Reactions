@@ -1,5 +1,6 @@
 using System;
 using OutfitReactions;
+using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions.Ai
 {
@@ -8,9 +9,8 @@ namespace OutfitReactions.Ai
     {
         public static bool IsLocal(ActiveAiSettings ai)
         {
-            string provider = ai?.Provider ?? "";
             string endpoint = ai?.Endpoint ?? "";
-            return provider.Equals("Local", StringComparison.OrdinalIgnoreCase)
+            return AiProviderRegistry.Get(ai?.Provider).IsLocal
                 || endpoint.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)
                 || endpoint.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase);
         }
@@ -41,8 +41,6 @@ namespace OutfitReactions.Ai
                 return Create(config, "xAI", config.XAiTemperaturePercent, config.XAiTimeoutSeconds, config.XAiMaxCharacters);
             if (provider.Equals("Cerebras", StringComparison.OrdinalIgnoreCase))
                 return Create(config, "Cerebras", config.CerebrasAiTemperaturePercent, config.CerebrasAiTimeoutSeconds, config.CerebrasAiMaxCharacters);
-            if (provider.Equals("Perplexity", StringComparison.OrdinalIgnoreCase))
-                return Create(config, "Perplexity", config.PerplexityAiTemperaturePercent, config.PerplexityAiTimeoutSeconds, config.PerplexityAiMaxCharacters);
             if (provider.Equals("DeepSeek", StringComparison.OrdinalIgnoreCase))
                 return Create(config, "DeepSeek", config.DeepSeekAiTemperaturePercent, config.DeepSeekAiTimeoutSeconds, config.DeepSeekAiMaxCharacters);
 

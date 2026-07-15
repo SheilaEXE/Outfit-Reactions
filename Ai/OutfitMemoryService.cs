@@ -184,14 +184,16 @@ namespace OutfitReactions.Ai
             if (OutfitReactions.ModEntry.DebugLog) monitor.Log($"[OUTFIT MEMORY] Recorded memory of '{outfitId}' for {npcName}.", LogLevel.Info);
         }
 
-        /// <summary>Build a human-readable context string to inject into the AI prompt.</summary>
+        /// <summary>Build an English internal context string to inject into the AI prompt.</summary>
         public string BuildMemoryContextHint(OutfitMemoryComparison memory, string targetLanguage)
         {
             if (memory == null)
                 return null;
 
-            bool isPt = string.Equals(targetLanguage, "pt", StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(targetLanguage, "pt-BR", StringComparison.OrdinalIgnoreCase);
+            // Prompt instructions remain English for every output language. The provider still
+            // writes the final dialogue in targetLanguage, but internal metadata must not mix
+            // localized examples into the instruction layer.
+            bool isPt = false;
 
             string firstSeenLabel = FormatFirstSeen(memory, isPt);
             int times = memory.TimesSeenBefore;

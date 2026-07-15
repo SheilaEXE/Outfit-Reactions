@@ -245,9 +245,9 @@ public sealed partial class ModEntry : Mod
 		{
 			return "";
 		}
-		string currentGameLanguageForPrompt = GetCurrentGameLanguageForPrompt();
-		bool flag = currentGameLanguageForPrompt.Contains("pt", StringComparison.OrdinalIgnoreCase);
-		return (vanillaPantsSeenCount != 1) ? (flag ? $"Este NPC já viu a(o) jogadora(o) usando {pantsName} antes ({vanillaPantsSeenCount} vezes). Devem reconhecer como algo já visto." : $"This NPC has seen the farmer wear {pantsName} before ({vanillaPantsSeenCount} times). They should recognize it as something they've seen.") : (flag ? ("Este NPC já viu a(o) jogadora(o) usando " + pantsName + " antes (1 vez). Pode reconhecer com familiaridade.") : ("This NPC has seen the farmer wear " + pantsName + " before (1 time). They may recognize it with familiarity."));
+		return vanillaPantsSeenCount == 1
+			? $"This NPC has seen the farmer wear {pantsName} once before and may recognize it with familiarity."
+			: $"This NPC has seen the farmer wear {pantsName} {vanillaPantsSeenCount} times before and should recognize it as familiar.";
 	}
 
 	private string GetCurrentVanillaPantsName()
