@@ -32,6 +32,8 @@
   "gmcm.option.npc-reaction-chance.tooltip": "Chance for each nearby NPC to notice the player's appearance.",
   "gmcm.option.npc-repeated-visual-chance.name": "Repeated visual notice chance",
   "gmcm.option.npc-repeated-visual-chance.tooltip": "Chance for an NPC to react to a visual they have already seen before (lower keeps repeats from being noticed as often). Requires NPC memory.",
+  "gmcm.option.festival-npc-reaction-chance.name": "Festival reaction chance",
+  "gmcm.option.festival-npc-reaction-chance.tooltip": "Chance for an NPC to notice your appearance when you talk to them during a festival. Festival NPCs do not notice outfits automatically from a distance.",
   "gmcm.option.romantic-partners-always-notice.name": "Romantic partners always notice changes",
   "gmcm.option.romantic-partners-always-notice.tooltip": "If enabled, every dating partner and spouse always notices a valid change while nearby and in line of sight. Krobus continues using the normal chances.",
   "gmcm.option.debug-logging.name": "Enable debug logging",
