@@ -6,35 +6,34 @@
     "If the current hat matches one of these entries, this is not a generic outfit compliment. The NPC should react to the hat specifically.",
     "Use the NPC's personality, relationship level, location, and current context to decide whether the reaction is blunt, polite, fascinated, amused, horrified, confused, or approving.",
     "Do not describe details that are not visible or not part of the detected hat.",
-    "Do not mechanically recite the saved outfit name. Use natural in-world language.",
-    "For Intensity 4 or 5 hats, avoid bland compliments unless the NPC has a clear reason to admire strange fashion."
+    "Do not mechanically recite the saved outfit name. Use natural in-world language."
   ],
   "Hats": {
     "BlobfishMask": {
       "DisplayName": "Blobfish Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de Peixe-Bolha"
-      },
+      "MatchIds": [
+        "(H)56"
+      ],
       "Category": "grotesque_mask",
       "ReactionPriority": "VeryHigh",
       "CoreDescription": "A deeply strange blobfish mask with a droopy, unpleasant, fish-like face. It is intentionally ugly, awkward, and comedic.",
-      "ReactionHint": "NPCs should not treat this as normal fashion. They should react as if the farmer were wearing something repulsive, hideous, ugly, and disgusting. Sometimes they might be startled, or they might not want to engage in conversation with the farmer."
+      "ReactionHint": "NPCs should not treat this as normal fashion. They should react as if the farmer were wearing something repulsive, hideous, ugly, and disgusting. Sometimes they might be startled, or they might not want to engage in conversation with the farmer. NPCs with genuine fishing knowledge or a strong connection to fish may recognize the creature and respond with informed fascination or fishing-related amusement, though they should still notice its grotesque appearance."
     },
     "GarbageHat": {
       "DisplayName": "Garbage Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Lixo"
-      },
+      "MatchIds": [
+        "(H)66"
+      ],
       "Category": "trash_hat",
       "ReactionPriority": "High",
       "CoreDescription": "A trash-can lid worn as a hat. It looks improvised, ridiculous, and questionably hygienic.",
-      "ReactionHint": "Most NPCs should notice the absurdity of wearing garbage as headwear. Reactions may be disgusted, amused, practical, or baffled."
+      "ReactionHint": "Most NPCs should notice the absurdity and questionable hygiene of wearing garbage as headwear. Reactions may be disgusted, repulsed, or baffled. Practical, resourceful, or environmentally minded NPCs may instead appreciate the reuse or improvised creativity while still recognizing that it is a trash-can lid."
     },
     "CopperPanHat": {
       "DisplayName": "Copper Pan Hat",
-      "LocalizedNames": {
-        "pt-BR": "Peneira de Cobre"
-      },
+      "MatchIds": [
+        "(H)71"
+      ],
       "Category": "pan_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A copper pan worn on the head like an improvised helmet.",
@@ -42,9 +41,9 @@
     },
     "SteelPanHat": {
       "DisplayName": "Steel Pan Hat",
-      "LocalizedNames": {
-        "pt-BR": "Peneira de Aço"
-      },
+      "MatchIds": [
+        "(H)SteelPanHat"
+      ],
       "Category": "pan_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A steel pan worn on the head like a strange metal hat.",
@@ -52,9 +51,9 @@
     },
     "GoldPanHat": {
       "DisplayName": "Gold Pan Hat",
-      "LocalizedNames": {
-        "pt-BR": "Peneira de Ouro"
-      },
+      "MatchIds": [
+        "(H)GoldPanHat"
+      ],
       "Category": "pan_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A gold pan worn on the head, flashy but still absurd.",
@@ -62,9 +61,9 @@
     },
     "IridiumPanHat": {
       "DisplayName": "Iridium Pan Hat",
-      "LocalizedNames": {
-        "pt-BR": "Peneira de Irídio"
-      },
+      "MatchIds": [
+        "(H)IridiumPanHat"
+      ],
       "Category": "pan_hat",
       "ReactionPriority": "High",
       "CoreDescription": "An iridium pan worn on the head, rare and absurdly overqualified as headwear.",
@@ -72,9 +71,9 @@
     },
     "LivingHat": {
       "DisplayName": "Living Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu Vivo"
-      },
+      "MatchIds": [
+        "(H)40"
+      ],
       "Category": "living_thing_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A living plant-like hat that looks like it may be growing directly on the farmer's head.",
@@ -82,9 +81,9 @@
     },
     "FrogHat": {
       "DisplayName": "Frog Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Sapo"
-      },
+      "MatchIds": [
+        "(H)78"
+      ],
       "Category": "animal_head_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A frog-themed hat that looks like a little frog friend sitting on the farmer's head.",
@@ -92,49 +91,49 @@
     },
     "SquidHat": {
       "DisplayName": "Squid Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Lula"
-      },
+      "MatchIds": [
+        "(H)SquidHat"
+      ],
       "Category": "sea_creature_hat",
       "ReactionPriority": "High",
-      "CoreDescription": "A squid worn on the head, absurd and likely unpleasant-looking to many villagers.",
-      "ReactionHint": "NPCs should react to the fact that the farmer appears to be wearing a sea creature as a hat. Fishing NPCs may be more specific."
+      "CoreDescription": "A squid worn directly on the head, looking wet, slimy, absurd, and unpleasant to many villagers.",
+      "ReactionHint": "NPCs should notice that the farmer appears to have a real sea creature sitting on their head. Reactions may include disgust, concern about slime or smell, bafflement, or morbid fascination. NPCs with genuine fishing knowledge may identify it more confidently or respond with informed amusement."
     },
     "QiMask": {
       "DisplayName": "Qi Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara Qi"
-      },
-      "Category": "mysterious_mask",
-      "ReactionPriority": "Medium",
-      "CoreDescription": "A mysterious Qi-themed mask with an uncanny, secretive quality.",
-      "ReactionHint": "NPCs may find it cryptic, unsettling, oddly important, or suspiciously theatrical."
+      "MatchIds": [
+        "(H)86"
+      ],
+      "Category": "uncanny_powerful_mask",
+      "ReactionPriority": "High",
+      "CoreDescription": "An uncanny mask depicting Mr. Qi's face, with a secretive and strangely powerful presence that can make the wearer difficult to read.",
+      "ReactionHint": "NPCs may feel watched, unsettled, suspicious, fascinated, or intimidated by the artificial face. Those familiar with Mr. Qi may recognize the imitation and react to the farmer boldly wearing his likeness; others may only sense that the face seems unusual and important."
     },
     "QuestionMarkHat": {
       "DisplayName": "???",
-      "LocalizedNames": {
-        "pt-BR": "???"
-      },
-      "Category": "cursed_or_mysterious_hat",
+      "MatchIds": [
+        "(H)92"
+      ],
+      "Category": "familiar_mysterious_face",
       "ReactionPriority": "High",
-      "CoreDescription": "A mysterious and hard-to-explain hat that looks like it should not be ordinary clothing.",
-      "ReactionHint": "NPCs may struggle to describe it, treat it as strange or ominous, or react as if the farmer is wearing a question nobody asked."
+      "CoreDescription": "A mask depicting a strange pink face with dark sunglasses. The face feels uncannily familiar, as though it belongs to someone important whom the viewer has seen before, but its identity remains impossible to place.",
+      "ReactionHint": "NPCs should react with an inexplicable sense of recognition. They may insist they have seen that face somewhere, wonder why it seems familiar, or feel that it belongs to someone unusually important. Shape the reaction around the NPC's personality: curious, respectful, suspicious, amused, uneasy, or frustrated that they cannot remember. Never identify the face as ConcernedApe, a developer, the game's creator, or otherwise break the fourth wall."
     },
     "MummyMask": {
       "DisplayName": "Mummy Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de Múmia"
-      },
-      "Category": "monster_mask",
-      "ReactionPriority": "Medium",
-      "CoreDescription": "A mummy-themed mask with a spooky costume-like look.",
-      "ReactionHint": "NPCs may connect it to monsters, the mines, Spirit's Eve, or looking like the farmer crawled out of a crypt."
+      "MatchIds": [
+        "(H)MummyMask"
+      ],
+      "Category": "frightening_monster_mask",
+      "ReactionPriority": "High",
+      "CoreDescription": "A large, frightening mummy mask that makes the farmer resemble something ancient and undead emerging from a sealed crypt.",
+      "ReactionHint": "NPCs may be startled, frightened, intimidated, or deeply uncomfortable looking at it. Nervous NPCs may want the farmer to take it off, while braver or monster-experienced NPCs may hide their unease, challenge the farmer, or admire how convincing it looks. Its frightening effect applies in every season and situation."
     },
     "TotemMask": {
       "DisplayName": "Totem Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de Totem"
-      },
+      "MatchIds": [
+        "(H)44"
+      ],
       "Category": "cursed_or_mysterious_hat",
       "ReactionPriority": "High",
       "CoreDescription": "A strange totem-like mask with a ritual or magical feeling.",
@@ -142,29 +141,29 @@
     },
     "GoblinMask": {
       "DisplayName": "Goblin Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de duende"
-      },
+      "MatchIds": [
+        "(H)9"
+      ],
       "Category": "creepy_mask",
       "ReactionPriority": "High",
-      "CoreDescription": "A creepy goblin mask that can look more disturbing than charming.",
-      "ReactionHint": "NPCs may find it creepy, ugly, mischievous, or startling. Blunt NPCs can be openly critical."
+      "CoreDescription": "A frightening goblin mask with an ugly, inhuman face designed to startle and scare anyone nearby.",
+      "ReactionHint": "NPCs may recoil, become nervous, feel intimidated, or admit that the mask genuinely frightened them. Braver, mischievous, or monster-experienced NPCs may laugh it off, appreciate the scare, or criticize how ugly it looks."
     },
     "SkeletonMask": {
       "DisplayName": "Skeleton Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de esqueleto"
-      },
-      "Category": "monster_mask",
-      "ReactionPriority": "Medium",
-      "CoreDescription": "A skull or skeleton mask with a spooky costume look.",
-      "ReactionHint": "NPCs may react as if the farmer looks ready for Spirit's Eve, the mines, or a ghost story."
+      "MatchIds": [
+        "(H)8"
+      ],
+      "Category": "frightening_skull_mask",
+      "ReactionPriority": "High",
+      "CoreDescription": "An intimidating skull mask with an unnatural, threatening stare and eerie red eyes that make the farmer look genuinely frightening.",
+      "ReactionHint": "NPCs may be startled, frightened, intimidated, or reluctant to keep looking at the farmer. Timid NPCs may ask them to remove it or keep their distance, while brave or combat-experienced NPCs may conceal their fear, challenge the look, or respect how intimidating it is. Its frightening effect applies in every season and situation."
     },
     "PumpkinMask": {
       "DisplayName": "Pumpkin Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de Abóbora"
-      },
+      "MatchIds": [
+        "(H)48"
+      ],
       "Category": "spooky_costume_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A pumpkin mask with a festive, spooky, costume-like appearance.",
@@ -172,9 +171,9 @@
     },
     "DinosaurHat": {
       "DisplayName": "Dinosaur Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Dinossauro"
-      },
+      "MatchIds": [
+        "(H)43"
+      ],
       "Category": "costume_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A dinosaur-themed hat that makes the farmer look playful, odd, or prehistoric.",
@@ -182,19 +181,19 @@
     },
     "ChickenMask": {
       "DisplayName": "Chicken Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de galinha"
-      },
+      "MatchIds": [
+        "(H)10"
+      ],
       "Category": "animal_head_hat",
       "ReactionPriority": "Medium",
-      "CoreDescription": "A chicken-themed headpiece that looks farm-themed, silly, and hard to take seriously.",
-      "ReactionHint": "NPCs may joke about chickens, farm chores, eggs, or the farmer looking like they belong in the coop."
+      "CoreDescription": "A chicken sitting on top of the farmer's head. It can look cute and perfectly suited to someone who cares for a farm, but also strange, silly, and difficult to ignore.",
+      "ReactionHint": "NPCs may find the chicken adorable, wonder why it is calmly perched there, tease the farmer about bringing farm life everywhere, or think the arrangement is bizarre. Farmers, animal lovers, and children may respond more warmly, while practical NPCs may worry about feathers, pecking, or mess."
     },
     "PropellerHat": {
       "DisplayName": "Propeller Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Hélice"
-      },
+      "MatchIds": [
+        "(H)68"
+      ],
       "Category": "childish_silly_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A childish propeller hat that looks playful, goofy, and not very serious.",
@@ -202,9 +201,9 @@
     },
     "JesterHat": {
       "DisplayName": "Jester Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Bobo da Corte"
-      },
+      "MatchIds": [
+        "(H)JesterHat"
+      ],
       "Category": "theatrical_silly_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A jester hat that makes the farmer look theatrical, goofy, or deliberately ridiculous.",
@@ -212,9 +211,9 @@
     },
     "RadioactiveGoggles": {
       "DisplayName": "Radioactive Goggles",
-      "LocalizedNames": {
-        "pt-BR": "Óculos Radioativos"
-      },
+      "MatchIds": [
+        "(H)84"
+      ],
       "Category": "hazard_goggles",
       "ReactionPriority": "Medium",
       "CoreDescription": "Radioactive-looking goggles that suggest danger, experiments, or questionable protection.",
@@ -222,9 +221,9 @@
     },
     "SpaceHelmet": {
       "DisplayName": "Space Helmet",
-      "LocalizedNames": {
-        "pt-BR": "Capacete Espacial"
-      },
+      "MatchIds": [
+        "(H)SpaceHelmet"
+      ],
       "Category": "costume_helmet",
       "ReactionPriority": "Medium",
       "CoreDescription": "A space helmet that looks dramatic and out of place in rural Pelican Town.",
@@ -232,9 +231,9 @@
     },
     "GovernorHat": {
       "DisplayName": "Governor's Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu do Governador"
-      },
+      "MatchIds": [
+        "(H)GovernorsHat"
+      ],
       "Category": "authority_impersonation_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A hat associated with the Governor, making the farmer look like they are borrowing official authority.",
@@ -242,9 +241,9 @@
     },
     "JojaCap": {
       "DisplayName": "Joja Cap",
-      "LocalizedNames": {
-        "pt-BR": "Boné Joja"
-      },
+      "MatchIds": [
+        "(H)JojaCap"
+      ],
       "Category": "brand_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A Joja-branded cap that can carry social or political baggage in Pelican Town.",
@@ -252,9 +251,9 @@
     },
     "BridalVeil": {
       "DisplayName": "Bridal Veil",
-      "LocalizedNames": {
-        "pt-BR": "Véu de Noiva"
-      },
+      "MatchIds": [
+        "(H)69"
+      ],
       "Category": "context_sensitive_ceremonial_hat",
       "ReactionPriority": "ContextualHigh",
       "CoreDescription": "A bridal veil that strongly suggests marriage, ceremony, or romantic drama even when worn casually.",
@@ -262,9 +261,9 @@
     },
     "WearableDwarfHelm": {
       "DisplayName": "Wearable Dwarf Helm",
-      "LocalizedNames": {
-        "pt-BR": "Elmo de Anão Vestível"
-      },
+      "MatchIds": [
+        "(H)46"
+      ],
       "Category": "fantasy_helmet",
       "ReactionPriority": "Medium",
       "CoreDescription": "A dwarven-looking helmet that makes the farmer look ready for underground ruins or an expedition into the mines.",
@@ -272,19 +271,19 @@
     },
     "KnightHelmet": {
       "DisplayName": "Knight Helmet",
-      "LocalizedNames": {
-        "pt-BR": "Elmo de Cavaleiro"
-      },
+      "MatchIds": [
+        "(H)50"
+      ],
       "Category": "knight_helmet",
       "ReactionPriority": "Medium",
       "CoreDescription": "A medieval knight-style helmet that makes the farmer look prepared for battle instead of farm work.",
-      "ReactionHint": "NPCs may react as if the farmer looks like a knight, guard, or someone preparing for a dramatic heroic quest."
+      "ReactionHint": "NPCs may react as if the farmer looks like a knight, guard, or someone preparing for battle. The heavy armored appearance may inspire respect, caution, intimidation, teasing, or curiosity depending on the NPC's personality."
     },
     "SquireHelmet": {
       "DisplayName": "Squire Helmet",
-      "LocalizedNames": {
-        "pt-BR": "Elmo de Escudeiro"
-      },
+      "MatchIds": [
+        "(H)51"
+      ],
       "Category": "squire_helmet",
       "ReactionPriority": "Medium",
       "CoreDescription": "A simpler medieval helmet that suggests an apprentice knight or a beginner adventurer.",
@@ -292,19 +291,19 @@
     },
     "WarriorHelmet": {
       "DisplayName": "Warrior Helmet",
-      "LocalizedNames": {
-        "pt-BR": "Capacete de Guerreiro"
-      },
+      "MatchIds": [
+        "(H)93"
+      ],
       "Category": "warrior_helmet",
-      "ReactionPriority": "Medium",
-      "CoreDescription": "A battle-ready helmet that makes the farmer look prepared for monsters, combat, or a dangerous trip.",
-      "ReactionHint": "NPCs may react as if the farmer looks ready for combat, monsters, or an unusually dangerous errand."
+      "ReactionPriority": "High",
+      "CoreDescription": "A fierce, battle-ready helmet that makes the farmer look imposing and prepared to face monsters or serious combat.",
+      "ReactionHint": "NPCs may feel impressed, cautious, intimidated, or concerned that the farmer expects danger. Combat-experienced NPCs may respect or assess the equipment, while others may wonder why someone dressed for battle is approaching them."
     },
     "GoldenHelmet": {
       "DisplayName": "Golden Helmet",
-      "LocalizedNames": {
-        "pt-BR": "Capacete Dourado"
-      },
+      "MatchIds": [
+        "(H)75"
+      ],
       "Category": "golden_helmet",
       "ReactionPriority": "Medium",
       "CoreDescription": "A shiny golden helmet that looks flashy, excessive, and much more dramatic than ordinary farm wear.",
@@ -312,9 +311,9 @@
     },
     "ArcaneHat": {
       "DisplayName": "Arcane Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu Arcano"
-      },
+      "MatchIds": [
+        "(H)60"
+      ],
       "Category": "magic_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A magical-looking hat that makes the farmer seem scholarly, mysterious, or suspiciously connected to arcane things.",
@@ -322,9 +321,9 @@
     },
     "WitchHat": {
       "DisplayName": "Witch Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Bruxa"
-      },
+      "MatchIds": [
+        "(H)70"
+      ],
       "Category": "witch_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A pointed witch hat that feels magical, spooky, theatrical, and strongly tied to fantasy or Spirit’s Eve vibes.",
@@ -332,9 +331,9 @@
     },
     "PirateHat": {
       "DisplayName": "Pirate Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Pirata"
-      },
+      "MatchIds": [
+        "(H)62"
+      ],
       "Category": "pirate_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A pirate-style hat that makes the farmer look theatrical, sea-themed, and ready for an overly dramatic voyage.",
@@ -342,9 +341,9 @@
     },
     "DeluxePirateHat": {
       "DisplayName": "Deluxe Pirate Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Pirata de Luxo"
-      },
+      "MatchIds": [
+        "(H)76"
+      ],
       "Category": "deluxe_pirate_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A fancier, more dramatic pirate hat that makes the farmer look especially theatrical and flashy.",
@@ -352,29 +351,29 @@
     },
     "TricornHat": {
       "DisplayName": "Tricorn Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu Tricórnio"
-      },
+      "MatchIds": [
+        "(H)TricornHat"
+      ],
       "Category": "tricorn_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "An old-fashioned tricorn hat that feels nautical, historical, and oddly formal for everyday village life.",
       "ReactionHint": "NPCs may see it as old-fashioned, theatrical, nautical, or strangely formal."
     },
     "SwordsmanHat": {
-      "DisplayName": "Swordsman Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Espadachim"
-      },
+      "DisplayName": "Swashbuckler Hat",
+      "MatchIds": [
+        "(H)85"
+      ],
       "Category": "swordsman_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A dramatic duelist-style hat that makes the farmer look elegant, theatrical, and a little challenge-ready.",
       "ReactionHint": "NPCs may react as if the farmer looks like a duelist, performer, or someone about to challenge someone dramatically."
     },
     "GnomeHat": {
-      "DisplayName": "Gnome Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Gnomo"
-      },
+      "DisplayName": "Gnome's Cap",
+      "MatchIds": [
+        "(H)23"
+      ],
       "Category": "gnome_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A whimsical gnome-like hat that makes the farmer look like they belong in a flowerbed or a fairy-tale garden.",
@@ -382,9 +381,9 @@
     },
     "LeprechaunHat": {
       "DisplayName": "Leprechaun Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Duende"
-      },
+      "MatchIds": [
+        "(H)LeprechuanHat"
+      ],
       "Category": "leprechaun_or_goblin_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A mischievous little fantasy hat that makes the farmer look like a trickster from a fairy tale.",
@@ -392,9 +391,9 @@
     },
     "JunimoHat": {
       "DisplayName": "Junimo Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Junimo"
-      },
+      "MatchIds": [
+        "(H)JunimoHat"
+      ],
       "Category": "junimo_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A Junimo-themed hat that feels magical, foresty, cute, and just a little uncanny to anyone unfamiliar with Junimos.",
@@ -402,9 +401,9 @@
     },
     "TigerHat": {
       "DisplayName": "Tiger Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Tigre"
-      },
+      "MatchIds": [
+        "(H)91"
+      ],
       "Category": "animal_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A tiger-themed hat that makes the farmer look playful, wild, and very visibly costumed.",
@@ -412,29 +411,29 @@
     },
     "PandaHat": {
       "DisplayName": "Panda Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Panda"
-      },
+      "MatchIds": [
+        "(H)36"
+      ],
       "Category": "animal_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A panda-themed hat that looks cute, soft, and noticeably costume-like.",
       "ReactionHint": "NPCs may find it cute, soft-looking, childish, or oddly charming depending on personality."
     },
     "BlueBirdMask": {
-      "DisplayName": "Blue Bird Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara de Pássaro Azul"
-      },
+      "DisplayName": "Bluebird Mask",
+      "MatchIds": [
+        "(H)80"
+      ],
       "Category": "animal_mask",
       "ReactionPriority": "Medium",
-      "CoreDescription": "A blue bird mask that makes the farmer look theatrical, costumed, and distinctly non-human.",
-      "ReactionHint": "NPCs may react to the farmer looking birdlike, masked, theatrical, or oddly cheerful."
+      "CoreDescription": "A cheerful bluebird mask modeled after the distinctive face of the Island Trader. It looks playful, cute, theatrical, and distinctly non-human.",
+      "ReactionHint": "NPCs may find the birdlike face adorable, cheerful, strange, or amusingly theatrical. Anyone familiar with Ginger Island or its trader may recognize the resemblance, while others may simply wonder why the farmer is dressed like such an unusually colorful bird."
     },
     "GoldenMask": {
       "DisplayName": "Golden Mask",
-      "LocalizedNames": {
-        "pt-BR": "Máscara Dourada"
-      },
+      "MatchIds": [
+        "(H)67"
+      ],
       "Category": "golden_mask",
       "ReactionPriority": "High",
       "CoreDescription": "A golden mask that looks ancient, expensive, mysterious, and slightly eerie.",
@@ -442,9 +441,9 @@
     },
     "RedPartyHat": {
       "DisplayName": "Red Party Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Festa Vermelho"
-      },
+      "MatchIds": [
+        "(H)57"
+      ],
       "Category": "context_sensitive_party_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A bright red party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
@@ -452,9 +451,9 @@
     },
     "BluePartyHat": {
       "DisplayName": "Blue Party Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Festa Azul"
-      },
+      "MatchIds": [
+        "(H)58"
+      ],
       "Category": "context_sensitive_party_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A bright blue party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
@@ -462,9 +461,9 @@
     },
     "GreenPartyHat": {
       "DisplayName": "Green Party Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Festa Verde"
-      },
+      "MatchIds": [
+        "(H)59"
+      ],
       "Category": "context_sensitive_party_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A bright green party hat that looks festive and playful, especially noticeable when there is no celebration happening.",
@@ -472,9 +471,9 @@
     },
     "ChefHat": {
       "DisplayName": "Chef Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Chefe de Cozinha"
-      },
+      "MatchIds": [
+        "(H)61"
+      ],
       "Category": "context_sensitive_profession_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A chef-style hat that suggests cooking, kitchen work, or showing up dressed for a restaurant instead of ordinary village life.",
@@ -482,9 +481,9 @@
     },
     "MrQiHat": {
       "DisplayName": "Mr. Qi Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu do Sr. Qi"
-      },
+      "MatchIds": [
+        "(H)82"
+      ],
       "Category": "context_sensitive_authority_hat",
       "ReactionPriority": "ContextualHigh",
       "CoreDescription": "A hat strongly associated with Mr. Qi, making the farmer look mysterious, unsettling, or like they are imitating someone unusual and powerful.",
@@ -492,9 +491,9 @@
     },
     "SantaHat": {
       "DisplayName": "Santa Hat",
-      "LocalizedNames": {
-        "pt-BR": "Gorro de Papai Noel"
-      },
+      "MatchIds": [
+        "(H)25"
+      ],
       "Category": "context_sensitive_seasonal_hat",
       "ReactionPriority": "Contextual",
       "CoreDescription": "A Santa hat that feels cheerful and seasonal in winter, but noticeably out of place at other times of year.",
@@ -502,9 +501,9 @@
     },
     "InfinityCrown": {
       "DisplayName": "Infinity Crown",
-      "LocalizedNames": {
-        "pt-BR": "Coroa do Infinito"
-      },
+      "MatchIds": [
+        "(H)InfinityCrown"
+      ],
       "Category": "context_sensitive_mystic_crown",
       "ReactionPriority": "ContextualHigh",
       "CoreDescription": "A dramatic crown that suggests power, rarity, or mystical status far beyond normal farm life.",
@@ -512,9 +511,9 @@
     },
     "MagicTurban": {
       "DisplayName": "Magic Turban",
-      "LocalizedNames": {
-        "pt-BR": "Turbante Mágico"
-      },
+      "MatchIds": [
+        "(H)74"
+      ],
       "Category": "context_sensitive_magic_hat",
       "ReactionPriority": "ContextualHigh",
       "CoreDescription": "A magical-looking turban that feels mystical, ornate, and theatrical compared to everyday village clothes.",
@@ -522,9 +521,9 @@
     },
     "MagicCowboyHat": {
       "DisplayName": "Magic Cowboy Hat",
-      "LocalizedNames": {
-        "pt-BR": "Chapéu de Vaqueiro Mágico"
-      },
+      "MatchIds": [
+        "(H)73"
+      ],
       "Category": "context_sensitive_magic_hat",
       "ReactionPriority": "ContextualHigh",
       "CoreDescription": "A cowboy hat with a magical or unusually dramatic flair, making the farmer look theatrical and a little larger than life.",

@@ -155,6 +155,12 @@ public sealed partial class ModEntry : Mod
 		SpecialItemNoticeInfo notice;
 		bool flag10 = TryResolveSpecialItemNoticeForNpc(npc, effectiveFashionSenseChangeInfoForNpc, requireNpcMemoryForRemoval: true, out notice);
 		string specialItemReactionContext = ((!flag10) ? "" : (notice?.ReactionContext ?? ""));
+		if (flag10 && !string.IsNullOrWhiteSpace(specialItemReactionContext))
+		{
+			// A content-pack/special-item definition has higher priority than the built-in
+			// vanilla-hat catalog, so never send two competing reaction descriptions.
+			specialHatReactionContext = "";
+		}
 		bool flag11 = flag10 && (notice?.WasRemoved ?? false);
 		string text3 = ((!flag10) ? "" : (notice?.MemoryHint ?? ""));
 		if (flag10 && DebugLog)
@@ -352,6 +358,18 @@ public sealed partial class ModEntry : Mod
 		{
 			return "Hat";
 		}
+		if (changeInfo.VanillaShirtChanged || changeInfo.ChangedShirt)
+		{
+			return "Shirt";
+		}
+		if (changeInfo.VanillaPantsChanged || changeInfo.ChangedPants)
+		{
+			return "Pants";
+		}
+		if (changeInfo.VanillaShoesChanged || changeInfo.ChangedShoes)
+		{
+			return "Shoes";
+		}
 		if (changeInfo.ChangedHat && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(changeInfo.NewHatId) && (flag || ItemNameRevealsShape(changeInfo.NewHatId)))
 		{
 			return "Hat";
@@ -419,6 +437,18 @@ public sealed partial class ModEntry : Mod
 		if (string.Equals(changeType, "Accessory", StringComparison.OrdinalIgnoreCase))
 		{
 			return StringUtils.FirstNonEmpty(changeInfo.NewAccessoryId, "unknown-accessory-change") ?? "";
+		}
+		if (string.Equals(changeType, "Shirt", StringComparison.OrdinalIgnoreCase))
+		{
+			return StringUtils.FirstNonEmpty(changeInfo.NewVanillaShirtName, changeInfo.NewShirtId) ?? "";
+		}
+		if (string.Equals(changeType, "Pants", StringComparison.OrdinalIgnoreCase))
+		{
+			return StringUtils.FirstNonEmpty(changeInfo.NewVanillaPantsName, changeInfo.NewPantsId) ?? "";
+		}
+		if (string.Equals(changeType, "Shoes", StringComparison.OrdinalIgnoreCase))
+		{
+			return StringUtils.FirstNonEmpty(changeInfo.NewVanillaShoesName, changeInfo.NewShoesId) ?? "";
 		}
 		return "";
 	}

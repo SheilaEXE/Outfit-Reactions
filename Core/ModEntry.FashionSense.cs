@@ -43,18 +43,28 @@ public sealed partial class ModEntry : Mod
 		List<string> candidates = ((!string.IsNullOrWhiteSpace(visibleVanillaHatId)) ? GetCurrentVisibleVanillaHatSpecialItemCandidates(currentVanillaHatName) : new List<string>());
 		string currentVanillaPantsName = GetCurrentVanillaPantsName();
 		List<string> candidates2 = ((!string.IsNullOrWhiteSpace(currentVanillaPantsName)) ? GetCurrentVanillaPantsSpecialItemCandidates(currentVanillaPantsName) : new List<string>());
+		string currentVanillaShirtName = GetCurrentVanillaShirtName();
+		List<string> shirtCandidates = ((!string.IsNullOrWhiteSpace(currentVanillaShirtName)) ? GetCurrentVanillaShirtSpecialItemCandidates(currentVanillaShirtName) : new List<string>());
+		string currentVanillaShoesName = GetCurrentVanillaShoesName();
+		List<string> shoesCandidates = ((!string.IsNullOrWhiteSpace(currentVanillaShoesName)) ? GetCurrentVanillaShoesSpecialItemCandidates(currentVanillaShoesName) : new List<string>());
 		if (!vanillaClothingTrackingInitialized)
 		{
 			lastKnownVanillaHatId = visibleVanillaHatId;
 			lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(candidates);
 			lastKnownVanillaPantsName = currentVanillaPantsName ?? "";
 			lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(candidates2);
+			lastKnownVanillaShirtName = currentVanillaShirtName ?? "";
+			lastKnownVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(shirtCandidates);
+			lastKnownVanillaShoesName = currentVanillaShoesName ?? "";
+			lastKnownVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(shoesCandidates);
 			vanillaClothingTrackingInitialized = true;
 			return;
 		}
 		bool flag = !string.Equals(visibleVanillaHatId, lastKnownVanillaHatId ?? "", StringComparison.OrdinalIgnoreCase);
 		bool flag2 = !string.Equals(currentVanillaPantsName ?? "", lastKnownVanillaPantsName ?? "", StringComparison.OrdinalIgnoreCase);
-		if (!flag && !flag2)
+		bool shirtChanged = !string.Equals(currentVanillaShirtName ?? "", lastKnownVanillaShirtName ?? "", StringComparison.OrdinalIgnoreCase);
+		bool shoesChanged = !string.Equals(currentVanillaShoesName ?? "", lastKnownVanillaShoesName ?? "", StringComparison.OrdinalIgnoreCase);
+		if (!flag && !flag2 && !shirtChanged && !shoesChanged)
 		{
 			return;
 		}
@@ -63,20 +73,32 @@ public sealed partial class ModEntry : Mod
 		fashionSenseSnapshot.VanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaHatSpecialItemCandidates);
 		fashionSenseSnapshot.VanillaPants = lastKnownVanillaPantsName ?? "";
 		fashionSenseSnapshot.VanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaPantsSpecialItemCandidates);
+		fashionSenseSnapshot.VanillaShirt = lastKnownVanillaShirtName ?? "";
+		fashionSenseSnapshot.VanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaShirtSpecialItemCandidates);
+		fashionSenseSnapshot.VanillaShoes = lastKnownVanillaShoesName ?? "";
+		fashionSenseSnapshot.VanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(lastKnownVanillaShoesSpecialItemCandidates);
 		FashionSenseSnapshot fashionSenseSnapshot2 = CaptureFashionSenseSnapshot();
 		fashionSenseSnapshot2.VanillaHat = visibleVanillaHatId;
 		fashionSenseSnapshot2.VanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(candidates);
 		fashionSenseSnapshot2.VanillaPants = currentVanillaPantsName ?? "";
 		fashionSenseSnapshot2.VanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(candidates2);
+		fashionSenseSnapshot2.VanillaShirt = currentVanillaShirtName ?? "";
+		fashionSenseSnapshot2.VanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(shirtCandidates);
+		fashionSenseSnapshot2.VanillaShoes = currentVanillaShoesName ?? "";
+		fashionSenseSnapshot2.VanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(shoesCandidates);
 		lastKnownVanillaHatId = visibleVanillaHatId;
 		lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(candidates);
 		lastKnownVanillaPantsName = currentVanillaPantsName ?? "";
 		lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(candidates2);
+		lastKnownVanillaShirtName = currentVanillaShirtName ?? "";
+		lastKnownVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(shirtCandidates);
+		lastKnownVanillaShoesName = currentVanillaShoesName ?? "";
+		lastKnownVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(shoesCandidates);
 		FashionSenseChangeInfo changeInfo = CompareFashionSenseSnapshots(fashionSenseSnapshot, fashionSenseSnapshot2);
 		int num = changeInfo?.CountChanges() ?? 0;
 		if (DebugLog)
 		{
-			((Mod)this).Monitor.Log($"[VANILLA POLL] hatChanged={flag} (now='{visibleVanillaHatId}' was='{fashionSenseSnapshot.VanillaHat}') | pantsChanged={flag2} (now='{currentVanillaPantsName}' was='{fashionSenseSnapshot.VanillaPants}') | changeCount={num} vanillaPantsChanged={changeInfo?.VanillaPantsChanged} vanillaPantsRemoved={changeInfo?.VanillaPantsRemoved} fsPantsAfter='{fashionSenseSnapshot2.Pants}' pantsDebug={GetCurrentVanillaPantsDebugString()}", (LogLevel)2);
+			((Mod)this).Monitor.Log($"[VANILLA POLL] hatChanged={flag} pantsChanged={flag2} shirtChanged={shirtChanged} shoesChanged={shoesChanged} | changeCount={num} pantsDebug={GetCurrentVanillaPantsDebugString()}", (LogLevel)2);
 		}
 		if (changeInfo == null || num <= 0)
 		{
@@ -120,6 +142,127 @@ public sealed partial class ModEntry : Mod
 			{
 				((Mod)this).Monitor.Log(flag ? "[FS] Accessory changed (no vision): item name reveals its shape, so it will be noticed." : "[FS] Accessory changed (no vision): item name is too generic to describe, so it is skipped.", (LogLevel)2);
 			}
+		}
+	}
+
+	private void RearmCurrentAppearanceNoticeAfterLifecycleReset(string reason)
+	{
+		if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
+		{
+			return;
+		}
+
+		FashionSenseSnapshot snapshot = CaptureFashionSenseSnapshot();
+		if (snapshot == null)
+		{
+			return;
+		}
+
+		// Treat the currently equipped vanilla pieces as the new tracking baseline so the
+		// normal polling loop doesn't report a second, artificial change after this restore.
+		lastKnownVanillaHatId = snapshot.VanillaHat ?? "";
+		lastKnownVanillaHatSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaHatSpecialItemCandidates);
+		lastKnownVanillaPantsName = snapshot.VanillaPants ?? "";
+		lastKnownVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaPantsSpecialItemCandidates);
+		lastKnownVanillaShirtName = snapshot.VanillaShirt ?? "";
+		lastKnownVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaShirtSpecialItemCandidates);
+		lastKnownVanillaShoesName = snapshot.VanillaShoes ?? "";
+		lastKnownVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaShoesSpecialItemCandidates);
+		vanillaClothingTrackingInitialized = true;
+
+		bool hasSavedOutfit = !string.IsNullOrWhiteSpace(snapshot.OutfitId);
+		string currentAccessories = BuildCurrentAccessoryMemoryValue(snapshot);
+		FashionSenseChangeInfo restoredNotice = new FashionSenseChangeInfo
+		{
+			ChangedOutfit = hasSavedOutfit,
+			ChangedHair = !hasSavedOutfit && !string.IsNullOrWhiteSpace(snapshot.Hair),
+			ChangedAccessory = !hasSavedOutfit && !string.IsNullOrWhiteSpace(currentAccessories),
+			ChangedHat = !hasSavedOutfit
+				&& !string.IsNullOrWhiteSpace(snapshot.Hat)
+				&& !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(snapshot.Hat),
+			NewOutfitId = snapshot.OutfitId,
+			NewHairId = snapshot.Hair,
+			NewAccessoryId = currentAccessories,
+			NewHatId = snapshot.Hat,
+			NewShirtId = snapshot.Shirt,
+			NewPantsId = snapshot.Pants,
+			NewSleevesId = snapshot.Sleeves,
+			NewShoesId = snapshot.Shoes
+		};
+
+		// Ordinary vanilla clothes remain only a baseline. A currently equipped special item
+		// (such as the purple shorts) is restored as an active notice across days/save loads.
+		FashionSenseChangeInfo specialItemProbe = new FashionSenseChangeInfo
+		{
+			VanillaHatChanged = !string.IsNullOrWhiteSpace(snapshot.VanillaHat),
+			NewVanillaHatId = snapshot.VanillaHat,
+			VanillaPantsChanged = !string.IsNullOrWhiteSpace(snapshot.VanillaPants),
+			NewVanillaPantsName = snapshot.VanillaPants,
+			NewVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaPantsSpecialItemCandidates),
+			VanillaShirtChanged = !string.IsNullOrWhiteSpace(snapshot.VanillaShirt),
+			NewVanillaShirtName = snapshot.VanillaShirt,
+			NewVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaShirtSpecialItemCandidates),
+			VanillaShoesChanged = !string.IsNullOrWhiteSpace(snapshot.VanillaShoes),
+			NewVanillaShoesName = snapshot.VanillaShoes,
+			NewVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(snapshot.VanillaShoesSpecialItemCandidates),
+			ChangedShirt = !string.IsNullOrWhiteSpace(snapshot.Shirt),
+			NewShirtId = snapshot.Shirt,
+			ChangedPants = !string.IsNullOrWhiteSpace(snapshot.Pants),
+			NewPantsId = snapshot.Pants,
+			ChangedShoes = !string.IsNullOrWhiteSpace(snapshot.Shoes),
+			NewShoesId = snapshot.Shoes,
+			ChangedHat = !string.IsNullOrWhiteSpace(snapshot.Hat),
+			NewHatId = snapshot.Hat
+		};
+
+		bool hasEquippedSpecialItem = TryResolveSpecialItemNoticeForNpc(
+			null,
+			specialItemProbe,
+			requireNpcMemoryForRemoval: false,
+			out var specialItemNotice)
+			&& specialItemNotice != null
+			&& !specialItemNotice.WasRemoved;
+
+		if (hasEquippedSpecialItem)
+		{
+			if (string.Equals(specialItemNotice.ItemType, "Hat", StringComparison.OrdinalIgnoreCase))
+			{
+				restoredNotice.VanillaHatChanged = specialItemProbe.VanillaHatChanged;
+				restoredNotice.NewVanillaHatId = specialItemProbe.NewVanillaHatId;
+			}
+			else if (string.Equals(specialItemNotice.ItemType, "Shirt", StringComparison.OrdinalIgnoreCase))
+			{
+				restoredNotice.VanillaShirtChanged = specialItemProbe.VanillaShirtChanged;
+				restoredNotice.NewVanillaShirtName = specialItemProbe.NewVanillaShirtName;
+				restoredNotice.NewVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(specialItemProbe.NewVanillaShirtSpecialItemCandidates);
+			}
+			else if (string.Equals(specialItemNotice.ItemType, "Shoes", StringComparison.OrdinalIgnoreCase)
+				|| string.Equals(specialItemNotice.ItemType, "Boots", StringComparison.OrdinalIgnoreCase))
+			{
+				restoredNotice.VanillaShoesChanged = specialItemProbe.VanillaShoesChanged;
+				restoredNotice.NewVanillaShoesName = specialItemProbe.NewVanillaShoesName;
+				restoredNotice.NewVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(specialItemProbe.NewVanillaShoesSpecialItemCandidates);
+			}
+			else
+			{
+				restoredNotice.VanillaPantsChanged = specialItemProbe.VanillaPantsChanged;
+				restoredNotice.NewVanillaPantsName = specialItemProbe.NewVanillaPantsName;
+				restoredNotice.NewVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(specialItemProbe.NewVanillaPantsSpecialItemCandidates);
+			}
+		}
+
+		if (string.IsNullOrWhiteSpace(GetFashionSenseDialogueKey(restoredNotice)))
+		{
+			return;
+		}
+
+		ApplyDetectedClothesChange(restoredNotice);
+		if (DebugLog)
+		{
+			((Mod)this).Monitor.Log(
+				$"[CLOTHES NOTICE] Restored the currently equipped appearance after {reason} "
+				+ $"(savedOutfit={hasSavedOutfit}, specialItem={specialItemNotice?.EntryId ?? "<none>"}).",
+				(LogLevel)2);
 		}
 	}
 
@@ -197,7 +340,10 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (!changeInfo.VanillaPantsChanged && !changeInfo.VanillaHatChanged)
+		if (!changeInfo.VanillaPantsChanged
+			&& !changeInfo.VanillaHatChanged
+			&& !changeInfo.VanillaShirtChanged
+			&& !changeInfo.VanillaShoesChanged)
 		{
 			return false;
 		}
@@ -629,6 +775,14 @@ public sealed partial class ModEntry : Mod
 		fashionSenseSnapshot.VanillaHatSpecialItemCandidates = ((!flag && !string.IsNullOrWhiteSpace(GetCurrentVanillaHatName())) ? GetCurrentVisibleVanillaHatSpecialItemCandidates(GetCurrentVanillaHatName()) : new List<string>());
 		fashionSenseSnapshot.VanillaPants = text;
 		fashionSenseSnapshot.VanillaPantsSpecialItemCandidates = vanillaPantsSpecialItemCandidates;
+		fashionSenseSnapshot.VanillaShirt = GetCurrentVanillaShirtName();
+		fashionSenseSnapshot.VanillaShirtSpecialItemCandidates = string.IsNullOrWhiteSpace(fashionSenseSnapshot.VanillaShirt)
+			? new List<string>()
+			: GetCurrentVanillaShirtSpecialItemCandidates(fashionSenseSnapshot.VanillaShirt);
+		fashionSenseSnapshot.VanillaShoes = GetCurrentVanillaShoesName();
+		fashionSenseSnapshot.VanillaShoesSpecialItemCandidates = string.IsNullOrWhiteSpace(fashionSenseSnapshot.VanillaShoes)
+			? new List<string>()
+			: GetCurrentVanillaShoesSpecialItemCandidates(fashionSenseSnapshot.VanillaShoes);
 		fashionSenseSnapshot.Shirt = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomShirt.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Shirt));
 		fashionSenseSnapshot.Pants = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomPants.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Pants));
 		fashionSenseSnapshot.Sleeves = StringUtils.FirstNonEmpty(GetFsModData("FashionSense.CustomSleeves.Id"), GetFsAppearanceId(IFashionSenseApi.Type.Sleeves));
@@ -662,6 +816,10 @@ public sealed partial class ModEntry : Mod
 		bool flag7 = IsFashionSensePantsValueCoveringVanilla(after.Pants);
 		bool vanillaPantsChanged = !flag7 && !string.Equals(before.VanillaPants ?? "", after.VanillaPants ?? "", StringComparison.OrdinalIgnoreCase);
 		bool vanillaPantsRemoved = !flag7 && !string.IsNullOrWhiteSpace(before.VanillaPants) && string.IsNullOrWhiteSpace(after.VanillaPants);
+		bool vanillaShirtChanged = !string.Equals(before.VanillaShirt ?? "", after.VanillaShirt ?? "", StringComparison.OrdinalIgnoreCase);
+		bool vanillaShirtRemoved = !string.IsNullOrWhiteSpace(before.VanillaShirt) && string.IsNullOrWhiteSpace(after.VanillaShirt);
+		bool vanillaShoesChanged = !string.Equals(before.VanillaShoes ?? "", after.VanillaShoes ?? "", StringComparison.OrdinalIgnoreCase);
+		bool vanillaShoesRemoved = !string.IsNullOrWhiteSpace(before.VanillaShoes) && string.IsNullOrWhiteSpace(after.VanillaShoes);
 		bool flag8 = before.Accessory != after.Accessory || before.AccessorySecondary != after.AccessorySecondary || before.AccessoryTertiary != after.AccessoryTertiary;
 		bool flag9 = before.AccessoryColor != after.AccessoryColor || before.AccessorySecondaryColor != after.AccessorySecondaryColor || before.AccessoryTertiaryColor != after.AccessoryTertiaryColor;
 		bool flag10 = flag && !string.Equals(before.OutfitId, after.OutfitId, StringComparison.OrdinalIgnoreCase);
@@ -691,6 +849,18 @@ public sealed partial class ModEntry : Mod
 			NewVanillaPantsName = after.VanillaPants,
 			PreviousVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(before.VanillaPantsSpecialItemCandidates),
 			NewVanillaPantsSpecialItemCandidates = CloneSpecialItemCandidates(after.VanillaPantsSpecialItemCandidates),
+			VanillaShirtChanged = vanillaShirtChanged,
+			VanillaShirtRemoved = vanillaShirtRemoved,
+			PreviousVanillaShirtName = before.VanillaShirt,
+			NewVanillaShirtName = after.VanillaShirt,
+			PreviousVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(before.VanillaShirtSpecialItemCandidates),
+			NewVanillaShirtSpecialItemCandidates = CloneSpecialItemCandidates(after.VanillaShirtSpecialItemCandidates),
+			VanillaShoesChanged = vanillaShoesChanged,
+			VanillaShoesRemoved = vanillaShoesRemoved,
+			PreviousVanillaShoesName = before.VanillaShoes,
+			NewVanillaShoesName = after.VanillaShoes,
+			PreviousVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(before.VanillaShoesSpecialItemCandidates),
+			NewVanillaShoesSpecialItemCandidates = CloneSpecialItemCandidates(after.VanillaShoesSpecialItemCandidates),
 			NewShirtId = after.Shirt,
 			NewPantsId = after.Pants,
 			NewSleevesId = after.Sleeves,

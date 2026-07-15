@@ -183,7 +183,7 @@ public sealed partial class ModEntry : Mod
 
 	private void ShowSpousePendingOutfitBubbleIfNeeded(NPC npc, bool force = false)
 	{
-		if (spouseOutfitNoticeController.TryShowPendingBubble(spouseProximityState, npc, Game1.player, force, clothesEmoteFired, Config.OutfitNoticeDistance, Game1.activeClickableMenu != null || Game1.eventUp, DistanceToPlayer))
+		if (spouseOutfitNoticeController.TryShowPendingBubble(spouseProximityState, npc, Game1.player, force, clothesEmoteFired, Config.OutfitNoticeDistance, Game1.activeClickableMenu != null || ShouldDeferOutfitReactionForActiveFestivalActivity(), DistanceToPlayer))
 		{
 			clothesEmoteFired = true;
 		}
