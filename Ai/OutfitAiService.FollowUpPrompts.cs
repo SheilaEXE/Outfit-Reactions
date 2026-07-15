@@ -146,7 +146,7 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("If the previous NPC line was uncertain, treat the farmer's reply as their explanation of what the small accessory/change actually was. React to that explanation naturally.");
             builder.AppendLine("Location: " + StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName));
             builder.AppendLine("Season: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage));
-            builder.AppendLine("Weather: " + context.Weather + ", time: " + context.Time);
+            builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")"));
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FestivalContext))
                 builder.AppendLine("Festival: " + context.FestivalContext);
