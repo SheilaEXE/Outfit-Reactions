@@ -88,7 +88,7 @@ public sealed partial class ModEntry : Mod
 
 	private OutfitAiContext BuildOutfitAiContext(NPC npc, bool isSpouseDialogue)
 	{
-		if (npc == null || lastFashionSenseChangeInfo == null)
+		if (npc == null || lastFashionSenseChangeInfo == null || !NpcCompatibilityPolicy.Allows(npc))
 		{
 			return null;
 		}

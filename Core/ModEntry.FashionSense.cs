@@ -411,7 +411,7 @@ public sealed partial class ModEntry : Mod
 
 	private bool CanNpcNoticeCurrentOutfitNotice(NPC npc)
 	{
-		if (npc == null)
+		if (npc == null || !NpcCompatibilityPolicy.Allows(npc))
 		{
 			return false;
 		}
@@ -711,7 +711,7 @@ public sealed partial class ModEntry : Mod
 
 	private bool CanNpcReactToOutfit(NPC npc)
 	{
-		if (npc == null || string.IsNullOrWhiteSpace(((Character)npc).Name))
+		if (npc == null || string.IsNullOrWhiteSpace(((Character)npc).Name) || !NpcCompatibilityPolicy.Allows(npc))
 		{
 			return false;
 		}
