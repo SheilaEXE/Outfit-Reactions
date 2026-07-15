@@ -397,7 +397,8 @@ public sealed partial class ModEntry : Mod
 			ReactionContext = resolved.ReactionContext,
 			WasRemoved = wasRemoved,
 			HasSecret = resolved.HasSecret,
-			SecretId = (resolved.SecretId ?? "")
+			SecretId = (resolved.SecretId ?? ""),
+			NpcKnowsSecret = resolved.NpcKnowsSecret
 		};
 		notice.MemoryHint = BuildSpecialItemMemoryContext(npc, notice);
 		return true;
@@ -520,7 +521,9 @@ public sealed partial class ModEntry : Mod
 		{
 			return "";
 		}
-		string text = StringUtils.FirstNonEmpty(notice.DisplayName, notice.MatchedName, notice.EntryId) ?? "this special item";
+		string text = notice.HasSecret && !notice.NpcKnowsSecret
+			? "this unusual purple intimate garment"
+			: StringUtils.FirstNonEmpty(notice.DisplayName, notice.MatchedName, notice.EntryId) ?? "this special item";
 		return (specialItemSeenCount == 1) ? ("This NPC has seen the farmer wear " + text + " before (1 time). They may recognize it with familiarity.") : $"This NPC has seen the farmer wear {text} before ({specialItemSeenCount} times). They should recognize it as something they've seen before.";
 	}
 

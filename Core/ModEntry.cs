@@ -284,6 +284,8 @@ public sealed partial class ModEntry : Mod
 
 		public string SecretId { get; set; } = "";
 
+		public bool NpcKnowsSecret { get; set; }
+
 		public bool IsValid => !string.IsNullOrWhiteSpace(EntryId) && !string.IsNullOrWhiteSpace(ReactionContext);
 	}
 

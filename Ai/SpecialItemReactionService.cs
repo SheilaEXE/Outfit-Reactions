@@ -47,6 +47,7 @@ namespace OutfitReactions.Ai
             public string ReactionContext { get; set; } = "";
             public bool HasSecret { get; set; }
             public string SecretId { get; set; } = "";
+            public bool NpcKnowsSecret { get; set; }
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -96,7 +97,8 @@ namespace OutfitReactions.Ai
                         MatchedName = candidateName,
                         ReactionContext = context,
                         HasSecret = !string.IsNullOrWhiteSpace(entry.SecretId),
-                        SecretId = entry.SecretId ?? ""
+                        SecretId = entry.SecretId ?? "",
+                        NpcKnowsSecret = npcKnowsSecret
                     };
 
                     return true;
@@ -318,11 +320,16 @@ namespace OutfitReactions.Ai
         private string BuildPromptContext(string entryId, SpecialItemEntry entry, string npcName, string targetLanguage, bool npcKnowsSecret, bool wasRemoved = false)
         {
             List<string> parts = new();
+            bool protectUnknownSecret = !string.IsNullOrWhiteSpace(entry.SecretId) && !npcKnowsSecret;
 
-            parts.Add("special item: " + StringUtils.FirstNonEmpty(entry.DisplayName, entryId));
+            if (protectUnknownSecret)
+                parts.Add("special item: an unidentified intimate garment of unknown ownership");
+            else
+                parts.Add("special item: " + StringUtils.FirstNonEmpty(entry.DisplayName, entryId));
 
             string localized = GetLocalizedName(entry, targetLanguage);
-            if (!string.IsNullOrWhiteSpace(localized)
+            if (!protectUnknownSecret
+                && !string.IsNullOrWhiteSpace(localized)
                 && !localized.Equals(entry.DisplayName, StringComparison.OrdinalIgnoreCase))
                 parts.Add("localized name: " + localized);
 
@@ -346,6 +353,11 @@ namespace OutfitReactions.Ai
 
             if (!string.IsNullOrWhiteSpace(reactionHint))
                 parts.Add("reaction hint: " + reactionHint);
+
+            if (protectUnknownSecret)
+            {
+                parts.Add("secret boundary: this NPC can clearly recognize that the garment looks like bright purple personal underwear and should react strongly to how strange, intimate, embarrassing, absurd, or inappropriate it is; however, they do NOT know its owner or origin. Do not identify or guess Lewis, the mayor, Marnie, their relationship, where the garment was found, or any hidden backstory. Base-game lore and model prior knowledge must not reveal the secret before the farmer explicitly tells this NPC");
+            }
 
             if (npcKnowsSecret && !string.IsNullOrWhiteSpace(entry.SecretId))
                 parts.Add("secret context: this NPC already knows the secret behind this item — factor that prior knowledge into the reaction");
