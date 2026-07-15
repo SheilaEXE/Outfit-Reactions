@@ -5,6 +5,8 @@ namespace OutfitReactions
 {
     public sealed class ModConfig
     {
+        private const string DefaultGeminiModel = "gemini-3.1-flash-lite";
+
         public bool Enabled { get; set; } = true;
 
         // --- Voice samples (MVP) ---------------------------------------------
@@ -53,7 +55,7 @@ namespace OutfitReactions
         // enabled checkbox, model, API key and (optional) endpoint. The mod uses the ENABLED
         // slot whose provider matches the active AiProvider. The old auto-guess (SlotMatches-
         // Provider) is kept only as a fallback when no enabled slot explicitly matches.
-        public string AiModelSlot1 { get; set; } = "";
+        public string AiModelSlot1 { get; set; } = DefaultGeminiModel;
         public string AiModelSlot2 { get; set; } = "";
         public string AiModelSlot3 { get; set; } = "";
         public string AiModelSlot4 { get; set; } = "";
@@ -308,10 +310,18 @@ namespace OutfitReactions
             UseJsonFallbackForOutfitReactions = false;
             EnableNpcOutfitReactions = true;
 
-            // Default AI models and endpoints are intentionally NOT set here.
-            // The user must configure their own model (and endpoint, where applicable)
-            // for whichever provider they choose. This keeps the mod from shipping any
-            // built-in model/endpoint defaults. Left commented for reference only:
+            // Backfill the default only when Profile 1 is still Gemini and has no model.
+            // Never replace a model the player already selected.
+            if (NormalizeProvider(AiProviderSlot1).Equals("Gemini", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(AiModelSlot1))
+            {
+                AiModelSlot1 = DefaultGeminiModel;
+            }
+
+            // Profile 1 ships enabled with Gemini 3.1 Flash-Lite, whose official endpoint
+            // is resolved automatically. Other providers intentionally keep their model and
+            // endpoint fields empty so players can configure them explicitly if desired.
+            // Alternative defaults left commented for reference only:
             //
             // if (string.IsNullOrWhiteSpace(DeepSeekAiModel))
             //     DeepSeekAiModel = "deepseek-v4-flash";

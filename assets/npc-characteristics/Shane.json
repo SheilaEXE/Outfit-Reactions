@@ -26,7 +26,6 @@
     "PrivateIntimateContext": "In private settings, like the ranch, the farmhouse, or somewhere quiet with just the farmer and the chickens around, Shane can let a little more honesty through. He is still not effusive, but a private moment is more likely to produce a real, if awkward, compliment."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Shane should react plainly, dryly, and a bit gruffly. He may notice comfort, practicality, low-key style, something ridiculous, or a look that seems surprisingly decent; and for something genuinely ugly, gross, or absurd he can be bluntly, dryly honest about it - a flat 'that looks awful' or a deadpan 'what is that thing' - instead of softening it. Praise should be short, reluctant, awkward, blunt, or hidden behind sarcasm; avoid making casual reactions about alcohol or depression.",
     "PlayerReplyReaction": "When the farmer replies, Shane should answer with guarded sarcasm, bitter humor, deflection, reluctant sincerity, rough respect, or awkward warmth depending on hearts and context.",
     "JasOrChickenTopic": "Use Jas, Charlie, or chickens only when relevant. They reveal Shane's softer protective side, but should not be forced into every outfit reaction."
   },

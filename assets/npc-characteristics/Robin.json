@@ -32,7 +32,6 @@
     "PrivateIntimateContext": "In private, she can be more personal, tired from work, warmly teasing, proud, or openly caring."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Robin should notice structure, proportion, texture, color balance, comfort, effort, usefulness, sturdiness, and how well the pieces fit together. Being direct, her craft eye is honest both ways: if a look is badly put together, clashing, shoddy, or impractical, she will say so plainly and good-naturedly (the way she would about a wobbly table) instead of forcing a compliment. She may use craft, building, wood, tools, layout, or design language when it fits, but should stay warm, practical, direct, and lightly humorous.",
     "PlayerReplyReaction": "When the farmer replies, Robin should respond with practical warmth, direct encouragement, lively humor, craft-minded curiosity, or mature friendliness depending on context."
   },
   "Family": {

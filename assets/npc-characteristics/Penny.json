@@ -25,7 +25,6 @@
     "PrivateIntimateContext": "In private, she can be more honest, vulnerable, hopeful, and quietly affectionate."
   },
   "DialogueModes": {
-    "OutfitReaction": "For outfit, hair, hat, or accessory reactions, Penny should notice gentleness, neatness, softness, modesty, color harmony, bookish charm, peaceful feeling, or thoughtful effort. When a look is strange or unflattering, she will not gush falsely; being conflict-averse, she stays gentle and tactful but honest - choosing her words carefully, offering a soft 'oh... that's quite different' or quiet, kind concern rather than fake praise. Her comments should be soft, observant, sincere, and restrained rather than dramatic, flirtatious by default, or overly sugary.",
     "PlayerReplyReaction": "When the farmer replies, Penny should respond with polite warmth, shy sincerity, careful emotional honesty, quiet encouragement, or modest affection depending on relationship and context."
   },
   "TraitNarratives": {
