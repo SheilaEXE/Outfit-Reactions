@@ -340,10 +340,9 @@ public sealed partial class ModEntry : Mod
 		bool flag = AreVisionOnlyFashionSenseTriggersEnabled();
 		if (changeInfo.ChangedOutfit && !string.IsNullOrWhiteSpace(changeInfo.NewOutfitId))
 		{
-			if (changeInfo.ChangedAccessory && ShouldTreatAccessoryAsCurrentComboFocus(changeInfo.NewAccessoryId, flag))
-			{
-				return "Accessory";
-			}
+			// Applying a saved Fashion Sense outfit can change several component slots at once,
+			// including accessories. The reaction is still about the complete saved look; routing
+			// it as an accessory change incorrectly tells the AI that only the accessory is new.
 			return "Outfit";
 		}
 		if (ShouldTreatGenericHeadwearAsSavedOutfitPart(changeInfo))
