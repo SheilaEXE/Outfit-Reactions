@@ -680,7 +680,7 @@ public sealed partial class ModEntry : Mod
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
-		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner);
+		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => ShouldDeferAutomaticOutfitReaction(logDecision: false));
 		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
 		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
 		helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -737,7 +737,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+		if (ShouldDeferAutomaticOutfitReaction())
 		{
 			return false;
 		}
@@ -753,19 +753,41 @@ public sealed partial class ModEntry : Mod
 			otherNpcClothesReactionSystem?.SuspendRomanticHoldForExternalKiss(npc);
 			return false;
 		}
-		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+		if (ShouldDeferAutomaticOutfitReaction())
 			return false;
 		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
 	}
 
-	private bool ShouldDeferOutfitReactionForActiveFestivalActivity()
+	private static bool IsActiveFestivalEventForOutfitReaction()
+	{
+		if (!Game1.eventUp || Game1.CurrentEvent == null)
+			return false;
+
+		if (Game1.CurrentEvent.isFestival)
+			return true;
+
+		string eventId = Game1.CurrentEvent.id ?? "";
+		return eventId.StartsWith("festival_", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private bool ShouldDeferAutomaticOutfitReaction(bool logDecision = true)
 	{
 		if (!Game1.eventUp)
 			return false;
 
+		// Ordinary scripted events own their actors, dialogue, and input. Outfit reactions are
+		// allowed during free-roam festivals through the specialized festival path below, but
+		// must never arm or capture clicks during cutscenes, spouse morning events, or load events.
+		if (!IsActiveFestivalEventForOutfitReaction())
+		{
+			if (DebugLog && logDecision)
+				((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred outfit reaction because a scripted non-festival event is active.", (LogLevel)2);
+			return true;
+		}
+
 		if (Game1.currentMinigame != null)
 		{
-			if (DebugLog)
+			if (DebugLog && logDecision)
 				((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred pending festival outfit reaction because a minigame is active.", (LogLevel)2);
 			return true;
 		}
@@ -784,7 +806,7 @@ public sealed partial class ModEntry : Mod
 					?? eventType.GetField(timerName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(currentEvent);
 				if ((value is int intTimer && intTimer > 0) || (value is float floatTimer && floatTimer > 0f) || (value is double doubleTimer && doubleTimer > 0d))
 				{
-					if (DebugLog)
+					if (DebugLog && logDecision)
 						((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred pending festival outfit reaction because a festival competition timer is active.", (LogLevel)2);
 					return true;
 				}
@@ -792,7 +814,7 @@ public sealed partial class ModEntry : Mod
 		}
 		catch (Exception ex)
 		{
-			if (DebugLog)
+			if (DebugLog && logDecision)
 				((Mod)this).Monitor.Log("[NPC OUTFIT] Could not inspect festival activity timer safely: " + ex.Message, (LogLevel)1);
 		}
 
@@ -809,7 +831,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+		if (ShouldDeferAutomaticOutfitReaction())
 		{
 			return false;
 		}
@@ -902,7 +924,7 @@ public sealed partial class ModEntry : Mod
 		{
 			if (item != null && item.Task != null && !item.Task.IsCompleted)
 			{
-				NPC characterFromName = Game1.getCharacterFromName(item.NpcName, true, false);
+				NPC characterFromName = NpcContextResolver.Resolve(item.NpcName);
 				if (characterFromName != null && ((Character)characterFromName).currentLocation == ((Character)Game1.player).currentLocation)
 				{
 					DrawOwnAiWaitingHudMessage(e.SpriteBatch, characterFromName, GetOwnAiWaitingDialogueText(characterFromName, item.WaitingDotCount));
@@ -914,7 +936,7 @@ public sealed partial class ModEntry : Mod
 		{
 			if (item2 != null && item2.Task != null && !item2.Task.IsCompleted)
 			{
-				NPC characterFromName2 = Game1.getCharacterFromName(item2.NpcName, true, false);
+				NPC characterFromName2 = NpcContextResolver.Resolve(item2.NpcName);
 				if (characterFromName2 != null && ((Character)characterFromName2).currentLocation == ((Character)Game1.player).currentLocation)
 				{
 					DrawOwnAiWaitingHudMessage(e.SpriteBatch, characterFromName2, GetOwnAiReplyWaitingDialogueText(characterFromName2, item2.WaitingDotCount));
@@ -930,14 +952,34 @@ public sealed partial class ModEntry : Mod
 		//IL_0050: Unknown result type (might be due to invalid IL or missing references)
 		if (Context.IsWorldReady && Game1.player != null && Game1.currentLocation != null && Config.Enabled && Game1.activeClickableMenu == null && (SButtonExtensions.IsActionButton(e.Button) || SButtonExtensions.IsUseToolButton(e.Button)))
 		{
-			if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+			if (ShouldDeferAutomaticOutfitReaction())
 			{
 				return;
 			}
 			NPC npcBeingInteractedWith = GetNpcBeingInteractedWith();
-			if (npcBeingInteractedWith != null && !TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith))
+			if (npcBeingInteractedWith != null)
 			{
-				otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npcBeingInteractedWith);
+				bool outfitClickConsumed = TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith);
+				if (!outfitClickConsumed)
+				{
+					outfitClickConsumed = otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npcBeingInteractedWith) ?? false;
+				}
+
+				// Festival dialogue can be opened directly by the event before NPC.checkAction runs.
+				// Consume only the click claimed by an outfit reaction; the festival's original
+				// dialogue stack stays untouched and remains available on the next interaction.
+				if (outfitClickConsumed && IsActiveFestivalEventForOutfitReaction())
+				{
+					((Mod)this).Helper.Input.Suppress(e.Button);
+					if (DebugLog)
+					{
+						((Mod)this).Monitor.Log($"[FESTIVAL OUTFIT] Suppressed {e.Button} for {((Character)npcBeingInteractedWith).Name} so the outfit reaction opens before the festival dialogue.", (LogLevel)2);
+					}
+				}
+			}
+			else if (DebugLog && IsActiveFestivalEventForOutfitReaction())
+			{
+				((Mod)this).Monitor.Log("[FESTIVAL OUTFIT] Action click did not resolve a festival NPC at the targeted tile.", (LogLevel)2);
 			}
 		}
 	}
@@ -950,15 +992,26 @@ public sealed partial class ModEntry : Mod
 		{
 			return null;
 		}
+		List<NPC> interactionCandidates = ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>().ToList();
+		if (IsActiveFestivalEventForOutfitReaction() && Game1.CurrentEvent?.actors != null)
+		{
+			foreach (NPC actor in Game1.CurrentEvent.actors)
+			{
+				if (actor != null && !interactionCandidates.Contains(actor))
+				{
+					interactionCandidates.Add(actor);
+				}
+			}
+		}
 		Vector2 grabTile = ((Character)Game1.player).GetGrabTile();
-		NPC val = ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>().FirstOrDefault((NPC c) => c != null && !c.IsInvisible && ((Character)c).TilePoint.X == (int)grabTile.X && ((Character)c).TilePoint.Y == (int)grabTile.Y);
+		NPC val = interactionCandidates.FirstOrDefault((NPC c) => c != null && !c.IsInvisible && ((Character)c).TilePoint.X == (int)grabTile.X && ((Character)c).TilePoint.Y == (int)grabTile.Y);
 		if (val != null)
 		{
 			return val;
 		}
 		int mouseTileX = (Game1.getOldMouseX() + Game1.viewport.X) / 64;
 		int mouseTileY = (Game1.getOldMouseY() + Game1.viewport.Y) / 64;
-		val = (from c in ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>()
+		val = (from c in interactionCandidates
 			where c != null && !c.IsInvisible && ((Character)c).TilePoint.X == mouseTileX && ((Character)c).TilePoint.Y == mouseTileY
 			orderby Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position)
 			select c).FirstOrDefault((NPC c) => Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position) <= 192f);
@@ -966,7 +1019,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return val;
 		}
-		return (from c in ((IEnumerable)Game1.currentLocation.characters).OfType<NPC>()
+		return (from c in interactionCandidates
 			where c != null && !c.IsInvisible && ((Character)c).currentLocation == ((Character)Game1.player).currentLocation
 			where Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position) <= 112f
 			orderby Vector2.Distance(((Character)c).Position, ((Character)Game1.player).Position)

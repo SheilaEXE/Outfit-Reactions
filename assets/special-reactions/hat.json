@@ -5,6 +5,7 @@
   "GlobalRules": [
     "If the current hat matches one of these entries, this is not a generic outfit compliment. The NPC should react to the hat specifically.",
     "Use the NPC's personality, relationship level, location, and current context to decide whether the reaction is blunt, polite, fascinated, amused, horrified, confused, or approving.",
+    "Use the authoritative calendar context when the hat is frightening, spooky, monstrous, ominous, magical, or costume-like. During fall, the NPC may naturally associate it with Spirit's Eve or preparations for it. If today is Spirit's Eve, the NPC may understand it as an intentional costume even if it still startles them. Outside fall, do not mention Spirit's Eve solely because of the hat. This association is optional and should only appear when it fits the NPC and conversation.",
     "Do not describe details that are not visible or not part of the detected hat.",
     "Do not mechanically recite the saved outfit name. Use natural in-world language."
   ],
@@ -127,7 +128,7 @@
       "Category": "frightening_monster_mask",
       "ReactionPriority": "High",
       "CoreDescription": "A large, frightening mummy mask that makes the farmer resemble something ancient and undead emerging from a sealed crypt.",
-      "ReactionHint": "NPCs may be startled, frightened, intimidated, or deeply uncomfortable looking at it. Nervous NPCs may want the farmer to take it off, while braver or monster-experienced NPCs may hide their unease, challenge the farmer, or admire how convincing it looks. Its frightening effect applies in every season and situation."
+      "ReactionHint": "NPCs may be startled, frightened, intimidated, or deeply uncomfortable looking at it. Nervous NPCs may want the farmer to take it off, while braver or monster-experienced NPCs may hide their unease, challenge the farmer, or admire how convincing it looks. Its frightening appearance remains noticeable even when the current calendar makes it appropriate as a costume."
     },
     "TotemMask": {
       "DisplayName": "Totem Mask",
@@ -157,7 +158,7 @@
       "Category": "frightening_skull_mask",
       "ReactionPriority": "High",
       "CoreDescription": "An intimidating skull mask with an unnatural, threatening stare and eerie red eyes that make the farmer look genuinely frightening.",
-      "ReactionHint": "NPCs may be startled, frightened, intimidated, or reluctant to keep looking at the farmer. Timid NPCs may ask them to remove it or keep their distance, while brave or combat-experienced NPCs may conceal their fear, challenge the look, or respect how intimidating it is. Its frightening effect applies in every season and situation."
+      "ReactionHint": "NPCs may be startled, frightened, intimidated, or reluctant to keep looking at the farmer. Timid NPCs may ask them to remove it or keep their distance, while brave or combat-experienced NPCs may conceal their fear, challenge the look, or respect how intimidating it is. Its frightening appearance remains noticeable even when the current calendar makes it appropriate as a costume."
     },
     "PumpkinMask": {
       "DisplayName": "Pumpkin Mask",
@@ -167,7 +168,7 @@
       "Category": "spooky_costume_hat",
       "ReactionPriority": "Medium",
       "CoreDescription": "A pumpkin mask with a festive, spooky, costume-like appearance.",
-      "ReactionHint": "NPCs may connect it to Spirit's Eve, pumpkins, festivals, or looking like a walking decoration."
+      "ReactionHint": "NPCs may find the farmer spooky, festive, theatrical, or like a walking pumpkin decoration. During fall they may naturally connect it to the season or Spirit's Eve, and on the festival day they may understand it as an intentional costume. Outside fall, its oddly timed pumpkin theme may be especially noticeable."
     },
     "DinosaurHat": {
       "DisplayName": "Dinosaur Hat",
@@ -326,8 +327,8 @@
       ],
       "Category": "witch_hat",
       "ReactionPriority": "Medium",
-      "CoreDescription": "A pointed witch hat that feels magical, spooky, theatrical, and strongly tied to fantasy or Spirit’s Eve vibes.",
-      "ReactionHint": "NPCs may connect it to magic, Spirit’s Eve, potions, curses, or a theatrical witchy look."
+      "CoreDescription": "A pointed witch hat that feels magical, spooky, theatrical, and strongly tied to fantasy.",
+      "ReactionHint": "NPCs may connect it to magic, potions, curses, or a theatrical witchy look. During fall they may naturally associate it with Spirit's Eve, and on the festival day they may understand it as an intentional costume. Outside fall, the magical or witch-like appearance should stand on its own."
     },
     "PirateHat": {
       "DisplayName": "Pirate Hat",

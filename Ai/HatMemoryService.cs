@@ -187,7 +187,7 @@ namespace OutfitReactions.Ai
         }
 
         /// <summary>
-        /// Produces a natural-language memory hint for the prompt (PT-BR or EN), or null if there
+        /// Produces an English internal memory hint for the prompt, or null if there
         /// is nothing worth saying. Kept separate from the outfit memory hint.
         /// </summary>
         public string BuildMemoryContextHint(HatMemoryComparison memory, string targetLanguage)
@@ -195,70 +195,35 @@ namespace OutfitReactions.Ai
             if (memory == null)
                 return null;
 
-            bool isPt = string.Equals(targetLanguage, "pt", StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(targetLanguage, "pt-BR", StringComparison.OrdinalIgnoreCase);
-
             // Case 1: the farmer just took the hat off (no current hat, but had one before).
             if (memory.CurrentlyHatless)
             {
                 if (string.IsNullOrWhiteSpace(memory.PreviousHatId))
                     return null;
-                return isPt
-                    ? "MEMÓRIA DO CHAPÉU: o jogador estava usando um chapéu da última vez que você o viu e agora está sem. "
-                      + "Reaja a ele ter tirado o chapéu, como alguém que notou a ausência do que estava lá antes."
-                    : "HAT MEMORY: the farmer was wearing a hat last time you saw them and is now bare-headed. "
-                      + "React to them having taken the hat off, like someone who noticed it's gone.";
+                return "HAT MEMORY: the farmer was wearing a hat last time you saw them and is now bare-headed. "
+                     + "React to them having taken the hat off, like someone who noticed it is gone.";
             }
 
             // Case 2: first time ever seeing this hat → no memory hint (let it be a fresh reaction).
             if (memory.TimesSeenBefore <= 0)
                 return null;
 
-            string firstSeen = FormatDate(memory.FirstSeenSeason, memory.FirstSeenDay, memory.FirstSeenYear, isPt);
+            string firstSeen = FormatDate(memory.FirstSeenSeason, memory.FirstSeenDay, memory.FirstSeenYear);
             int times = memory.TimesSeenBefore;
-
-            if (isPt)
-            {
-                string freq = times == 1
-                    ? "você já viu o jogador com esse chapéu uma vez antes"
-                    : $"você já viu o jogador com esse chapéu {times} vezes antes";
-                string firstNote = string.IsNullOrWhiteSpace(firstSeen) ? "" : $" (a primeira vez foi em {firstSeen})";
-                return $"MEMÓRIA DO CHAPÉU: {freq}{firstNote}. "
-                     + "Reconheça que já conhece esse chapéu — pode demonstrar familiaridade, implicar que ele gosta muito desse chapéu, "
-                     + "ou comentar conforme a sua personalidade. NÃO reaja como se fosse a primeira vez que vê esse chapéu.";
-            }
-            else
-            {
-                string freq = times == 1
-                    ? "you've seen the farmer in this hat once before"
-                    : $"you've seen the farmer in this hat {times} times before";
-                string firstNote = string.IsNullOrWhiteSpace(firstSeen) ? "" : $" (first time was in {firstSeen})";
-                return $"HAT MEMORY: {freq}{firstNote}. "
-                     + "Show that you recognize this hat — you can show familiarity, tease that they really like this hat, "
-                     + "or comment in your own voice. Do NOT react as if seeing this hat for the first time.";
-            }
+            string freq = times == 1
+                ? "you have seen the farmer in this hat once before"
+                : $"you have seen the farmer in this hat {times} times before";
+            string firstNote = string.IsNullOrWhiteSpace(firstSeen) ? "" : $" (first seen on {firstSeen})";
+            return $"HAT MEMORY: {freq}{firstNote}. "
+                 + "Show that you recognize this hat through familiarity, teasing, or another response that fits your personality. "
+                 + "Do NOT react as if seeing this hat for the first time.";
         }
 
-        private static string FormatDate(string season, int day, int year, bool isPt)
+        private static string FormatDate(string season, int day, int year)
         {
             if (string.IsNullOrWhiteSpace(season) || day <= 0)
                 return "";
-            string seasonLabel = isPt ? TranslateSeasonPt(season) : season;
-            return isPt
-                ? $"dia {day} de {seasonLabel}, ano {year}"
-                : $"day {day} of {seasonLabel}, year {year}";
-        }
-
-        private static string TranslateSeasonPt(string season)
-        {
-            switch ((season ?? "").ToLowerInvariant())
-            {
-                case "spring": return "primavera";
-                case "summer": return "verão";
-                case "fall": return "outono";
-                case "winter": return "inverno";
-                default: return season ?? "";
-            }
+            return $"day {day} of {season}, year {year}";
         }
     }
 

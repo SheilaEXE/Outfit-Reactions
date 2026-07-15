@@ -605,7 +605,7 @@ namespace OutfitReactions.Ai
                 ? "For a whole saved outfit, focus on the outfit/theme itself; do not turn the player's hair color or a generic head-slot item into the main topic, and never call the farmer's hair a hat. "
                 : "";
 
-            string template = promptStyle?.NaturalReactionStyle ?? PromptStyleService.FallbackNaturalReactionStyle;
+            string template = promptStyle?.NaturalReactionStyle ?? PromptStyleService.DefaultNaturalReactionStyle;
             string rule = template
                 .Replace("{Change}", change)
                 .Replace("{OutfitFocusRule}", outfitFocusRule);
@@ -651,7 +651,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine(ApplyPromptTokens(template, context, extraTokens));
         }
 
-        public static void AppendPersonalityPriorityRule(StringBuilder builder, OutfitAiContext context)
+        public static void AppendPersonalityPriorityRule(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle = null)
         {
             if (builder == null)
                 return;
@@ -660,7 +660,7 @@ namespace OutfitReactions.Ai
             if (context != null)
                 builder.AppendLine("Current relationship strength for tone calibration: " + context.RelationshipStatus + ", hearts=" + context.RelationshipHearts + ". Low or mid hearts should not sound as intimate, warm, or openly admiring as high hearts/spouse unless that specific NPC would naturally act that way.");
             builder.AppendLine("A valid reaction may be positive, reluctant, dry, annoyed, skeptical, teasing, confused, practical, indifferent, flustered, or warm. Praise is allowed only when it fits the NPC and heart level; otherwise keep the NPC's edge, restraint, awkwardness, or bluntness intact.");
-            builder.AppendLine("OPENING VARIETY RULE: do not reuse the same opening phrase, first words, sentence structure, or reaction angle across outfit reactions. Do not always begin with grunts like 'Hmph', 'Humph', 'Bah', 'Tch', or direct questions like 'what are you wearing?'. Use grumbles only sometimes, and vary them naturally. A grumpy NPC can start with a complaint, warning, skeptical observation, practical remark, dry aside, or reluctant admission instead.");
+            AppendPromptBlock(builder, promptStyle?.OpeningVarietyRule ?? PromptStyleService.FallbackOpeningVarietyRule, context);
         }
 
         public static void AppendPlayerAddressAndGenderRule(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)
@@ -696,7 +696,7 @@ namespace OutfitReactions.Ai
             if (builder == null)
                 return;
 
-            builder.AppendLine("Spatial reference rule for clothing/accessories/items the farmer is currently wearing: these are physically close to the FARMER, right in front of the NPC, not far away. If the target language marks spatial distance in demonstratives (e.g. Portuguese 'isso'/'aí' for near-the-listener vs 'aquilo'/'ali' for far-from-both), use the near-listener form for anything worn on the farmer's body right now (e.g. 'isso aí na sua cabeça', not 'aquilo ali'). Reserve the far/distant form only for something genuinely far away, not for what the farmer is wearing.");
+            builder.AppendLine("Spatial reference rule for clothing, accessories, and items the farmer is currently wearing: they are physically on the farmer, directly in front of the NPC. If the target language distinguishes demonstratives by distance, use the form for something near the listener or on the listener's body. Reserve distant demonstratives for objects that are genuinely far from both speakers.");
         }
 
         public static void AppendCompactWornItemDeixisRule(StringBuilder builder)

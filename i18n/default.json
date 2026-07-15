@@ -58,6 +58,8 @@
   "gmcm.value.no-minimum": "No minimum",
   "gmcm.option.expressive-actions.name": "Expressive actions",
   "gmcm.option.expressive-actions.tooltip": "Allows the AI to include brief physical actions in asterisks (e.g. *sighs*, *looks away*). Disable if you prefer clean spoken dialogue only.",
+  "gmcm.option.profanity-filter.name": "Profanity filter",
+  "gmcm.option.profanity-filter.tooltip": "Asks the AI to avoid inappropriate strong profanity and softens it if it still appears. Disable to let NPC dialogue use profanity freely when the AI considers it fitting.",
   "gmcm.option.fs-id-hint.name": "Use Fashion Sense ID as hint",
   "gmcm.option.fs-id-hint.tooltip": "Uses the clothing piece's internal Fashion Sense ID as a hint for the AI about its theme. Works better when the ID is descriptive and matches what the piece actually looks like, rather than just a number or a name unrelated to the visual (e.g. \"Set04\").",
   "gmcm.option.voice-samples.name": "Use voice samples",

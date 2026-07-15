@@ -40,14 +40,12 @@ namespace OutfitReactions.Ai
         private static string FormatSeasonForPrompt(string season, string targetLanguage)
         {
             string key = NormalizeSeasonKey(season);
-            bool portuguese = !string.IsNullOrWhiteSpace(targetLanguage) && targetLanguage.IndexOf("Portuguese", StringComparison.OrdinalIgnoreCase) >= 0;
-
             return key switch
             {
-                "spring" => portuguese ? "spring / primavera" : "spring",
-                "summer" => portuguese ? "summer / verão" : "summer",
-                "fall" => portuguese ? "fall / autumn / outono" : "fall / autumn",
-                "winter" => portuguese ? "winter / inverno" : "winter",
+                "spring" => "spring",
+                "summer" => "summer",
+                "fall" => "fall / autumn",
+                "winter" => "winter",
                 _ => string.IsNullOrWhiteSpace(season) ? "unknown" : season
             };
         }

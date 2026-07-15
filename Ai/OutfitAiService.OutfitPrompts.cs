@@ -38,7 +38,7 @@ namespace OutfitReactions.Ai
                 builder.AppendLine(focusedProfile);
             builder.AppendLine();
 
-            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
             builder.AppendLine();
             int characterBlockEnd = builder.Length;
 
@@ -76,7 +76,7 @@ namespace OutfitReactions.Ai
                 if (outfitNameIsTechnical)
                     builder.AppendLine("Do not quote, repeat, translate, or mention the full technical saved outfit name literally. Use the readable theme meaning instead. If a readable part of the clue contains a recognizable reference or named theme, that reference may be mentioned naturally when it fits the NPC.");
                 else
-                    builder.AppendLine("You may naturally reference what the outfit is (e.g. say 'pijama', 'bikini', 'vestido' etc.) and any recognizable theme/reference in the name when it is clearly visible or fits the scene. Do not recite the full saved outfit name mechanically as a phrase.");
+                    builder.AppendLine("You may naturally use ordinary in-world garment terms and mention a recognizable theme or reference from the name when it is clearly visible or fits the scene. Do not recite the full saved outfit name mechanically as a phrase.");
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemeContext) ?? "");
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemePriorityInstruction) ?? "");
                 builder.AppendLine("Private outfit routing clue, for theme selection only. Do not say this label: " + HumanizeTechnicalLabelForPrompt(context.DialogueKey));
@@ -173,14 +173,14 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Final dialogue language: " + context.TargetLanguage + ". Ignore any language written inside the character profile above; the final spoken line must use ONLY this language.");
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
-            AppendProfanityIntensityRule(builder, context);
+            AppendProfanityIntensityRule(builder, context, config.EnableProfanityFilter);
             builder.AppendLine("Maximum final dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
             int minCharacters = GetMinimumLengthTarget(config, ai);
             if (minCharacters > 0)
                 builder.AppendLine("Minimum final dialogue length target: at least " + minCharacters + " visible characters (mandatory). Use #$b# breaks for natural pacing only, not a fixed pattern. Do not ramble or repeat yourself, and do not pad: the personality and reaction matter more than the length.");
             else
                 builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
-            builder.AppendLine("Use #$b# dialogue box breaks whenever they improve pacing. Do not force a fixed number of boxes; one, two, or several are all valid when the scene supports them.");
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
             builder.AppendLine("Do not mention metadata, mods, AI, APIs, Fashion Sense, JSON, or internal keys.");
             builder.AppendLine("Return JSON only with keys text, portrait, portraits, and needsClarification. Example shape only: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[],\"needsClarification\":false}. The portraits array may be empty; if you use it, let expressions stay the same or change only when that feels natural.");
             builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field contains only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Do not wrap the JSON in markdown and do not explain anything.");
@@ -219,21 +219,19 @@ namespace OutfitReactions.Ai
             return prompt;
         }
 
-        private static void AppendCompactReactionGuidance(StringBuilder builder, OutfitAiContext context)
+        private void AppendCompactReactionGuidance(StringBuilder builder, OutfitAiContext context)
         {
             builder.AppendLine("HOW TO REACT (filtered through the personality above)");
-            builder.AppendLine("React directly to the farmer's current appearance, visible theme, situation, or overall vibe in this NPC's own voice. Praise is optional; dry, reluctant, amused, skeptical, confused, practical, awkward, flustered, impressed, critical, or warm reactions are all valid. Mention visual details only when natural, never as a fashion review.");
-            builder.AppendLine("Recognizable theme/reference: when a clear clue points to a known character, franchise, mascot, creature, animal, food, object, or named style, the NPC may recognize or allude to it only when their knowledge and personality support that. Do not force recognition, but do not ignore an obvious clue they would notice. Move beyond bland praise with a fitting joke, question, roast, concern, guarded admission, or imagined situation. Comparisons must come from this NPC's own interests, work, and personality, not generic Stardew topics they would not naturally use.");
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.ReactionCoreRule ?? PromptStyleService.FallbackReactionCoreRule, context);
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.ThemeRecognitionRule ?? PromptStyleService.FallbackThemeRecognitionRule, context);
 
             if (context.IsAccessoryChange || context.IsOutfitChange)
             {
-                builder.AppendLine("Combination and occasion: consider the changed item together with any recognizable outfit still being worn; notice a fitting combination, clash, or funny hybrid instead of isolating the accessory. Also consider whether event-specific clothing fits the current place, festival, season, weather, and time. A clear mismatch may be questioned or teased when this NPC would care; never force it, and do not call a fitting occasion mismatched.");
+                CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.CombinationAndOccasionRule ?? PromptStyleService.FallbackCombinationAndOccasionRule, context);
             }
 
             if (context.IsOutfitChange)
-                builder.AppendLine("Whole-outfit focus: react to the complete saved look. Do not center a tiny head-slot item, hair, or hair color unless the theme truly revolves around it; ignore generic/internal head-slot IDs.");
-
-            builder.AppendLine("Opening variety: avoid repeatedly starting with equivalents of 'Esse visual', 'Essa roupa', or 'Esse look', generic greetings, or making 'combina com você' the main point. Lead naturally with this NPC's immediate observation, question, joke, complaint, concern, or admission; use 'hey', 'ei', or 'olha' only when this exact moment calls for it.");
+                CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.WholeOutfitFocusRule ?? PromptStyleService.FallbackWholeOutfitFocusRule, context);
         }
 
         private string BuildLocalPrompt(CharacterAiProfile profile, OutfitAiContext context, ActiveAiSettings ai)
@@ -253,7 +251,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do not add markdown, explanations, headings, analysis, context summaries, or extra options.");
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
-            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context);
+            CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("The spoken dialogue must directly react to the farmer's outfit/look/style. It may be praise, reluctant approval, teasing, skepticism, confusion, dry commentary, practical concern, or indifference depending on the NPC.");
@@ -262,7 +260,7 @@ namespace OutfitReactions.Ai
             string localSeasonAuthority = BuildLocalSeasonAuthorityInstruction(context);
             if (!string.IsNullOrWhiteSpace(localSeasonAuthority))
                 builder.AppendLine(localSeasonAuthority);
-            builder.AppendLine("Do not recite the full saved outfit name mechanically as a phrase. Natural in-world words (pijama, bikini, vestido, etc.) and recognizable named references/themes are fine when they fit naturally and the NPC would know or notice them.");
+            builder.AppendLine("Do not recite the full saved outfit name mechanically as a phrase. Ordinary in-world garment terms and recognizable named references or themes are fine when they fit naturally and the NPC would know or notice them.");
             builder.AppendLine("Missing head-piece rule: the outfit name is a theme label, not proof of what is worn. A themed name may imply ears, horns, antennae, or a themed hat, but those count only if the equipped-items list actually includes a head piece. If the list says no head piece is equipped (e.g. 'head/headwear: NONE equipped'), do NOT mention or describe ears/horns/hat/head accessory implied by the name — the farmer is bare-headed now. The rest of the worn theme can still be referenced.");
             if (context.HasVisionImage)
             {
@@ -278,35 +276,33 @@ namespace OutfitReactions.Ai
             }
             builder.AppendLine(BuildTechnicalContextLabelInstruction(context));
             builder.AppendLine(BuildSceneGroundingInstruction(context));
+            AppendCompactReactionGuidance(builder, context);
             int minCharacters = GetMinimumLengthTarget(config, ai);
             if (minCharacters > 0)
             {
-                builder.AppendLine("Minimum spoken dialogue length target: at least " + minCharacters + " visible characters. This is mandatory, but #$b# breaks are for natural pacing only, not a fixed pattern. Do not ramble or repeat yourself.");
+                builder.AppendLine("Minimum spoken dialogue length target: at least " + minCharacters + " visible characters. This is mandatory. Do not ramble or repeat yourself.");
                 builder.AppendLine("Do not answer with a tiny one-sentence compliment when the minimum is high.");
             }
             else
             {
                 builder.AppendLine("Keep it casual and natural, like a quick real-life remark. It may be one sentence, several sentences, or a longer naturally paced comment if the character has more to say.");
             }
-            builder.AppendLine("Use additional sentences and #$b# dialogue box breaks freely when they improve pacing. The character has room to breathe, pause, and react naturally; do not follow a fixed one-box, two-box, or three-box pattern.");
-            builder.AppendLine("Avoid formulaic outfit reactions. Do not repeatedly start with phrases equivalent to 'Esse visual...', 'Essa roupa...', or 'Esse look...'. Do not make 'combina com você' / 'fica bem em você' the main point of a recognizable theme reaction. Vary the opening and focus on the NPC's immediate reaction, a specific detail, a joke/question, a practical complaint, a guarded admission, an imagined scenario that fits this NPC, or the emotional context.");
-            builder.AppendLine("Do not start the spoken dialogue with \"hey\", \"ei\", \"olha\", or generic greetings unless it sounds natural and necessary for this exact moment.");
-            AppendExpressiveCuesRule(builder, (getConfig?.Invoke() ?? new ModConfig()).EnableExpressiveAsteriskActions);
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
+            AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
-            AppendProfanityIntensityRule(builder, context);
+            AppendProfanityIntensityRule(builder, context, config.EnableProfanityFilter);
             if (strictLocalMode)
             {
                 builder.AppendLine("LOCAL SAFE STYLE MODE:");
                 builder.AppendLine("Personality is more important than the outfit theme. The outfit theme is inspiration, not a new personality for the NPC.");
                 builder.AppendLine("Do not make reserved, sarcastic, shy, gloomy, or dry NPCs sound like cheerful generic romance characters.");
                 builder.AppendLine("Do not write narration, third-person descriptions, or stage directions. The JSON text field must contain only the exact spoken dialogue entry.");
-                builder.AppendLine("Do not turn private context labels into dialogue. Never say phrases like summer indoor, indoor theme, tema do verão indoor, NPC room, or outfit category.");
+                builder.AppendLine("Do not turn private context labels into dialogue. Never expose internal labels for seasonal context, indoor or outdoor classification, NPC room state, or outfit categories.");
             }
             string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
             builder.AppendLine("Max spoken dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
-            builder.AppendLine("Use #$b# for Stardew dialogue box breaks whenever pacing benefits. There is no fixed two-box limit: one, two, or several dialogue boxes are all valid when they feel natural for the NPC and the moment.");
             // PORTRAIT_SCORE_SYSTEM removed: mandatory portrait restriction for private/revealing outfits disabled.
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             builder.AppendLine(CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 1000));
@@ -366,20 +362,20 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Output exactly one compact JSON object now. No other text.");
             return builder.ToString();
         }
-        private static void AppendExpressiveCuesRule(StringBuilder builder, bool enabled = true)
+        private void AppendExpressiveCuesRule(StringBuilder builder, bool enabled = true)
         {
-            if (enabled)
-                builder.AppendLine("Brief expressive cues in asterisks are allowed when they fit the character and the moment — write them in the SAME language as the rest of the dialogue. For example, in Portuguese: *suspiro*, *murmura*, *engole em seco*, *pigarreia*, *olha para o lado*, *ri baixinho*. In English: *sighs*, *mumbles*, *chuckles*. Do not use asterisks as list bullets.");
-            else
-                builder.AppendLine("Do NOT use asterisks for actions or physical cues (no *sighs*, *mumbles*, *looks away*, etc.). Write only clean spoken dialogue.");
+            string rule = enabled
+                ? PromptStyle?.ExpressiveCuesAllowedRule ?? PromptStyleService.FallbackExpressiveCuesAllowedRule
+                : PromptStyle?.ExpressiveCuesDisabledRule ?? PromptStyleService.FallbackExpressiveCuesDisabledRule;
+            CharacterPromptBuilder.AppendPromptBlock(builder, rule, null);
         }
 
-        private static void AppendPunctuationRule(StringBuilder builder)
+        private void AppendPunctuationRule(StringBuilder builder)
         {
-            builder.AppendLine("Punctuation rule: use '...' for dramatic pauses, hesitation, trailing off, or unfinished thoughts — NEVER a lone period mid-sentence. Wrong: 'Uh. u-um', 'bem. marcante'. Correct: 'Uh... u-um', 'bem... marcante'.");
+            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.PunctuationRule ?? PromptStyleService.FallbackPunctuationRule, null);
         }
 
-        private static void AppendWeatherLocationRule(StringBuilder builder, OutfitAiContext context)
+        private void AppendWeatherLocationRule(StringBuilder builder, OutfitAiContext context)
         {
             if (builder == null || context == null)
                 return;
@@ -389,9 +385,9 @@ namespace OutfitReactions.Ai
             // model tends to conflate "Location: Museum" + "Weather: storm" into nonsense like
             // "if a magic storm suddenly showed up in here, inside the museum".
             if (context.IsIndoors)
-                builder.AppendLine("Weather/location rule: the NPC and farmer are currently INDOORS, sheltered from the weather above. If the weather is rain, storm, snow, or similar, that is happening OUTSIDE the building — refer to it as 'lá fora'/'outside', never as happening 'here'/'aqui dentro' in the current room. Only mention the weather at all if it is natural for the moment (e.g. commenting on the outfit choice given what it's like outside).");
+                CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.IndoorWeatherRule ?? PromptStyleService.FallbackIndoorWeatherRule, context);
             else if (context.IsOutdoors)
-                builder.AppendLine("Weather/location rule: the NPC and farmer are currently OUTDOORS, directly exposed to the weather described above. It is natural to reference it as happening right here/around them if relevant.");
+                CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.OutdoorWeatherRule ?? PromptStyleService.FallbackOutdoorWeatherRule, context);
         }
 
         private static string FormatTimeForPrompt(int time)
@@ -401,17 +397,17 @@ namespace OutfitReactions.Ai
             return $"{hours:00}:{minutes:00}";
         }
 
-                private static void AppendProfanityIntensityRule(StringBuilder builder, OutfitAiContext context)
+        private static void AppendProfanityIntensityRule(StringBuilder builder, OutfitAiContext context, bool enabled)
         {
-            if (builder == null)
+            if (builder == null || !enabled)
                 return;
 
-            builder.AppendLine("Profanity/intensity rule: do not use strong profanity or vulgar intensifiers in normal outfit reactions. Avoid words/phrases like 'puta merda', 'porra', 'caralho', 'cacete', 'pra cacete', 'inferno' as a curse, 'merda', or equivalents unless the current scene is genuinely extreme.");
+            builder.AppendLine("Profanity/intensity rule: do not use strong profanity, obscene expressions, or vulgar intensifiers in normal outfit reactions, in any language. Reserve them for a genuinely extreme scene only.");
 
             if (ContextAllowsStrongProfanity(context))
                 builder.AppendLine("In this current context, one mild-to-strong curse may be used only if it is genuinely earned by extreme shock, intense private romantic fluster, fear, pain, or anger. Never use profanity as a casual intensifier for cute, festive, seasonal, cake/candy, cozy, or normal outfit reactions.");
             else
-                builder.AppendLine("For this current context, strong profanity is forbidden. Use softer reactions like 'nossa', 'caramba', 'droga', 'pfft', 'heh', pauses, or shy self-correction instead.");
+                builder.AppendLine("For this current context, strong profanity is forbidden. Use a mild target-language interjection, a nonverbal hesitation, a pause, or shy self-correction instead.");
         }
 
         private static bool ContextAllowsStrongProfanity(OutfitAiContext context)
@@ -431,9 +427,9 @@ namespace OutfitReactions.Ai
             return romantic && IsPrivateRevealingOutfitContext(context, out _);
         }
 
-        private static string SanitizeContextInappropriateProfanity(string text, OutfitAiContext context)
+        private static string SanitizeContextInappropriateProfanity(string text, OutfitAiContext context, bool enabled)
         {
-            if (string.IsNullOrWhiteSpace(text) || ContextAllowsStrongProfanity(context))
+            if (!enabled || string.IsNullOrWhiteSpace(text) || ContextAllowsStrongProfanity(context))
                 return text;
 
             string result = text;
@@ -737,7 +733,7 @@ namespace OutfitReactions.Ai
                 + StringUtils.FirstNonEmpty(location, "unknown")
                 + ". Private location type/context: "
                 + StringUtils.FirstNonEmpty(locationType, "unknown")
-                + ". Safe natural wording for the CURRENT scene is: here, in this room, at home, inside, or outside. Unsafe as a current fact unless explicitly confirmed: 'in front of my motorcycle', 'by my computer', 'on my bed', 'at the beach', 'in the saloon', 'during band practice', or anything implying the farmer/NPC moved somewhere else. Hypothetical jokes or comparisons are allowed when clearly phrased as imagination (e.g. 'se você aparecesse assim...', 'dá pra imaginar...'), but any place, activity, creature, or theme used in such a comparison must come from THIS NPC's own personality, interests, and world — never a generic Stardew topic (mines, slimes, monsters, the saloon, chickens, crops) that this character would not naturally think about.";
+                + ". Safe natural wording for the CURRENT scene is: here, in this room, at home, inside, or outside. Unsafe as a current fact unless explicitly confirmed: 'in front of my motorcycle', 'by my computer', 'on my bed', 'at the beach', 'in the saloon', 'during band practice', or anything implying the farmer or NPC moved somewhere else. Hypothetical jokes or comparisons are allowed when clearly phrased as imagined or conditional situations, but any place, activity, creature, or theme used in such a comparison must come from THIS NPC's own personality, interests, and world — never a generic Stardew topic that this character would not naturally think about.";
         }
         private static string BuildTechnicalContextLabelInstruction(OutfitAiContext context)
         {

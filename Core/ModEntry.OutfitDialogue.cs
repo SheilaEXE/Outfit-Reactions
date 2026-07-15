@@ -37,7 +37,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+		if (ShouldDeferAutomaticOutfitReaction())
 		{
 			return false;
 		}
@@ -564,30 +564,8 @@ public sealed partial class ModEntry : Mod
 
 	private int GetActiveAiTimeoutSecondsForSafety()
 	{
-		string text = Config?.GetActiveProvider() ?? "DeepSeek";
-		if (1 == 0)
-		{
-		}
-		int num = text switch
-		{
-			"Gemini" => Config.GeminiAiTimeoutSeconds, 
-			"OpenAI" => Config.OpenAiAiTimeoutSeconds, 
-			"OpenRouter" => Config.OpenRouterAiTimeoutSeconds, 
-			"Mistral" => Config.MistralAiTimeoutSeconds, 
-			"Groq" => Config.GroqAiTimeoutSeconds, 
-			"Together" => Config.TogetherAiTimeoutSeconds, 
-			"Anthropic" => Config.AnthropicAiTimeoutSeconds,
-			"xAI" => Config.XAiTimeoutSeconds,
-			"Cerebras" => Config.CerebrasAiTimeoutSeconds,
-			"Perplexity" => Config.PerplexityAiTimeoutSeconds,
-			"Local" => Config.LocalAiTimeoutSeconds, 
-			_ => Config.DeepSeekAiTimeoutSeconds, 
-		};
-		if (1 == 0)
-		{
-		}
-		int value = num;
-		return Math.Clamp(value, 3, 120);
+		ActiveAiSettings settings = ActiveAiSettingsResolver.Resolve(Config);
+		return Math.Clamp(settings.TimeoutSeconds, 3, 120);
 	}
 
 	private bool IsOwnAiWaitingStateActiveFor(NPC npc)
@@ -656,7 +634,7 @@ public sealed partial class ModEntry : Mod
 			{
 				continue;
 			}
-			NPC characterFromName = Game1.getCharacterFromName(outfitNpcName, true, false);
+			NPC characterFromName = NpcContextResolver.Resolve(outfitNpcName);
 			if (pending == null || characterFromName == null || pending.Task == null)
 			{
 				aiGenerationCoordinator.RemoveOutfit(outfitNpcName);
@@ -740,6 +718,14 @@ public sealed partial class ModEntry : Mod
 		if (Game1.player == null || ((Character)npc).currentLocation != ((Character)Game1.player).currentLocation)
 		{
 			((Mod)this).Monitor.Log(" AI outfit compliment for " + pending.NpcName + " finished, but the player is no longer nearby. Discarding it.", (LogLevel)0);
+			if (pending.IsSpouseDialogue)
+			{
+				KeepSpouseOutfitNoticePendingAfterAiFailure(npc, "the player was no longer nearby when background AI generation finished.");
+			}
+			else
+			{
+				otherNpcClothesReactionSystem?.NotifyOwnAiFinalDialogueFailed(npc);
+			}
 			return;
 		}
 		bool flag = false;
@@ -1190,7 +1176,7 @@ public sealed partial class ModEntry : Mod
 			{
 				continue;
 			}
-			NPC characterFromName = Game1.getCharacterFromName(replyNpcName, true, false);
+			NPC characterFromName = NpcContextResolver.Resolve(replyNpcName);
 			if (pending == null || characterFromName == null || pending.Task == null)
 			{
 				FinishPlayerReplyInteraction(pending?.OnFinished, pending?.NpcName);
