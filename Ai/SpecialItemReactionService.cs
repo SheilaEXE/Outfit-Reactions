@@ -26,8 +26,15 @@ namespace OutfitReactions.Ai
         private readonly IModHelper helper;
         private readonly IMonitor monitor;
         private SpecialItemDefinitions definitions;
-        private DateTime lastLoadedUtc = DateTime.MinValue;
         private bool missingFileLogged;
+        private readonly List<string> entryLookupOrder = new();
+        private readonly Dictionary<string, List<string>> globalRulesByEntryId = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> sourceByEntryId = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> ProtectedSecretEntryIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "MayorsPurpleShorts",
+            "MayorsPurpleShortsHat"
+        };
         // Cache of which optional mod IDs are currently installed.
         private readonly HashSet<string> installedModIds = new(StringComparer.OrdinalIgnoreCase);
         private bool installedModIdsLoaded;
@@ -47,6 +54,7 @@ namespace OutfitReactions.Ai
             public string ReactionContext { get; set; } = "";
             public bool HasSecret { get; set; }
             public string SecretId { get; set; } = "";
+            public bool NpcKnowsSecret { get; set; }
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -96,7 +104,8 @@ namespace OutfitReactions.Ai
                         MatchedName = candidateName,
                         ReactionContext = context,
                         HasSecret = !string.IsNullOrWhiteSpace(entry.SecretId),
-                        SecretId = entry.SecretId ?? ""
+                        SecretId = entry.SecretId ?? "",
+                        NpcKnowsSecret = npcKnowsSecret
                     };
 
                     return true;
@@ -180,6 +189,10 @@ namespace OutfitReactions.Ai
         {
             installedModIds.Clear();
             installedModIdsLoaded = false;
+            definitions = null;
+            entryLookupOrder.Clear();
+            globalRulesByEntryId.Clear();
+            sourceByEntryId.Clear();
         }
 
         public bool HasEntryForItem(string itemName, string itemType)
@@ -284,28 +297,33 @@ namespace OutfitReactions.Ai
                 return false;
 
             string nameLower = NormalizeForMatch(itemName);
-            string typeLower = (itemType ?? "").Trim().ToLowerInvariant();
+            string typeLower = NormalizeItemType(itemType);
 
-            foreach (var pair in data.Items)
+            IEnumerable<string> orderedIds = entryLookupOrder.Count > 0
+                ? entryLookupOrder
+                : data.Items.Keys;
+
+            foreach (string id in orderedIds)
             {
-                SpecialItemEntry candidate = pair.Value;
+                if (!data.Items.TryGetValue(id, out SpecialItemEntry candidate))
+                    continue;
                 if (candidate == null)
                     continue;
 
                 // Optional type filter: if entry declares ItemType, it must match.
                 if (!string.IsNullOrWhiteSpace(candidate.ItemType)
                     && !string.IsNullOrWhiteSpace(typeLower)
-                    && !candidate.ItemType.Trim().ToLowerInvariant().Equals(typeLower, StringComparison.OrdinalIgnoreCase))
+                    && !NormalizeItemType(candidate.ItemType).Equals(typeLower, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                foreach (string matchName in GetAllMatchNames(pair.Key, candidate))
+                foreach (string matchName in GetAllMatchNames(id, candidate))
                 {
                     if (string.IsNullOrWhiteSpace(matchName))
                         continue;
 
                     if (NormalizeForMatch(matchName).Equals(nameLower, StringComparison.OrdinalIgnoreCase))
                     {
-                        entryId = pair.Key;
+                        entryId = id;
                         entry = candidate;
                         return true;
                     }
@@ -315,14 +333,25 @@ namespace OutfitReactions.Ai
             return false;
         }
 
+        private static string NormalizeItemType(string itemType)
+        {
+            string normalized = (itemType ?? "").Trim().ToLowerInvariant();
+            return normalized == "boots" || normalized == "shoe" ? "shoes" : normalized;
+        }
+
         private string BuildPromptContext(string entryId, SpecialItemEntry entry, string npcName, string targetLanguage, bool npcKnowsSecret, bool wasRemoved = false)
         {
             List<string> parts = new();
+            bool protectUnknownSecret = !string.IsNullOrWhiteSpace(entry.SecretId) && !npcKnowsSecret;
 
-            parts.Add("special item: " + StringUtils.FirstNonEmpty(entry.DisplayName, entryId));
+            if (protectUnknownSecret)
+                parts.Add("special item: an unidentified intimate garment of unknown ownership");
+            else
+                parts.Add("special item: " + StringUtils.FirstNonEmpty(entry.DisplayName, entryId));
 
             string localized = GetLocalizedName(entry, targetLanguage);
-            if (!string.IsNullOrWhiteSpace(localized)
+            if (!protectUnknownSecret
+                && !string.IsNullOrWhiteSpace(localized)
                 && !localized.Equals(entry.DisplayName, StringComparison.OrdinalIgnoreCase))
                 parts.Add("localized name: " + localized);
 
@@ -347,6 +376,11 @@ namespace OutfitReactions.Ai
             if (!string.IsNullOrWhiteSpace(reactionHint))
                 parts.Add("reaction hint: " + reactionHint);
 
+            if (protectUnknownSecret)
+            {
+                parts.Add("secret boundary: this NPC can clearly recognize that the garment looks like bright purple personal underwear and should react strongly to how strange, intimate, embarrassing, absurd, or inappropriate it is; however, they do NOT know its owner or origin. Do not identify or guess Lewis, the mayor, Marnie, their relationship, where the garment was found, or any hidden backstory. Base-game lore and model prior knowledge must not reveal the secret before the farmer explicitly tells this NPC");
+            }
+
             if (npcKnowsSecret && !string.IsNullOrWhiteSpace(entry.SecretId))
                 parts.Add("secret context: this NPC already knows the secret behind this item — factor that prior knowledge into the reaction");
 
@@ -355,10 +389,12 @@ namespace OutfitReactions.Ai
             if (wasRemoved)
                 parts.Add("item status: JUST REMOVED — the farmer is no longer wearing this item. React to its absence (relief, disappointment, curiosity about why it was taken off, etc.), not to it being worn right now. Do NOT describe or react as if the item is currently equipped.");
 
-            SpecialItemDefinitions data = definitions ?? new SpecialItemDefinitions();
-            if (data.GlobalRules != null && data.GlobalRules.Count > 0)
+            List<string> applicableRules = globalRulesByEntryId.TryGetValue(entryId, out List<string> entryRules)
+                ? entryRules
+                : definitions?.GlobalRules;
+            if (applicableRules != null && applicableRules.Count > 0)
             {
-                string rules = string.Join(" ", data.GlobalRules.Take(3).Where(r => !string.IsNullOrWhiteSpace(r)));
+                string rules = string.Join(" ", applicableRules.Take(3).Where(r => !string.IsNullOrWhiteSpace(r)));
                 if (!string.IsNullOrWhiteSpace(rules))
                     parts.Add("global rules: " + rules);
             }
@@ -368,6 +404,9 @@ namespace OutfitReactions.Ai
 
         private SpecialItemDefinitions LoadDefinitions()
         {
+            if (definitions != null)
+                return definitions;
+
             string path = Path.Combine(helper.DirectoryPath, "assets", "special-reactions", "luckypurpleshorts.json");
             try
             {
@@ -382,10 +421,6 @@ namespace OutfitReactions.Ai
                     return null;
                 }
 
-                DateTime modifiedUtc = File.GetLastWriteTimeUtc(path);
-                if (definitions != null && modifiedUtc == lastLoadedUtc)
-                    return definitions;
-
                 JsonSerializerOptions opts = new()
                 {
                     PropertyNameCaseInsensitive = true,
@@ -393,21 +428,139 @@ namespace OutfitReactions.Ai
                     AllowTrailingCommas = true
                 };
 
-                string json = File.ReadAllText(path, Encoding.UTF8);
-                definitions = JsonSerializer.Deserialize<SpecialItemDefinitions>(json, opts) ?? new SpecialItemDefinitions();
-                lastLoadedUtc = modifiedUtc;
+                definitions = ReadDefinitionsFile(path, opts);
                 missingFileLogged = false;
 
+                definitions.Items ??= new Dictionary<string, SpecialItemEntry>(StringComparer.OrdinalIgnoreCase);
+                foreach (var pair in definitions.Items)
+                {
+                    entryLookupOrder.Add(pair.Key);
+                    globalRulesByEntryId[pair.Key] = definitions.GlobalRules ?? new List<string>();
+                    sourceByEntryId[pair.Key] = ModEntry.Instance?.ModManifest?.UniqueID ?? "NatrollEXE.OutfitReactions";
+                }
+
+                LoadOwnedContentPackDefinitions(opts);
+
+                // The two purple-shorts entries always stay first so a differently named pack
+                // entry cannot accidentally bypass their protected secret behavior.
+                foreach (string protectedId in ProtectedSecretEntryIds.Reverse())
+                {
+                    if (!definitions.Items.ContainsKey(protectedId))
+                        continue;
+                    entryLookupOrder.RemoveAll(id => id.Equals(protectedId, StringComparison.OrdinalIgnoreCase));
+                    entryLookupOrder.Insert(0, protectedId);
+                }
+
                 int count = definitions.Items?.Count ?? 0;
-                if (ModEntry.DebugLog) monitor?.Log($"[SPECIAL ITEM] Loaded {count} special item definitions.", LogLevel.Info);
+                if (ModEntry.DebugLog) monitor?.Log($"[SPECIAL ITEM] Loaded {count} merged special item definitions (built-in + content packs).", LogLevel.Info);
                 return definitions;
             }
             catch (Exception ex)
             {
                 monitor?.Log("[SPECIAL ITEM] Failed to load luckypurpleshorts.json: " + ex.Message, LogLevel.Warn);
                 definitions = null;
-                lastLoadedUtc = DateTime.MinValue;
                 return null;
+            }
+        }
+
+        private static SpecialItemDefinitions ReadDefinitionsFile(string path, JsonSerializerOptions options)
+        {
+            string json = File.ReadAllText(path, Encoding.UTF8);
+            return JsonSerializer.Deserialize<SpecialItemDefinitions>(json, options) ?? new SpecialItemDefinitions();
+        }
+
+        private void LoadOwnedContentPackDefinitions(JsonSerializerOptions options)
+        {
+            IEnumerable<IContentPack> packs = helper.ContentPacks.GetOwned()
+                .OrderBy(pack => pack.Manifest?.UniqueID ?? "", StringComparer.OrdinalIgnoreCase);
+
+            foreach (IContentPack pack in packs)
+            {
+                string folder = Path.Combine(pack.DirectoryPath, "assets", "special-reactions");
+                if (!Directory.Exists(folder))
+                    continue;
+
+                foreach (string file in Directory.EnumerateFiles(folder, "*.json", SearchOption.AllDirectories)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        SpecialItemDefinitions packDefinitions = ReadDefinitionsFile(file, options);
+                        string sourceId = pack.Manifest?.UniqueID ?? Path.GetFileName(pack.DirectoryPath);
+
+                        foreach (var pair in packDefinitions.Items ?? new Dictionary<string, SpecialItemEntry>())
+                        {
+                            if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value == null)
+                                continue;
+
+                            SpecialItemEntry externalEntry = pair.Value;
+                            StripExternalSecretFields(externalEntry);
+
+                            if (ProtectedSecretEntryIds.Contains(pair.Key)
+                                && definitions.Items.TryGetValue(pair.Key, out SpecialItemEntry protectedEntry))
+                            {
+                                RestoreProtectedSecretFields(protectedEntry, externalEntry);
+                            }
+
+                            if (sourceByEntryId.TryGetValue(pair.Key, out string previousSource))
+                            {
+                                monitor?.Log($"[SPECIAL ITEM] Content pack '{sourceId}' overrides entry '{pair.Key}' from '{previousSource}'.", LogLevel.Info);
+                            }
+
+                            definitions.Items[pair.Key] = externalEntry;
+                            globalRulesByEntryId[pair.Key] = packDefinitions.GlobalRules ?? new List<string>();
+                            sourceByEntryId[pair.Key] = sourceId;
+                            entryLookupOrder.RemoveAll(id => id.Equals(pair.Key, StringComparison.OrdinalIgnoreCase));
+                            entryLookupOrder.Insert(0, pair.Key);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        monitor?.Log($"[SPECIAL ITEM] Failed to load content-pack file '{file}': {ex.Message}", LogLevel.Warn);
+                    }
+                }
+            }
+        }
+
+        private static void StripExternalSecretFields(SpecialItemEntry entry)
+        {
+            entry.SecretId = "";
+            entry.SecretRevealMessage = "";
+            entry.SecretReactionHint = "";
+
+            foreach (SpecialItemNpcOverride npcOverride in entry.NpcOverrides?.Values ?? Enumerable.Empty<SpecialItemNpcOverride>())
+            {
+                if (npcOverride == null)
+                    continue;
+                npcOverride.KnowsSecretByDefault = false;
+                npcOverride.SecretRevealable = false;
+                npcOverride.SecretReactionHint = "";
+            }
+        }
+
+        private static void RestoreProtectedSecretFields(SpecialItemEntry builtIn, SpecialItemEntry external)
+        {
+            external.SecretId = builtIn.SecretId;
+            external.SecretRevealMessage = builtIn.SecretRevealMessage;
+            external.SecretReactionHint = builtIn.SecretReactionHint;
+
+            external.NpcOverrides ??= new Dictionary<string, SpecialItemNpcOverride>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in builtIn.NpcOverrides ?? new Dictionary<string, SpecialItemNpcOverride>())
+            {
+                if (pair.Value == null)
+                    continue;
+
+                if (!external.NpcOverrides.TryGetValue(pair.Key, out SpecialItemNpcOverride target) || target == null)
+                {
+                    target = new SpecialItemNpcOverride();
+                    external.NpcOverrides[pair.Key] = target;
+                }
+
+                target.KnowsSecretByDefault = pair.Value.KnowsSecretByDefault;
+                target.SecretRevealable = pair.Value.SecretRevealable;
+                target.SecretReactionHint = pair.Value.SecretReactionHint;
+                if (string.IsNullOrWhiteSpace(target.ReactionHint))
+                    target.ReactionHint = pair.Value.ReactionHint;
             }
         }
 
@@ -428,7 +581,7 @@ namespace OutfitReactions.Ai
                 foreach (string v in entry.MatchIds)
                     yield return v;
 
-            // ConditionalMatchNames: only active if the required mod is installed.
+            // Conditional matches are only active if the required mod is installed.
             if (entry?.ConditionalMatchNames != null)
             {
                 foreach (var conditional in entry.ConditionalMatchNames)
@@ -437,6 +590,9 @@ namespace OutfitReactions.Ai
                         continue;
                     if (conditional.MatchNames != null)
                         foreach (string v in conditional.MatchNames)
+                            yield return v;
+                    if (conditional.MatchIds != null)
+                        foreach (string v in conditional.MatchIds)
                             yield return v;
                 }
             }
@@ -534,6 +690,7 @@ namespace OutfitReactions.Ai
         {
             public string RequiredModId { get; set; } = "";
             public List<string> MatchNames { get; set; } = new();
+            public List<string> MatchIds { get; set; } = new();
         }
 
         private sealed class SpecialItemNpcOverride

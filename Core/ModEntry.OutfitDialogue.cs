@@ -37,7 +37,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (Game1.eventUp)
+		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
 		{
 			return false;
 		}

@@ -11,15 +11,16 @@
   "Items": {
     "MayorsPurpleShorts": {
       "DisplayName": "Mayor's Purple Shorts",
-      "LocalizedNames": {
-        "pt-BR": "Short Roxo do Prefeito"
-      },
       "MatchNames": [
         "Mayor's Purple Shorts",
         "Lucky Purple Shorts",
         "Trimmed Lucky Purple Shorts",
         "Purple Shorts",
         "Mayor's Shorts"
+      ],
+      "MatchIds": [
+        "(P)15",
+        "15"
       ],
       "ItemType": "Pants",
       "ReactionPriority": "VeryHigh",
@@ -44,18 +45,11 @@
     },
     "MayorsPurpleShortsHat": {
       "DisplayName": "Mayor's Purple Shorts (Hat)",
-      "LocalizedNames": {
-        "pt-BR": "Short Roxo do Prefeito (Chapéu)"
-      },
       "MatchNames": [
         "Mayor's Purple Shorts Hat",
         "Purple Shorts Hat",
         "Mayor Shorts Hat",
         "Shorts Hat"
-      ],
-      "MatchIds": [
-        "(H)39",
-        "39"
       ],
       "ItemType": "Hat",
       "ReactionPriority": "VeryHigh",
@@ -80,6 +74,10 @@
       "ConditionalMatchNames": [
         {
           "RequiredModId": "PakRT.MayorsShorts13",
+          "MatchIds": [
+            "(H)39",
+            "39"
+          ],
           "MatchNames": [
             "Lucky Purple Short",
             "39"

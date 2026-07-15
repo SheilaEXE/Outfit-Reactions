@@ -11,7 +11,7 @@ Created by **NatrollEXE**.
 ## ✨ Features
 
 * **AI-powered reactions**: spouses and nearby NPCs react to your current outfit using AI, generating unique lines whenever you change clothes.
-* **Vanilla hat and pants support**: reacts to Fashion Sense items as well as some common vanilla hats.
+* **Vanilla and modded clothing support**: content packs can add focused reactions for hats, shirts, pants, and shoes from the base game, other mods, or Fashion Sense.
 * **Special items with secrets**: a special-item system (`assets/special-reactions`) for creating unique reactions to memorable clothing pieces. Currently includes the Lucky Purple Shorts.
 * **Outfit memory**: NPCs remember outfits and special items they have seen before, reacting with familiarity instead of repeating a first-time reaction.
 * **Weather and location awareness**: reactions can consider whether the NPC is indoors or outdoors, whether it is sunny or raining, the time of day, and festival dates.
@@ -46,8 +46,83 @@ The mod can be configured through Generic Mod Config Menu, including:
 Outfit Reactions can be extended through its own content packs:
 
 * `assets/npc-characteristics/*.json` — define an NPC's personality and speaking style to shape their reactions.
-* `assets/special-reactions/*.json` — define special clothing items, hats, or pants with custom reactions and secrets.
+* `assets/special-reactions/*.json` — define focused reactions for hats, shirts, pants, and shoes. The secret system remains exclusive to Mayor Lewis's purple shorts.
 * `assets/prompts/prompts.json` — customize the rules and instructions sent to the AI model.
+
+### Adding clothing reactions with a content pack
+
+Authors can add reactions without editing or replacing any Outfit Reactions files. Create a normal SMAPI content pack with this structure:
+
+```text
+[OR] My Clothing Reactions/
+├── manifest.json
+└── assets/
+    └── special-reactions/
+        └── items.json
+```
+
+The content pack's `manifest.json` should point to Outfit Reactions:
+
+```json
+{
+  "Name": "My Clothing Reactions",
+  "Author": "YourName",
+  "Version": "1.0.0",
+  "Description": "Adds custom clothing reactions to Outfit Reactions.",
+  "UniqueID": "YourName.MyClothingReactions",
+  "ContentPackFor": {
+    "UniqueID": "NatrollEXE.OutfitReactions"
+  }
+}
+```
+
+Then add one or more `.json` files inside `assets/special-reactions`. File names are flexible, so a pack may keep hats, dresses, and shoes in separate files:
+
+```json
+{
+  "FormatVersion": 1,
+  "GlobalRules": [
+    "React to this item naturally in the NPC's own voice."
+  ],
+  "Items": {
+    "YourName.RubyBoots": {
+      "DisplayName": "Ruby Boots",
+      "LocalizedNames": {
+        "pt-BR": "Botas de Rubi"
+      },
+      "MatchNames": [
+        "Ruby Boots"
+      ],
+      "MatchIds": [
+        "YourMod_RubyBoots",
+        "(B)YourMod_RubyBoots"
+      ],
+      "ItemType": "Shoes",
+      "ReactionPriority": "High",
+      "CoreDescription": "Bright red boots that look unusually dramatic and expensive.",
+      "ReactionHint": "The NPC may find the boots flashy, impressive, excessive, or impractical depending on their personality.",
+      "NpcOverrides": {
+        "Emily": {
+          "ReactionHint": "Emily is especially interested in their bold color and unusual style."
+        }
+      }
+    }
+  }
+}
+```
+
+Supported `ItemType` values are:
+
+* `Hat`
+* `Shirt`
+* `Pants`
+* `Shoes` (`Boots` is also accepted as an alias)
+
+`MatchIds` is the most reliable option for modded items. It may contain an `ItemId`, a `QualifiedItemId`, or an exact Fashion Sense appearance ID. `MatchNames` can contain display names and internal names, including localized alternatives.
+
+Content-pack definitions take priority over Outfit Reactions' built-in visual reactions. To intentionally replace an existing definition, use the same entry ID or match the same equipped item. If two content packs define the same entry ID, Outfit Reactions logs which pack won.
+
+The secret and reveal-choice system is reserved for Mayor Lewis's purple shorts. Secret-related fields in third-party content packs are ignored; packs can still customize the shorts' visible reaction while the original Lewis and Marnie secret behavior remains protected.
 
 ## 📜 License
 

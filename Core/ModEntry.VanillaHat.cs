@@ -75,6 +75,28 @@ public sealed partial class ModEntry : Mod
 		return !IsEmptyFashionSenseValue(value) && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(value);
 	}
 
+	private bool IsFashionSenseShirtCoveringVanilla()
+	{
+		string fsModData = GetFsModData("FashionSense.CustomShirt.Id");
+		if (!IsEmptyFashionSenseValue(fsModData))
+		{
+			return true;
+		}
+		string fsAppearanceId = GetFsAppearanceId(IFashionSenseApi.Type.Shirt);
+		return !IsEmptyFashionSenseValue(fsAppearanceId) && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(fsAppearanceId);
+	}
+
+	private bool IsFashionSenseShoesCoveringVanilla()
+	{
+		string fsModData = GetFsModData("FashionSense.CustomShoes.Id");
+		if (!IsEmptyFashionSenseValue(fsModData))
+		{
+			return true;
+		}
+		string fsAppearanceId = GetFsAppearanceId(IFashionSenseApi.Type.Shoes);
+		return !IsEmptyFashionSenseValue(fsAppearanceId) && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(fsAppearanceId);
+	}
+
 	private string GetVisibleVanillaHatId()
 	{
 		if (IsFashionSenseHatCoveringVanilla())
@@ -249,6 +271,40 @@ public sealed partial class ModEntry : Mod
 		}
 	}
 
+	private string GetCurrentVanillaShirtName()
+	{
+		try
+		{
+			if (IsFashionSenseShirtCoveringVanilla())
+			{
+				return "";
+			}
+			Clothing shirt = Game1.player?.shirtItem?.Value;
+			return shirt == null ? "" : (StringUtils.FirstNonEmpty(((Item)shirt).DisplayName, ((Item)shirt).Name) ?? "");
+		}
+		catch
+		{
+			return "";
+		}
+	}
+
+	private string GetCurrentVanillaShoesName()
+	{
+		try
+		{
+			if (IsFashionSenseShoesCoveringVanilla())
+			{
+				return "";
+			}
+			Boots shoes = Game1.player?.boots?.Value;
+			return shoes == null ? "" : (StringUtils.FirstNonEmpty(((Item)shoes).DisplayName, ((Item)shoes).Name) ?? "");
+		}
+		catch
+		{
+			return "";
+		}
+	}
+
 	private string GetCurrentVanillaPantsDebugString()
 	{
 		try
@@ -288,6 +344,41 @@ public sealed partial class ModEntry : Mod
 		{
 		}
 		return vanillaPantsSpecialItemCandidatesFromName;
+	}
+
+	private List<string> GetCurrentVanillaShirtSpecialItemCandidates(string displayName)
+	{
+		try
+		{
+			return GetEquippedItemSpecialReactionCandidates(Game1.player?.shirtItem?.Value, displayName);
+		}
+		catch
+		{
+			return GetEquippedItemSpecialReactionCandidates(null, displayName);
+		}
+	}
+
+	private List<string> GetCurrentVanillaShoesSpecialItemCandidates(string displayName)
+	{
+		try
+		{
+			return GetEquippedItemSpecialReactionCandidates(Game1.player?.boots?.Value, displayName);
+		}
+		catch
+		{
+			return GetEquippedItemSpecialReactionCandidates(null, displayName);
+		}
+	}
+
+	private static List<string> GetEquippedItemSpecialReactionCandidates(Item item, string displayName)
+	{
+		List<string> candidates = new List<string>();
+		AddSpecialItemCandidate(candidates, displayName);
+		AddSpecialItemCandidate(candidates, item?.DisplayName);
+		AddSpecialItemCandidate(candidates, item?.Name);
+		AddSpecialItemCandidate(candidates, item?.ItemId);
+		AddSpecialItemCandidate(candidates, item?.QualifiedItemId);
+		return candidates;
 	}
 
 	private List<string> GetCurrentVisibleVanillaHatSpecialItemCandidates(string displayName)
@@ -397,7 +488,8 @@ public sealed partial class ModEntry : Mod
 			ReactionContext = resolved.ReactionContext,
 			WasRemoved = wasRemoved,
 			HasSecret = resolved.HasSecret,
-			SecretId = (resolved.SecretId ?? "")
+			SecretId = (resolved.SecretId ?? ""),
+			NpcKnowsSecret = resolved.NpcKnowsSecret
 		};
 		notice.MemoryHint = BuildSpecialItemMemoryContext(npc, notice);
 		return true;
@@ -469,6 +561,69 @@ public sealed partial class ModEntry : Mod
 				return true;
 			}
 		}
+		string currentVanillaShirtName = GetCurrentVanillaShirtName();
+		if (!string.IsNullOrWhiteSpace(currentVanillaShirtName)
+			&& TryResolveSpecialItemCandidates(GetCurrentVanillaShirtSpecialItemCandidates(currentVanillaShirtName), "Shirt", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
+		if (changeInfo.VanillaShirtChanged && !string.IsNullOrWhiteSpace(changeInfo.PreviousVanillaShirtName))
+		{
+			List<string> previousShirtCandidates = CloneSpecialItemCandidates(changeInfo.PreviousVanillaShirtSpecialItemCandidates);
+			AddSpecialItemCandidate(previousShirtCandidates, changeInfo.PreviousVanillaShirtName);
+			if (TryResolveSpecialItemCandidates(previousShirtCandidates, "Shirt", npc, wasRemoved: true, out notice))
+			{
+				if (requireNpcMemoryForRemoval && !HasSpecialItemMemory(npc, notice))
+				{
+					notice = null;
+					return false;
+				}
+				return true;
+			}
+		}
+
+		string currentVanillaShoesName = GetCurrentVanillaShoesName();
+		if (!string.IsNullOrWhiteSpace(currentVanillaShoesName)
+			&& TryResolveSpecialItemCandidates(GetCurrentVanillaShoesSpecialItemCandidates(currentVanillaShoesName), "Shoes", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
+		if (changeInfo.VanillaShoesChanged && !string.IsNullOrWhiteSpace(changeInfo.PreviousVanillaShoesName))
+		{
+			List<string> previousShoesCandidates = CloneSpecialItemCandidates(changeInfo.PreviousVanillaShoesSpecialItemCandidates);
+			AddSpecialItemCandidate(previousShoesCandidates, changeInfo.PreviousVanillaShoesName);
+			if (TryResolveSpecialItemCandidates(previousShoesCandidates, "Shoes", npc, wasRemoved: true, out notice))
+			{
+				if (requireNpcMemoryForRemoval && !HasSpecialItemMemory(npc, notice))
+				{
+					notice = null;
+					return false;
+				}
+				return true;
+			}
+		}
+
+		// Content packs can target Fashion Sense pieces by their appearance IDs too.
+		if (!string.IsNullOrWhiteSpace(changeInfo.NewHatId)
+			&& TryResolveSpecialItemCandidates(new[] { changeInfo.NewHatId }, "Hat", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
+		if (!string.IsNullOrWhiteSpace(changeInfo.NewShirtId)
+			&& TryResolveSpecialItemCandidates(new[] { changeInfo.NewShirtId }, "Shirt", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
+		if (!string.IsNullOrWhiteSpace(changeInfo.NewPantsId)
+			&& TryResolveSpecialItemCandidates(new[] { changeInfo.NewPantsId }, "Pants", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
+		if (!string.IsNullOrWhiteSpace(changeInfo.NewShoesId)
+			&& TryResolveSpecialItemCandidates(new[] { changeInfo.NewShoesId }, "Shoes", npc, wasRemoved: false, out notice))
+		{
+			return true;
+		}
 		return false;
 	}
 
@@ -520,7 +675,9 @@ public sealed partial class ModEntry : Mod
 		{
 			return "";
 		}
-		string text = StringUtils.FirstNonEmpty(notice.DisplayName, notice.MatchedName, notice.EntryId) ?? "this special item";
+		string text = notice.HasSecret && !notice.NpcKnowsSecret
+			? "this unusual purple intimate garment"
+			: StringUtils.FirstNonEmpty(notice.DisplayName, notice.MatchedName, notice.EntryId) ?? "this special item";
 		return (specialItemSeenCount == 1) ? ("This NPC has seen the farmer wear " + text + " before (1 time). They may recognize it with familiarity.") : $"This NPC has seen the farmer wear {text} before ({specialItemSeenCount} times). They should recognize it as something they've seen before.";
 	}
 

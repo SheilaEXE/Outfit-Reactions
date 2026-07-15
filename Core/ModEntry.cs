@@ -164,6 +164,30 @@ public sealed partial class ModEntry : Mod
 
 		public List<string> NewVanillaPantsSpecialItemCandidates = new List<string>();
 
+		public bool VanillaShirtChanged;
+
+		public bool VanillaShirtRemoved;
+
+		public string PreviousVanillaShirtName;
+
+		public string NewVanillaShirtName;
+
+		public List<string> PreviousVanillaShirtSpecialItemCandidates = new List<string>();
+
+		public List<string> NewVanillaShirtSpecialItemCandidates = new List<string>();
+
+		public bool VanillaShoesChanged;
+
+		public bool VanillaShoesRemoved;
+
+		public string PreviousVanillaShoesName;
+
+		public string NewVanillaShoesName;
+
+		public List<string> PreviousVanillaShoesSpecialItemCandidates = new List<string>();
+
+		public List<string> NewVanillaShoesSpecialItemCandidates = new List<string>();
+
 		public string NewShirtId;
 
 		public string NewPantsId;
@@ -201,11 +225,23 @@ public sealed partial class ModEntry : Mod
 			{
 				num++;
 			}
+			if (VanillaShirtChanged)
+			{
+				num++;
+			}
+			if (VanillaShoesChanged)
+			{
+				num++;
+			}
 			if (ChangedSleeves)
 			{
 				num++;
 			}
 			if (ChangedOutfit)
+			{
+				num++;
+			}
+			if (ChangedShoes)
 			{
 				num++;
 			}
@@ -234,6 +270,14 @@ public sealed partial class ModEntry : Mod
 		public string VanillaPants;
 
 		public List<string> VanillaPantsSpecialItemCandidates = new List<string>();
+
+		public string VanillaShirt;
+
+		public List<string> VanillaShirtSpecialItemCandidates = new List<string>();
+
+		public string VanillaShoes;
+
+		public List<string> VanillaShoesSpecialItemCandidates = new List<string>();
 
 		public string Shirt;
 
@@ -284,6 +328,8 @@ public sealed partial class ModEntry : Mod
 
 		public string SecretId { get; set; } = "";
 
+		public bool NpcKnowsSecret { get; set; }
+
 		public bool IsValid => !string.IsNullOrWhiteSpace(EntryId) && !string.IsNullOrWhiteSpace(ReactionContext);
 	}
 
@@ -308,6 +354,14 @@ public sealed partial class ModEntry : Mod
 	private string lastKnownVanillaPantsName;
 
 	private List<string> lastKnownVanillaPantsSpecialItemCandidates = new List<string>();
+
+	private string lastKnownVanillaShirtName;
+
+	private List<string> lastKnownVanillaShirtSpecialItemCandidates = new List<string>();
+
+	private string lastKnownVanillaShoesName;
+
+	private List<string> lastKnownVanillaShoesSpecialItemCandidates = new List<string>();
 
 	private readonly HashSet<string> loggedSpecialItemDebugKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -683,7 +737,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (Game1.eventUp)
+		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
 		{
 			return false;
 		}
@@ -755,7 +809,7 @@ public sealed partial class ModEntry : Mod
 		{
 			return false;
 		}
-		if (Game1.eventUp)
+		if (ShouldDeferOutfitReactionForActiveFestivalActivity())
 		{
 			return false;
 		}
@@ -809,9 +863,12 @@ public sealed partial class ModEntry : Mod
 		vanillaClothingTrackingInitialized = false;
 		lastKnownVanillaHatId = null;
 		lastKnownVanillaPantsName = null;
+		lastKnownVanillaShirtName = null;
+		lastKnownVanillaShoesName = null;
 		ResetClothesState(clearChangeFlag: true);
 		otherNpcClothesReactionSystem?.Reset();
 		outfitAiService?.LoadProfiles(quiet: true);
+		RearmCurrentAppearanceNoticeAfterLifecycleReset("loading the save");
 	}
 
 	private void OnDayStarted(object sender, DayStartedEventArgs e)
@@ -819,6 +876,7 @@ public sealed partial class ModEntry : Mod
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
 		otherNpcClothesReactionSystem?.Reset();
+		RearmCurrentAppearanceNoticeAfterLifecycleReset("starting a new day");
 		Farmer player = Game1.player;
 		if (player != null)
 		{
@@ -870,8 +928,12 @@ public sealed partial class ModEntry : Mod
 	{
 		//IL_0043: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0050: Unknown result type (might be due to invalid IL or missing references)
-		if (Context.IsWorldReady && Game1.player != null && Game1.currentLocation != null && Config.Enabled && Game1.activeClickableMenu == null && !Game1.eventUp && (SButtonExtensions.IsActionButton(e.Button) || SButtonExtensions.IsUseToolButton(e.Button)))
+		if (Context.IsWorldReady && Game1.player != null && Game1.currentLocation != null && Config.Enabled && Game1.activeClickableMenu == null && (SButtonExtensions.IsActionButton(e.Button) || SButtonExtensions.IsUseToolButton(e.Button)))
 		{
+			if (ShouldDeferOutfitReactionForActiveFestivalActivity())
+			{
+				return;
+			}
 			NPC npcBeingInteractedWith = GetNpcBeingInteractedWith();
 			if (npcBeingInteractedWith != null && !TryPrioritizeSpouseOutfitDialogueForClick(npcBeingInteractedWith))
 			{

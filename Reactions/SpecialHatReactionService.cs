@@ -34,10 +34,12 @@ namespace OutfitReactions.Ai
 
                 string displayName = (hat.DisplayName ?? "").Trim();
                 string internalName = (hat.Name ?? "").Trim();
+                string itemId = (hat.ItemId ?? "").Trim();
+                string qualifiedItemId = (hat.QualifiedItemId ?? "").Trim();
                 if (string.IsNullOrWhiteSpace(displayName) && string.IsNullOrWhiteSpace(internalName))
                     return "";
 
-                if (!TryFindHatEntry(displayName, internalName, out string entryId, out SpecialHatReactionEntry entry))
+                if (!TryFindHatEntry(displayName, internalName, itemId, qualifiedItemId, out string entryId, out SpecialHatReactionEntry entry))
                     return "";
 
                 return BuildPromptContext(entryId, entry, displayName, internalName, targetLanguage);
@@ -62,7 +64,7 @@ namespace OutfitReactions.Ai
                 if (string.IsNullOrWhiteSpace(removedHatName))
                     return "";
 
-                if (!TryFindHatEntry(removedHatName, removedHatName, out string entryId, out SpecialHatReactionEntry entry))
+                if (!TryFindHatEntry(removedHatName, removedHatName, "", "", out string entryId, out SpecialHatReactionEntry entry))
                     return "";
 
                 string baseContext = BuildPromptContext(entryId, entry, removedHatName, removedHatName, targetLanguage);
@@ -91,7 +93,7 @@ namespace OutfitReactions.Ai
             }
         }
 
-        private bool TryFindHatEntry(string displayName, string internalName, out string entryId, out SpecialHatReactionEntry entry)
+        private bool TryFindHatEntry(string displayName, string internalName, string itemId, string qualifiedItemId, out string entryId, out SpecialHatReactionEntry entry)
         {
             entryId = "";
             entry = null;
@@ -103,6 +105,25 @@ namespace OutfitReactions.Ai
             string displayNorm = NormalizeForMatch(displayName);
             string internalNorm = NormalizeForMatch(internalName);
 
+            // IDs are stable across languages, so they are the authoritative match.
+            foreach (var pair in data.Hats)
+            {
+                SpecialHatReactionEntry candidate = pair.Value;
+                if (candidate?.MatchIds == null)
+                    continue;
+
+                foreach (string id in candidate.MatchIds)
+                {
+                    if (EqualsExact(id, qualifiedItemId) || EqualsExact(id, itemId))
+                    {
+                        entryId = pair.Key;
+                        entry = candidate;
+                        return true;
+                    }
+                }
+            }
+
+            // Names remain as a compatibility fallback for older or cloned items.
             foreach (var pair in data.Hats)
             {
                 SpecialHatReactionEntry candidate = pair.Value;
@@ -124,6 +145,13 @@ namespace OutfitReactions.Ai
             }
 
             return false;
+        }
+
+        private static bool EqualsExact(string expected, string actual)
+        {
+            return !string.IsNullOrWhiteSpace(expected)
+                && !string.IsNullOrWhiteSpace(actual)
+                && expected.Trim().Equals(actual.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private SpecialHatReactionDefinitions LoadDefinitions()
@@ -395,6 +423,7 @@ namespace OutfitReactions.Ai
             public string DisplayName { get; set; } = "";
             public Dictionary<string, string> LocalizedNames { get; set; } = new(StringComparer.OrdinalIgnoreCase);
             public List<string> MatchNames { get; set; } = new();
+            public List<string> MatchIds { get; set; } = new();
             public string Category { get; set; } = "";
             public List<string> Tags { get; set; } = new();
             public int Intensity { get; set; }
