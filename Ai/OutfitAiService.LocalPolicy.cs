@@ -102,7 +102,10 @@ namespace OutfitReactions.Ai
             {
                 context.OutfitName,
                 context.SafeOutfitHint,
+                context.NoticedChangeName,
+                context.SafeNoticedChangeHint,
                 context.DialogueKey,
+                context.FashionSenseVisualSummary,
                 SanitizeThemeContextForPrompt(context.ThemeContext),
                 SanitizeThemeContextForPrompt(context.ThemePriorityInstruction)
             }).ToLowerInvariant();
@@ -160,32 +163,18 @@ namespace OutfitReactions.Ai
             if (context == null)
                 return "";
 
-            string allClues = string.Join(" ", new[]
-            {
-                context.OutfitName,
-                context.SafeOutfitHint,
-                context.DialogueKey,
-                SanitizeThemeContextForPrompt(context.ThemeContext)
-            }).ToLowerInvariant();
+            string actualSeason = NormalizeSeasonKey(context.Season);
+            HashSet<string> inferredSeasons = InferSeasonKeysFromOutfitClues(context);
+            bool hasClearSeasonMismatch = inferredSeasons.Count > 0
+                && !string.IsNullOrWhiteSpace(actualSeason)
+                && !inferredSeasons.Contains(actualSeason);
 
-            string season = (context.Season ?? "").ToLowerInvariant();
-            bool christmasOrWinter =
-                allClues.Contains("xmas") || allClues.Contains("christmas") || allClues.Contains("natal") ||
-                allClues.Contains("noel") || allClues.Contains("winter") || allClues.Contains("snow") ||
-                allClues.Contains("neve") || allClues.Contains("inverno");
-
-            if (christmasOrWinter && !season.Contains("winter"))
+            if (hasClearSeasonMismatch)
             {
-                return "Seasonal awareness: the outfit clue/theme suggests Christmas, snow, or winter, but the current season is " + context.Season + ". React to that mismatch in a human way if it fits the NPC: gentle teasing, surprise, amusement, curiosity, or finding it charmingly out of place. Do not force a line saying it also suits or works for the current season.";
+                return "MANDATORY OUT-OF-SEASON REACTION: reliable outfit clues give this look a clear seasonal or holiday identity that conflicts with the authoritative current in-game season, " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". The spoken reaction MUST explicitly notice that the look is early, late, out of season, or belongs to a different time of year. This mismatch must be a meaningful part of the reaction, not omitted, softened into generic praise, or reduced to an analytical fashion comment. Express it naturally through this NPC's established personality and relationship. Do not claim the related season, holiday, or event is currently happening, and never mention these instructions or technical labels.";
             }
 
-            bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
-            if (swimOrBeach && (season.Contains("winter") || (context.Weather ?? "").IndexOf("snow", StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                return "Seasonal awareness: the outfit clue/theme suggests swimwear or beachwear, but the current season/weather is cold or snowy. Mention that contrast naturally if it fits the character. Do not use technical labels like indoor or theme guidance.";
-            }
-
-            return "Season is flavor, not a requirement: only bring up the season/weather if it genuinely connects to what is worn (e.g. a coat on a chilly rainy spring day, a sundress in summer). NEVER force a seasonal tie-in, and NEVER add a closing line that says the look also suits, fits, or works for the current season just to wrap up — if there is no real connection, end without mentioning the season at all. Use location, weather, and time the same way: only when they add something real. Never repeat technical labels like indoor, outdoor, NPC room, dialogue category, or theme guidance.";
+            return "Season is flavor, not a requirement when the look has no clear seasonal conflict. Only bring up season or weather when it genuinely connects to what is worn. NEVER add a closing line saying the look also suits, fits, or works for the current season merely to wrap up; if there is no real connection, end without mentioning the season. Use location, weather, and time the same way: only when they add something real. Never repeat technical labels like indoor, outdoor, NPC room, dialogue category, or theme guidance.";
         }
 
         private static string BuildLanguageExampleLocalLine(string targetLanguage)
