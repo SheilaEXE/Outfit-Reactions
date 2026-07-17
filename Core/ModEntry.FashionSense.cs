@@ -270,6 +270,7 @@ public sealed partial class ModEntry : Mod
 	{
 		if (Context.IsWorldReady && Config.Enabled)
 		{
+			UpdateDayStartReactionGate();
 			UpdateReactionActiveModDataFlag();
 			RefreshCurrentSavedOutfitNoticeCandidate();
 			PollVanillaHatAndPantsChange();
@@ -277,6 +278,40 @@ public sealed partial class ModEntry : Mod
 			UpdatePendingOwnAiPlayerReplyGenerations();
 			otherNpcClothesReactionSystem?.Update();
 		}
+	}
+
+	private void BeginDayStartReactionGate()
+	{
+		waitingForDayStartFreeRoam = true;
+		dayStartFreeRoamTicks = 0;
+	}
+
+	private void UpdateDayStartReactionGate()
+	{
+		if (!waitingForDayStartFreeRoam)
+			return;
+
+		bool hasStableFreeRoamControl = Context.IsPlayerFree
+			&& Game1.player != null
+			&& Game1.CurrentEvent == null
+			&& !Game1.eventUp
+			&& Game1.currentMinigame == null
+			&& !Game1.freezeControls;
+
+		if (!hasStableFreeRoamControl)
+		{
+			dayStartFreeRoamTicks = 0;
+			return;
+		}
+
+		dayStartFreeRoamTicks++;
+		if (dayStartFreeRoamTicks < DayStartFreeRoamConfirmationTicks)
+			return;
+
+		waitingForDayStartFreeRoam = false;
+		dayStartFreeRoamTicks = 0;
+		if (DebugLog)
+			((Mod)this).Monitor.Log("[NPC OUTFIT] Stable free-roam control confirmed after day start; outfit reactions are enabled.", (LogLevel)2);
 	}
 
 	private void RefreshCurrentSavedOutfitNoticeCandidate()

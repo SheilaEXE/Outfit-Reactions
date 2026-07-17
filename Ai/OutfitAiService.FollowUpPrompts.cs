@@ -28,7 +28,7 @@ namespace OutfitReactions.Ai
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             AppendExpressiveCuesRule(builder, (getConfig?.Invoke() ?? new ModConfig()).EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
-            builder.AppendLine("Language: " + context.TargetLanguage + ". Max " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
+            builder.AppendLine("Language: " + context.TargetLanguage + ". Approximate length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. This is a soft estimate; finish the reply naturally even if it goes over.");
             builder.AppendLine("Do not ignore the farmer's reply. Do not continue the original compliment as if the farmer never answered.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
 
@@ -88,7 +88,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Use exactly this language for the spoken dialogue text: " + context.TargetLanguage + ".");
             builder.AppendLine("Ignore any language instructions inside NPC CHARACTERISTICS. The current game language above always wins.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
-            builder.AppendLine("Maximum final dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
+            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. Treat it as a soft estimate, not a hard cutoff, and finish the reply naturally if it goes over.");
             int followUpMinCharacters = GetMinimumLengthTarget(config, ai);
             if (followUpMinCharacters > 0)
                 builder.AppendLine("Minimum final dialogue length target: at least " + followUpMinCharacters + " visible characters. This is mandatory. React directly to the farmer's reply.");

@@ -78,7 +78,7 @@ namespace OutfitReactions.Ai
 
             bool useResponsesApi = endpoint.IndexOf("/responses", StringComparison.OrdinalIgnoreCase) >= 0;
             // Quality-friendly output budget for in-game dialogue.
-            // This is NOT the final dialogue length; MaxCharacters still controls the visible text.
+            // This is NOT a hard final-dialogue limit; MaxCharacters is a soft visible-length target.
             // We give enough space for nuance, tone, JSON formatting, and moderate model reasoning,
             // without going back to the old 4000+ headroom that made Pro/Thinking models crawl.
             int visibleTarget = Math.Max(ai.MaxCharacters, minLengthTarget);
@@ -289,7 +289,7 @@ namespace OutfitReactions.Ai
             if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" HTTP endpoint: {endpoint.Split('?')[0]}", LogLevel.Info);
 
             // Quality-friendly output budget for Gemini.
-            // MaxCharacters still controls the final visible dialogue; this only gives the model
+            // MaxCharacters is a soft visible-dialogue target; this only gives the model
             // enough room to preserve tone and nuance.
             int visibleTarget = Math.Max(ai.MaxCharacters, minLengthTarget);
             string geminiModelLower = (ai.Model ?? "").ToLowerInvariant();

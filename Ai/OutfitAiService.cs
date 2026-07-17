@@ -161,6 +161,7 @@ namespace OutfitReactions.Ai
             if (config.UseAiCache && memoryCache.TryGetValue(cacheKey, out string cached) && !string.IsNullOrWhiteSpace(cached))
             {
                 dialogue = cached;
+                RememberDialogueOpening(dialogue);
                 return true;
             }
 
@@ -191,6 +192,8 @@ namespace OutfitReactions.Ai
 
                 if (config.UseAiCache)
                     memoryCache[cacheKey] = dialogue;
+
+                RememberDialogueOpening(dialogue);
 
                 if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" Generated outfit compliment for {context.NpcName} using {ai.Provider}/{ai.Model}.", LogLevel.Info);
                 return true;
