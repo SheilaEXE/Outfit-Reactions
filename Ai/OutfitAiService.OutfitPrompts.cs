@@ -39,7 +39,6 @@ namespace OutfitReactions.Ai
             builder.AppendLine();
 
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
-            AppendRecentOpeningVarietyContext(builder);
             builder.AppendLine();
             int characterBlockEnd = builder.Length;
 
@@ -132,8 +131,6 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Private room/home context: farmer is in the speaking NPC's personal room = " + context.IsNpcRoom + "; farmer is in this marriage candidate's home/private indoor space = " + context.IsNpcPersonalLocation + ". Do not say NPC room or internal labels; phrase naturally if relevant.");
             builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ". Time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")") + ".");
             AppendWeatherLocationRule(builder, context);
-            if (!string.IsNullOrWhiteSpace(context.FestivalContext))
-                builder.AppendLine("Festival context: " + context.FestivalContext);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
                 builder.AppendLine("Farmer birthday context: " + context.FarmerBirthdayContext);
             string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
@@ -164,6 +161,13 @@ namespace OutfitReactions.Ai
             //    is now stated ONCE (previously each appeared multiple times).
             // ---------------------------------------------------------------
             AppendCompactReactionGuidance(builder, context);
+
+            // Keep the live festival as the final semantic authority. Generic theme,
+            // occasion, and seasonal guidance above must not override an active in-game
+            // festival or reassign a fitting look to a different real-world occasion.
+            if (!string.IsNullOrWhiteSpace(context.FestivalContext))
+                builder.AppendLine("Festival context (final scene authority): " + context.FestivalContext);
+            AppendRecentOpeningVarietyContext(builder);
 
             // ---------------------------------------------------------------
             // 4. TECHNICAL / OUTPUT RULES — moved to the very end on purpose.
@@ -253,7 +257,6 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
-            AppendRecentOpeningVarietyContext(builder);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("The spoken dialogue must directly react to the farmer's outfit/look/style. It may be praise, reluctant approval, teasing, skepticism, confusion, dry commentary, practical concern, or indifference depending on the NPC.");
@@ -331,8 +334,6 @@ namespace OutfitReactions.Ai
             string contextNaturalization = BuildNaturalContextHint(context);
             if (!string.IsNullOrWhiteSpace(contextNaturalization))
                 builder.AppendLine(contextNaturalization);
-            if (!string.IsNullOrWhiteSpace(context.FestivalContext))
-                builder.AppendLine("Festival: " + context.FestivalContext);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
                 builder.AppendLine("Farmer birthday: " + context.FarmerBirthdayContext);
 
@@ -359,6 +360,13 @@ namespace OutfitReactions.Ai
             string privateCandidateToneRule = BuildPrivateCandidateToneRule(context);
             if (!string.IsNullOrWhiteSpace(privateCandidateToneRule))
                 builder.AppendLine(privateCandidateToneRule);
+
+            // Match the hosted-provider prompt: active festival context comes after all
+            // other semantic guidance so local models cannot let a generic occasion or
+            // seasonal association overrule the event happening in the current scene.
+            if (!string.IsNullOrWhiteSpace(context.FestivalContext))
+                builder.AppendLine("Festival context (final scene authority): " + context.FestivalContext);
+            AppendRecentOpeningVarietyContext(builder);
 
             builder.AppendLine();
             builder.AppendLine("Output exactly one compact JSON object now. No other text.");

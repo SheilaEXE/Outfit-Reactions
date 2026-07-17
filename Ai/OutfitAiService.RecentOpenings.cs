@@ -34,7 +34,7 @@ namespace OutfitReactions.Ai
                 return;
 
             builder.AppendLine(RecentOpeningBlockStart);
-            builder.AppendLine("The lines below were recently used by NPCs. They are not forbidden phrases and their topics may still be mentioned naturally. However, do not closely copy their opening wording, sentence structure, or conversational setup. Begin this NPC's reaction in a distinctly different way that still fits their personality.");
+            builder.AppendLine("The lines below were recently used by NPCs. They are not forbidden phrases and their topics may still be mentioned naturally. However, begin this NPC's reaction through a genuinely different observation, action, question, joke, concern, or conversational angle that fits their personality. Do not preserve the same opening formula by merely swapping an interjection, the NPC's wording, or the farmer's name.");
             foreach (string opening in recentOpenings)
                 builder.AppendLine("- " + opening);
             builder.AppendLine(RecentOpeningBlockEnd);
