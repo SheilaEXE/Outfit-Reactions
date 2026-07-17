@@ -656,28 +656,10 @@ namespace OutfitReactions.Ai
             text = Regex.Replace(text, @"(\$[A-Za-z0-9]+)([A-Za-záàâãéèêíìîóòôõúùûçñÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇÑ])", "$1 $2", RegexOptions.CultureInvariant);
 
 
-            int limit = Math.Clamp(maxCharacters, 80, 2000);
-            int overrunAllowance = Math.Max(40, Math.Min(160, limit / 3));
-            int hardLimit = Math.Clamp(limit + overrunAllowance, 80, 2000);
-
-            if (text.Length > hardLimit)
-            {
-                // Cost-saving + quality-saving trim:
-                // The configured max is a target, but if the model goes a little over it, keep the
-                // line instead of chopping a good response. Only trim when it goes far past the max.
-                int cutLimit = Math.Max(20, hardLimit - 3);
-                string cut = text.Substring(0, Math.Min(cutLimit, text.Length)).TrimEnd('.', ',', ';', ':', ' ');
-                int lastBreak = Math.Max(cut.LastIndexOf("#$b#", StringComparison.Ordinal), Math.Max(cut.LastIndexOf(". ", StringComparison.Ordinal), cut.LastIndexOf("! ", StringComparison.Ordinal)));
-                if (lastBreak > Math.Max(40, cutLimit * 2 / 3))
-                    cut = cut.Substring(0, lastBreak + (cut.Substring(lastBreak).StartsWith("#$b#", StringComparison.Ordinal) ? 0 : 1)).TrimEnd('.', ',', ';', ':', ' ');
-
-                // Avoid cutting in the middle of a word if no sentence break was found.
-                int lastSpace = cut.LastIndexOf(' ');
-                if (lastSpace > Math.Max(40, cut.Length - 30))
-                    cut = cut.Substring(0, lastSpace).TrimEnd('.', ',', ';', ':', ' ');
-
-                text = cut + "...";
-            }
+            // maxCharacters is intentionally a generation target, not a post-processing cutoff.
+            // Keep the complete response once the provider has generated it; truncating here can
+            // discard the end of a sentence or an entire final dialogue box.
+            _ = maxCharacters;
 
             return text;
         }

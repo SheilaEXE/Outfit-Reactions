@@ -88,7 +88,7 @@ public sealed partial class ModEntry : Mod
 
 	private OutfitAiContext BuildOutfitAiContext(NPC npc, bool isSpouseDialogue)
 	{
-		if (npc == null || lastFashionSenseChangeInfo == null)
+		if (npc == null || lastFashionSenseChangeInfo == null || !NpcCompatibilityPolicy.Allows(npc))
 		{
 			return null;
 		}
@@ -682,7 +682,7 @@ public sealed partial class ModEntry : Mod
 
 	private string GetCurrentWeatherForAiPrompt(GameLocation location)
 	{
-		return Game1.IsGreenRainingHere(location) ? "green rain" : (Game1.IsLightningHere(location) ? "storm / thunderstorm" : (Game1.IsRainingHere(location) ? "rain" : (Game1.IsSnowingHere(location) ? "snow" : (Game1.IsDebrisWeatherHere(location) ? "windy / debris weather" : "sunny / clear"))));
+		return WeatherContextResolver.GetCurrentWeatherForAiPrompt(location);
 	}
 
 	private static string BuildSafeOutfitNameHint(string rawName)

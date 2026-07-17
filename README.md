@@ -13,7 +13,7 @@ Created by **NatrollEXE**.
 * **AI-powered reactions**: spouses and nearby NPCs react to your current outfit using AI, generating unique lines whenever you change clothes.
 * **Vanilla and modded clothing support**: content packs can add focused reactions for hats, shirts, pants, and shoes from the base game, or other mods.
 * **Outfit memory**: NPCs remember outfits and special items they have seen before, reacting with familiarity instead of repeating a first-time reaction.
-* **Custom content packs** can expand or customize NPC characteristics (`assets/npc-characteristics`) without requiring Content Patcher.
+* **Custom content packs** can customize characteristics for supported NPCs (`assets/npc-characteristics`) without requiring Content Patcher.
 * **Configurable through Generic Mod Config Menu** (optional), with combined or special-item-focused reaction modes, multiple AI profiles, and more.
 
 ## 📋 Requirements
@@ -40,6 +40,14 @@ The mod can be configured through Generic Mod Config Menu, including:
 * Additional reaction frequency and behavior settings.
 
 > **Dialogue quality depends on the AI model you choose.** Outfit Reactions provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
+
+## 🚧 Development Status and Custom NPC Compatibility
+
+Outfit Reactions is still being actively improved, but it has already reached a stable and enjoyable enough stage to be used normally. New improvements, refinements, and fixes may continue to be added as the mod develops.
+
+The mod supports its included base-game NPC profiles, while compatibility with custom NPCs is currently limited to **Stardew Valley Expanded** through the official Outfit Reactions SVE profile pack.
+
+Other custom NPC mods are intentionally not supported. Many mod authors do not want their characters, writing, or other creative work involved with AI-generated content. To respect their wishes, Outfit Reactions does not automatically generate reactions for NPCs from other mods. This is an intentional restriction, not a compatibility bug. Support for another custom NPC mod would only be considered with clear permission from its author.
 
 ## 🧩 Creating Custom Content
 

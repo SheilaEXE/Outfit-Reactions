@@ -491,7 +491,7 @@ public sealed partial class ModEntry : Mod
 
 	private bool CanUseOwnAiForOutfitDialogue(NPC npc)
 	{
-		if (outfitAiService == null || npc == null || lastFashionSenseChangeInfo == null)
+		if (outfitAiService == null || npc == null || lastFashionSenseChangeInfo == null || !NpcCompatibilityPolicy.Allows(npc))
 		{
 			return false;
 		}

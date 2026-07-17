@@ -369,6 +369,12 @@ public sealed partial class ModEntry : Mod
 
 	private int vanillaClothingPollTimer;
 
+	private const int DayStartFreeRoamConfirmationTicks = 60;
+
+	private bool waitingForDayStartFreeRoam;
+
+	private int dayStartFreeRoamTicks;
+
 	private OutfitVisionService outfitVisionService;
 
 	private FashionSenseVisualService fashionSenseVisualService;
@@ -772,7 +778,20 @@ public sealed partial class ModEntry : Mod
 
 	private bool ShouldDeferAutomaticOutfitReaction(bool logDecision = true)
 	{
-		if (!Game1.eventUp)
+		// DayStarted can run a few update ticks before a spouse morning event takes ownership
+		// of the location. Keep both automatic discovery and manual click interception disabled
+		// until the game has remained in normal free-roam control for a short, stable window.
+		if (waitingForDayStartFreeRoam)
+		{
+			if (DebugLog && logDecision)
+				((Mod)this).Monitor.Log("[NPC OUTFIT] Deferred outfit reaction while waiting for stable free-roam control after day start.", (LogLevel)2);
+			return true;
+		}
+
+		// Some modded morning events populate CurrentEvent one or more ticks before (or without)
+		// setting eventUp. Treat either signal as an active scripted event so a click can't slip
+		// through that transition and arm an outfit reaction inside the scene.
+		if (!Game1.eventUp && Game1.CurrentEvent == null)
 			return false;
 
 		// Ordinary scripted events own their actors, dialogue, and input. Outfit reactions are
@@ -879,6 +898,7 @@ public sealed partial class ModEntry : Mod
 
 	private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
 	{
+		BeginDayStartReactionGate();
 		outfitMemoryService?.Load();
 		hatMemoryService?.Load();
 		specialItemReactionService?.ResetModRegistryCache();
@@ -895,6 +915,7 @@ public sealed partial class ModEntry : Mod
 
 	private void OnDayStarted(object sender, DayStartedEventArgs e)
 	{
+		BeginDayStartReactionGate();
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
 		otherNpcClothesReactionSystem?.Reset();
@@ -909,6 +930,8 @@ public sealed partial class ModEntry : Mod
 
 	private void OnReturnedToTitle(object sender, ReturnedToTitleEventArgs e)
 	{
+		waitingForDayStartFreeRoam = false;
+		dayStartFreeRoamTicks = 0;
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
 		otherNpcClothesReactionSystem?.Reset();

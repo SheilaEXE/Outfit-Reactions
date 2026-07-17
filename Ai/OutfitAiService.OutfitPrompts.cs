@@ -39,6 +39,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine();
 
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
+            AppendRecentOpeningVarietyContext(builder);
             builder.AppendLine();
             int characterBlockEnd = builder.Length;
 
@@ -174,7 +175,7 @@ namespace OutfitReactions.Ai
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
             AppendProfanityIntensityRule(builder, context, config.EnableProfanityFilter);
-            builder.AppendLine("Maximum final dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
+            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. Treat this as a soft estimate, not a hard cutoff: prefer staying near it, but always finish the current thought naturally even if the dialogue goes over.");
             int minCharacters = GetMinimumLengthTarget(config, ai);
             if (minCharacters > 0)
                 builder.AppendLine("Minimum final dialogue length target: at least " + minCharacters + " visible characters (mandatory). Use #$b# breaks for natural pacing only, not a fixed pattern. Do not ramble or repeat yourself, and do not pad: the personality and reaction matter more than the length.");
@@ -252,6 +253,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
+            AppendRecentOpeningVarietyContext(builder);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             builder.AppendLine("The spoken dialogue must directly react to the farmer's outfit/look/style. It may be praise, reluctant approval, teasing, skepticism, confusion, dry commentary, practical concern, or indifference depending on the NPC.");
@@ -302,7 +304,7 @@ namespace OutfitReactions.Ai
             string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
-            builder.AppendLine("Max spoken dialogue length: " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " characters.");
+            builder.AppendLine("Approximate spoken dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. This is a soft estimate, not a hard cutoff; finish the reaction naturally if it needs to go over.");
             // PORTRAIT_SCORE_SYSTEM removed: mandatory portrait restriction for private/revealing outfits disabled.
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             builder.AppendLine(CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 1000));
@@ -917,6 +919,7 @@ namespace OutfitReactions.Ai
 
         private static string BuildCacheKey(OutfitAiContext context, ModConfig config, string prompt, ActiveAiSettings ai)
         {
+            string stablePrompt = RemoveRecentOpeningVarietyContextForCache(prompt);
             return string.Join("|", new[]
             {
                 ai.Provider ?? "",
@@ -936,7 +939,7 @@ namespace OutfitReactions.Ai
                 context.Weather ?? "",
                 context.RelationshipStatus ?? "",
                 context.RelationshipHearts.ToString(),
-                prompt.GetHashCode().ToString()
+                stablePrompt.GetHashCode().ToString()
             });
         }
 
