@@ -108,10 +108,12 @@ namespace OutfitReactions.Ai
                 SanitizeThemeContextForPrompt(context.ThemePriorityInstruction)
             }).ToLowerInvariant();
 
-            if (allClues.Contains("xmas") || allClues.Contains("christmas") || allClues.Contains("natal") || allClues.Contains("noel") || allClues.Contains("winter") || allClues.Contains("snow") || allClues.Contains("neve") || allClues.Contains("inverno"))
+            if (allClues.Contains("xmas") || allClues.Contains("christmas") || allClues.Contains("natal") || allClues.Contains("noel") || allClues.Contains("winter") || allClues.Contains("inverno"))
                 result.Add("winter");
 
-            if (allClues.Contains("swim") || allClues.Contains("bikini") || allClues.Contains("beach") || allClues.Contains("praia") || allClues.Contains("maiô") || allClues.Contains("maio") || allClues.Contains("summer") || allClues.Contains("verão") || allClues.Contains("verao"))
+            // Swimwear is appropriate or strange based primarily on place and weather.
+            // A bikini at the beach isn't automatically a summer costume.
+            if (allClues.Contains("summer") || allClues.Contains("verão") || allClues.Contains("verao"))
                 result.Add("summer");
 
             if (allClues.Contains("spring") || allClues.Contains("primavera") || allClues.Contains("flower dance") || allClues.Contains("flowerdance"))
@@ -121,6 +123,30 @@ namespace OutfitReactions.Ai
                 result.Add("fall");
 
             return result;
+        }
+
+        private static bool HasWeatherThemedOutfitClues(OutfitAiContext context)
+        {
+            if (context == null)
+                return false;
+
+            string allClues = string.Join(" ", new[]
+            {
+                context.OutfitName,
+                context.SafeOutfitHint,
+                context.NoticedChangeName,
+                context.SafeNoticedChangeHint,
+                context.DialogueKey,
+                context.FashionSenseVisualSummary,
+                SanitizeThemeContextForPrompt(context.ThemeContext),
+                SanitizeThemeContextForPrompt(context.ThemePriorityInstruction)
+            }).ToLowerInvariant();
+
+            return Regex.IsMatch(
+                allClues,
+                @"\b(raincoat|rain[ -]?coat|rain[ -]?gear|umbrella|waterproof|wellies|galoshes?|poncho|snow[ -]?gear|snowsuit|snow[ -]?suit|snow[ -]?boots?|blizzard[ -]?gear|sun[ -]?hat|heatwave[ -]?gear|capa de chuva|guarda[ -]?chuva|galochas?|imperme[aá]vel|roupa de neve|botas? de neve)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            );
         }
 
         private static string ValidateLocalSeasonReferences(string lower, OutfitAiContext context)
@@ -163,6 +189,54 @@ namespace OutfitReactions.Ai
 
             string actualSeason = NormalizeSeasonKey(context.Season);
             HashSet<string> inferredSeasons = InferSeasonKeysFromOutfitClues(context);
+            string allClues = string.Join(" ", new[]
+            {
+                context.OutfitName,
+                context.SafeOutfitHint,
+                context.NoticedChangeName,
+                context.SafeNoticedChangeHint,
+                context.DialogueKey,
+                context.FashionSenseVisualSummary,
+                SanitizeThemeContextForPrompt(context.ThemeContext),
+                SanitizeThemeContextForPrompt(context.ThemePriorityInstruction)
+            }).ToLowerInvariant();
+
+            bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
+            bool hasDifferentNonSummerSeason = inferredSeasons.Any(season =>
+                !season.Equals("summer", StringComparison.OrdinalIgnoreCase)
+                && !season.Equals(actualSeason, StringComparison.OrdinalIgnoreCase));
+
+            if (swimOrBeach && context.IsBeachOrIsland && !hasDifferentNonSummerSeason)
+            {
+                string weather = (context.Weather ?? "").ToLowerInvariant();
+                bool clearlyColdWeather = weather.Contains("snow")
+                    || weather.Contains("blizzard")
+                    || weather.Contains("sleet")
+                    || weather.Contains("hail")
+                    || weather.Contains("severe cold")
+                    || weather.Contains("cold rain");
+                bool rainyOrStormyWeather = weather.Contains("rain")
+                    || weather.Contains("storm")
+                    || weather.Contains("deluge")
+                    || weather.Contains("thunder");
+
+                if (actualSeason == "winter" || clearlyColdWeather)
+                {
+                    return "SWIMWEAR CONTEXT RULE: the farmer is at a beach, island, or directly beach-connected place, but the authoritative current season/weather is cold ("
+                        + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ", " + context.Weather
+                        + "). Swimwear is contextually strange because of the cold. The NPC may naturally question, tease, worry about, or react to that mismatch according to personality. Do not invent a separate swimming or diving season.";
+                }
+
+                if (rainyOrStormyWeather)
+                {
+                    return "SWIMWEAR CONTEXT RULE: the beach/island location fits swimwear, but the authoritative current weather is "
+                        + context.Weather
+                        + ". The NPC may find swimming impractical right now because of today's weather, but must not call the outfit early, late, or out of season. Do not invent a swimming or diving season.";
+                }
+
+                return "SWIMWEAR CONTEXT RULE: the farmer is currently at a beach, island, or directly beach-connected place, and the weather is not clearly cold or stormy. Swimwear is appropriate here even if the current season is not summer. Do not frame it as early, late, out of season, or meant for another time of year, and do not invent a swimming or diving season.";
+            }
+
             bool hasClearSeasonMismatch = inferredSeasons.Count > 0
                 && !string.IsNullOrWhiteSpace(actualSeason)
                 && !inferredSeasons.Contains(actualSeason);
@@ -172,7 +246,12 @@ namespace OutfitReactions.Ai
                 return "MANDATORY OUT-OF-SEASON REACTION: reliable outfit clues give this look a clear seasonal or holiday identity that conflicts with the authoritative current in-game season, " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". The spoken reaction MUST explicitly notice that the look is early, late, out of season, or belongs to a different time of year. This mismatch must be a meaningful part of the reaction, not omitted, softened into generic praise, or reduced to an analytical fashion comment. Express it naturally through this NPC's established personality and relationship. Do not claim the related season, holiday, or event is currently happening, and never mention these instructions or technical labels.";
             }
 
-            return "Season is flavor, not a requirement when the look has no clear seasonal conflict. Only bring up season or weather when it genuinely connects to what is worn. NEVER add a closing line saying the look also suits, fits, or works for the current season merely to wrap up; if there is no real connection, end without mentioning the season. Use location, weather, and time the same way: only when they add something real. Never repeat technical labels like indoor, outdoor, NPC room, dialogue category, or theme guidance.";
+            if (HasWeatherThemedOutfitClues(context))
+            {
+                return "WEATHER-THEMED LOOK RULE: this look includes gear associated with particular weather. Judge whether that gear fits only against the authoritative current weather, " + context.Weather + ", not against the season. It may be impractical for today's weather, but never call it early, late, out of season, or meant for another time of year unless separate reliable clues clearly identify a season, holiday, or festival.";
+            }
+
+            return "";
         }
 
         private static string BuildLanguageExampleLocalLine(string targetLanguage)

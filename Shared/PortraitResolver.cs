@@ -99,105 +99,39 @@ namespace OutfitReactions.Ai
             }
         }
 
-        private static string ResolveNeutralFallbackPortraitKey(CharacterAiProfile profile, string requestedFallbackKey)
-        {
-            if (IsNeutralPortraitKey(profile, requestedFallbackKey))
-                return requestedFallbackKey?.Trim() ?? "";
-
-            return FindNeutralPortraitKey(profile);
-        }
-
-        private static string FindNeutralPortraitKey(CharacterAiProfile profile)
-        {
-            if (profile?.Portraits == null || profile.Portraits.Count == 0)
-                return "";
-
-            // Prefer an explicitly neutral custom/default portrait when the profile has one.
-            // If none exists, returning an empty string keeps Stardew's current/default face,
-            // which is safer than reusing an emotional portrait as fallback for every box.
-            foreach (var pair in profile.Portraits)
-            {
-                if (IsNeutralPortraitKey(profile, pair.Key))
-                    return pair.Key;
-            }
-
-            return "";
-        }
-
-        private static bool IsNeutralPortraitKey(CharacterAiProfile profile, string portraitKey)
-        {
-            if (profile?.Portraits == null || string.IsNullOrWhiteSpace(portraitKey))
-                return false;
-
-            string key = portraitKey.Trim();
-            if (key.StartsWith("$", StringComparison.Ordinal))
-                key = key.TrimStart('$');
-
-            if (!profile.Portraits.TryGetValue(key, out PortraitProfile portrait))
-            {
-                foreach (var pair in profile.Portraits)
-                {
-                    string command = pair.Value?.Command;
-                    if (string.IsNullOrWhiteSpace(command))
-                        command = "$" + pair.Key;
-
-                    if (command.Equals(portraitKey.Trim(), StringComparison.OrdinalIgnoreCase))
-                    {
-                        key = pair.Key;
-                        portrait = pair.Value;
-                        break;
-                    }
-                }
-            }
-
-            if (portrait == null)
-                return false;
-
-            string descriptor = ((key ?? "") + " " + (portrait.Description ?? "") + " " + (portrait.Command ?? "")).ToLowerInvariant();
-
-            // Keep this deliberately conservative. Happy, shy, angry, sad, jealous, shocked,
-            // flustered, etc. are real emotions and should come from portraits[] per box,
-            // not from the fallback that fills missing boxes.
-            if (descriptor.Contains("neutral") || descriptor.Contains("default face") || descriptor.Contains("default expression") || descriptor.Contains("straightforward moment"))
-                return true;
-
-            return false;
-        }
-
         public static string ApplyPortraitsFromFields(CharacterAiProfile profile, string dialogueText, AiComplimentResult parsed, string inlinePortraitFallback = null, int availablePortraitCount = 0)
         {
             if (string.IsNullOrWhiteSpace(dialogueText))
                 return dialogueText;
 
-            string requestedFallbackKey = StringUtils.FirstNonEmpty(parsed?.Portrait, inlinePortraitFallback);
-            string fallbackKey = ResolveNeutralFallbackPortraitKey(profile, requestedFallbackKey);
+            string primaryPortraitKey = StringUtils.FirstNonEmpty(parsed?.Portrait, inlinePortraitFallback);
             List<string> perBoxKeys = parsed?.Portraits ?? new List<string>();
-            return ApplyPortraitsToDialogueBoxes(profile, dialogueText, perBoxKeys, fallbackKey, availablePortraitCount);
+            return ApplyPortraitsToDialogueBoxes(profile, dialogueText, perBoxKeys, primaryPortraitKey, availablePortraitCount);
         }
 
-        private static string ApplyPortraitsToDialogueBoxes(CharacterAiProfile profile, string dialogueText, List<string> portraitKeys, string fallbackPortraitKey, int availablePortraitCount = 0)
+        private static string ApplyPortraitsToDialogueBoxes(CharacterAiProfile profile, string dialogueText, List<string> portraitKeys, string primaryPortraitKey, int availablePortraitCount = 0)
         {
             if (string.IsNullOrWhiteSpace(dialogueText))
                 return dialogueText;
 
-            string fallbackCommand = ResolvePortraitCommandSimple(profile, fallbackPortraitKey, availablePortraitCount);
-            bool hasPerBoxKeys = portraitKeys != null && portraitKeys.Any(k => !string.IsNullOrWhiteSpace(k));
+            string primaryCommand = ResolvePortraitCommandSimple(profile, primaryPortraitKey, availablePortraitCount);
 
             string[] boxes = dialogueText.Split(new[] { "#$b#" }, StringSplitOptions.None);
             if (boxes.Length == 0)
                 return dialogueText;
 
             StringBuilder result = new();
+            string activeKey = primaryPortraitKey;
             for (int i = 0; i < boxes.Length; i++)
             {
                 string box = boxes[i];
-                string key = hasPerBoxKeys && portraitKeys != null && i < portraitKeys.Count
-                    ? portraitKeys[i]
-                    : fallbackPortraitKey;
-                string command = ResolvePortraitCommandSimple(profile, key, availablePortraitCount);
+                if (portraitKeys != null && i < portraitKeys.Count && !string.IsNullOrWhiteSpace(portraitKeys[i]))
+                    activeKey = portraitKeys[i];
+
+                string command = ResolvePortraitCommandSimple(profile, activeKey, availablePortraitCount);
 
                 if (string.IsNullOrWhiteSpace(command))
-                    command = fallbackCommand;
+                    command = primaryCommand;
 
                 // Stardew reads portrait commands at the end of EACH dialogue box,
                 // before the #$b# break. Appending only once at the end makes the

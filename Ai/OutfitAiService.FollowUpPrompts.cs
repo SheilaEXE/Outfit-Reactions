@@ -19,8 +19,8 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Your previous follow-up answer was rejected: " + issue + ".");
 
             builder.AppendLine("Return exactly one compact JSON object only. No markdown, no explanation, no narration.");
-            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array may be empty; portrait changes are optional and should happen only when they feel natural.");
-            builder.AppendLine("Do NOT put Stardew portrait commands inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
+            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order.");
+            builder.AppendLine("Do NOT put Stardew portrait commands inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks.");
 
             builder.AppendLine("The dialogue entry must be a direct spoken response from " + context.NpcDisplayName + " to the farmer's reply.");
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
@@ -36,7 +36,7 @@ namespace OutfitReactions.Ai
                 ? string.Join(", ", profile.Portraits.Keys) : "";
             builder.AppendLine("Portrait keys and descriptions: " + CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 800));
             builder.AppendLine("Portrait must be one of these exact keys, or empty string if unsure: " + portraitKeys);
-            builder.AppendLine("The portraits array may be empty. If you use it, let the expression remain the same or change naturally. Use portrait only as a neutral/default fallback.");
+            builder.AppendLine("Choose each box's expression deliberately: reuse it while the mood stays the same and change it for a real emotional shift, never merely for variety.");
 
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
@@ -74,8 +74,8 @@ namespace OutfitReactions.Ai
             StringBuilder builder = new();
             builder.AppendLine("You are generating a follow-up dialogue for Stardew Valley after the farmer replies to an outfit visual reaction.");
             builder.AppendLine(localMode ? "LOCAL JSON MODE." : "Return exactly one compact JSON object and nothing else.");
-            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array may be empty; portrait changes are optional and should happen only when they feel natural.");
-            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
+            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order.");
+            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks.");
             builder.AppendLine("The dialogue must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
             CharacterPromptBuilder.AppendPersonalityPriorityRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
@@ -114,7 +114,7 @@ namespace OutfitReactions.Ai
             // PORTRAIT_SCORE_SYSTEM removed: no mandatory scoring instructions.
             // The AI reads the portrait descriptions from the NPC profile and freely decides which to use.
             builder.AppendLine("Portrait keys and descriptions: " + CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 800));
-            builder.AppendLine("Use the portrait field only as a neutral/default fallback key, not as the main emotional portrait. The portraits array may be empty; if used, reuse or change expressions only when natural. Do NOT place portrait commands inside the text. Use only keys from the list above, or leave portraits empty.");
+            builder.AppendLine("Choose each box's expression deliberately: reuse it while the mood stays the same and change it for a real emotional shift. Do NOT place portrait commands inside text.");
             builder.AppendLine();
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);

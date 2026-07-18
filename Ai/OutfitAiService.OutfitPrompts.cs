@@ -52,7 +52,6 @@ namespace OutfitReactions.Ai
             // 2. THE SCENE — the situation this specific character is reacting to.
             // ---------------------------------------------------------------
             builder.AppendLine("CURRENT SCENE");
-            builder.AppendLine("Speaker: " + context.NpcDisplayName);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendCompactWornItemDeixisRule(builder);
             builder.AppendLine("Relationship status: " + context.RelationshipStatus + ". Heart level: " + context.RelationshipHearts + ". Is spouse: " + context.IsSpouse + ".");
@@ -79,7 +78,6 @@ namespace OutfitReactions.Ai
                     builder.AppendLine("You may naturally use ordinary in-world garment terms and mention a recognizable theme or reference from the name when it is clearly visible or fits the scene. Do not recite the full saved outfit name mechanically as a phrase.");
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemeContext) ?? "");
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemePriorityInstruction) ?? "");
-                builder.AppendLine("Private outfit routing clue, for theme selection only. Do not say this label: " + HumanizeTechnicalLabelForPrompt(context.DialogueKey));
                 builder.AppendLine("Private saved outfit name, for theme/reference inference only: " + context.OutfitName);
                 builder.AppendLine("Readable theme/reference clue extracted from saved outfit name: " + context.SafeOutfitHint);
                 AppendNoticedChangeContextForPrompt(builder, context, PromptStyle);
@@ -88,11 +86,9 @@ namespace OutfitReactions.Ai
             // Vision / no-vision evidence rules (kept; only stated once).
             if (context.HasVisionImage)
             {
-                builder.AppendLine("A small transparent PNG image of the farmer's current rendered appearance is attached. Treat it as visual evidence for visible clothing shape, outfit silhouette, large accessories, overall style, and broad dominant clothing/outfit colors on the farmer when clearly visible. The hair in the image is the character's hairstyle and is NOT a hat and NOT part of the outfit; do not include hair color when describing or commenting on the outfit. Ignore room background, flooring, furniture, walls, lighting, and scenery.");
-                builder.AppendLine("Use only details clearly visible on the farmer in the pixel-art image. If a detail is unclear, keep it general; do not invent items, creatures, lore, or comparisons that are not visible or present in the text clues. If the Fashion Sense support data names a visible accessory (umbrella, wings, backpack, hat, etc.), treat it as a strong clue even if the captured sprite is small.");
+                builder.AppendLine("Attached front/back images are visual evidence for the farmer's clear outfit silhouette, large accessories, overall style, and broad clothing colors. Use equipped support data as the authority for named items and confirmed colors. Hair is not a hat or part of the clothing palette; ignore scenery and uncertain details. Never mention images, screenshots, PNGs, or pixels in dialogue.");
                 if (context.IsAccessoryChange)
                     builder.AppendLine("The noticed change is a Fashion Sense accessory (large back items, wings, backpacks, umbrellas, decorations, earrings, etc.; ignore makeup-like accessories). If it is too tiny or unclear to identify, do not guess: set needsClarification to true and make text a natural in-character line meaning 'there is something different about your look today, but I cannot quite identify it.'");
-                builder.AppendLine("The image is for outfit analysis only; do not mention that you saw an image, screenshot, PNG, pixels, or attached file.");
             }
             else
             {
@@ -123,12 +119,7 @@ namespace OutfitReactions.Ai
             int outfitAndVisionEnd = builder.Length;
 
             // Location / time / season for this scene.
-            builder.AppendLine("Location: " + context.LocationName);
-            if (!string.IsNullOrWhiteSpace(context.DetailedLocationName))
-                builder.AppendLine("Detailed location: " + context.DetailedLocationName);
-            if (!string.IsNullOrWhiteSpace(context.LocationType))
-                builder.AppendLine("Private location flags, for context only. Do not say these labels: locationType=" + HumanizeTechnicalLabelForPrompt(context.LocationType) + ", indoors=" + context.IsIndoors + ", outdoors=" + context.IsOutdoors + ".");
-            builder.AppendLine("Private room/home context: farmer is in the speaking NPC's personal room = " + context.IsNpcRoom + "; farmer is in this marriage candidate's home/private indoor space = " + context.IsNpcPersonalLocation + ". Do not say NPC room or internal labels; phrase naturally if relevant.");
+            AppendCompactLocationContext(builder, context);
             builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ". Time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")") + ".");
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
@@ -186,16 +177,14 @@ namespace OutfitReactions.Ai
             else
                 builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
-            builder.AppendLine("Do not mention metadata, mods, AI, APIs, Fashion Sense, JSON, or internal keys.");
-            builder.AppendLine("Return JSON only with keys text, portrait, portraits, and needsClarification. Example shape only: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[],\"needsClarification\":false}. The portraits array may be empty; if you use it, let expressions stay the same or change only when that feels natural.");
-            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field contains only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. Do not wrap the JSON in markdown and do not explain anything.");
-            builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
+            builder.AppendLine("Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. The text contains spoken dialogue, optional expressive cues, and #$b# breaks only: no metadata, explanations, markdown, or Stardew $portrait commands. Use portrait for the primary expression. If text has multiple #$b# boxes, portraits MUST contain exactly one valid key per box in order.");
+            builder.AppendLine("Available portrait keys (use only the keys, never their $commands):");
             if (profile.Portraits != null)
             {
                 foreach (var pair in profile.Portraits)
                     builder.AppendLine("- " + pair.Key + ": " + pair.Value?.Description);
             }
-            builder.AppendLine("Portrait selection is optional. The portraits array may be empty, reuse an expression, or change expressions naturally as the dialogue develops. The portrait field is only a neutral/default fallback.");
+            builder.AppendLine("Choose each box's fitting expression deliberately: reuse the same key only while its mood stays the same, and change it when a later box has a real emotional shift. Do not invent a change merely for variety.");
 
             string prompt = builder.ToString();
             List<KeyValuePair<string, int>> diagnosticBlocks = new()
@@ -227,7 +216,6 @@ namespace OutfitReactions.Ai
         private void AppendCompactReactionGuidance(StringBuilder builder, OutfitAiContext context)
         {
             builder.AppendLine("HOW TO REACT (filtered through the personality above)");
-            CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.ReactionCoreRule ?? PromptStyleService.FallbackReactionCoreRule, context);
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.ThemeRecognitionRule ?? PromptStyleService.FallbackThemeRecognitionRule, context);
 
             if (context.IsAccessoryChange || context.IsOutfitChange)
@@ -235,8 +223,6 @@ namespace OutfitReactions.Ai
                 CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.CombinationAndOccasionRule ?? PromptStyleService.FallbackCombinationAndOccasionRule, context);
             }
 
-            if (context.IsOutfitChange)
-                CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.WholeOutfitFocusRule ?? PromptStyleService.FallbackWholeOutfitFocusRule, context);
         }
 
         private string BuildLocalPrompt(CharacterAiProfile profile, OutfitAiContext context, ActiveAiSettings ai)
@@ -251,8 +237,8 @@ namespace OutfitReactions.Ai
             StringBuilder builder = new();
             builder.AppendLine("LOCAL JSON MODE.");
             builder.AppendLine("Return exactly one compact JSON object and nothing else.");
-            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. The portraits array may be empty; portrait changes are optional and should happen only when they feel natural.");
-            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks. Use the portrait field only as a neutral/default fallback. If portraits is used, choose only fitting portrait keys and freely reuse or change expressions.");
+            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order.");
+            builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks.");
             builder.AppendLine("Do not add markdown, explanations, headings, analysis, context summaries, or extra options.");
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
             builder.AppendLine("The dialogue in the JSON text field must be direct spoken dialogue from " + context.NpcDisplayName + " to the farmer.");
@@ -311,7 +297,7 @@ namespace OutfitReactions.Ai
             // PORTRAIT_SCORE_SYSTEM removed: mandatory portrait restriction for private/revealing outfits disabled.
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             builder.AppendLine(CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 1000));
-            builder.AppendLine("The portraits array is optional. Reuse an expression or change it only when the dialogue naturally calls for that. Use the portrait field only as a neutral/default fallback key. Do NOT place portrait commands inside the text. Use only keys from the list above, or leave portraits empty.");
+            builder.AppendLine("Choose each box's expression deliberately: reuse it while the mood stays the same and change it for a real emotional shift. Do NOT place portrait commands inside text.");
             builder.AppendLine("Do not put portrait words like portrait:, expression:, or emotion: inside the spoken dialogue text. Use only the JSON portrait and portraits fields for portrait keys.");
             builder.AppendLine();
             builder.AppendLine("NPC: " + context.NpcDisplayName);
@@ -325,8 +311,7 @@ namespace OutfitReactions.Ai
             AppendNoticedChangeContextForPrompt(builder, context, PromptStyle);
             AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
             AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
-            builder.AppendLine("Location: " + StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName));
-            builder.AppendLine("Private location flags, for context only. Do not say these labels: locationType=" + HumanizeTechnicalLabelForPrompt(context.LocationType) + ", npcRoom=" + context.IsNpcRoom + ", npcPersonalLocation=" + context.IsNpcPersonalLocation);
+            AppendCompactLocationContext(builder, context);
             builder.AppendLine("Season/day/year: " + context.Season + " " + context.DayOfSeason + ", year " + context.Year);
             builder.AppendLine("Authoritative current season only: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". Outfit seasonal clues are not the current date.");
             builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + ", day period: " + context.DayPart);
@@ -390,6 +375,15 @@ namespace OutfitReactions.Ai
             if (builder == null || context == null)
                 return;
 
+            string weather = (context.Weather ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(weather)
+                || weather.Equals("sunny / clear", StringComparison.OrdinalIgnoreCase)
+                || weather.Equals("sun", StringComparison.OrdinalIgnoreCase)
+                || weather.Equals("clear", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             // Weather (rain, storm, snow, wind, etc.) happens OUTSIDE. Being indoors means the
             // NPC and farmer are sheltered from it, not standing inside it. Without this rule the
             // model tends to conflate "Location: Museum" + "Weather: storm" into nonsense like
@@ -398,6 +392,21 @@ namespace OutfitReactions.Ai
                 CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.IndoorWeatherRule ?? PromptStyleService.FallbackIndoorWeatherRule, context);
             else if (context.IsOutdoors)
                 CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.OutdoorWeatherRule ?? PromptStyleService.FallbackOutdoorWeatherRule, context);
+        }
+
+        private static void AppendCompactLocationContext(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null || context == null)
+                return;
+
+            string location = StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName, "unknown");
+            string setting = context.IsIndoors ? "indoors" : context.IsOutdoors ? "outdoors" : "unspecified";
+            builder.AppendLine("Location: " + location + ". Setting: " + setting + ".");
+
+            if (context.IsNpcRoom)
+                builder.AppendLine("Private scene fact: the farmer is in this NPC's personal room. Phrase that naturally only if relevant.");
+            else if (context.IsNpcPersonalLocation)
+                builder.AppendLine("Private scene fact: the farmer is inside this marriage candidate's home or personal space. Phrase that naturally only if relevant.");
         }
 
         private static string FormatTimeForPrompt(int time)
@@ -720,18 +729,12 @@ namespace OutfitReactions.Ai
 
         private static string BuildCompactSceneGroundingInstruction(OutfitAiContext context)
         {
-            string location = context == null ? "" : StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName);
-            string locationType = context == null ? "" : HumanizeTechnicalLabelForPrompt(context.LocationType);
-            return "SCENE GROUNDING: do not turn profile background into current scene facts or invent objects, props, positions, or actions. Mention a current object/place/action only when confirmed by the scene or visible/support data. Confirmed location: "
-                + StringUtils.FirstNonEmpty(location, "unknown")
-                + "; private location context: "
-                + StringUtils.FirstNonEmpty(locationType, "unknown")
-                + ". Use natural wording such as here, in this room, at home, inside, or outside. Hypothetical jokes are allowed when clearly hypothetical and drawn from this NPC's own interests; do not present another place or activity as the current scene.";
+            return "SCENE GROUNDING: profile background is personality context, not proof of current objects or actions. State only scene facts confirmed below or by visible/support data. Character-specific comparisons are welcome when clearly hypothetical.";
         }
 
         private static string BuildCompactTechnicalContextLabelInstruction()
         {
-            return "Private routing labels (indoor/outdoor variant, NPC room, outfit/dialogue category, theme guidance, internal keys) are metadata: never say them. Naturalize only the location detail that matters to the dialogue.";
+            return "Private routing labels and internal keys are metadata: never say them. Naturalize only scene details that matter.";
         }
 
         private static string BuildSceneGroundingInstruction(OutfitAiContext context)
@@ -779,6 +782,9 @@ namespace OutfitReactions.Ai
 
             if (context.IsHatChange && !string.IsNullOrWhiteSpace(context.SafeOutfitHint))
                 builder.AppendLine("Current saved outfit/theme clue still being worn: " + context.SafeOutfitHint + ". For this headwear reaction, you may compare the head item with the existing outfit/theme when the combination is funny, strange, cute, ugly, dramatic, or mismatched.");
+
+            if (context.IsOutfitChange && context.SavedOutfitIncludesMeaningfulAccessory)
+                builder.AppendLine("SAVED-OUTFIT COMBINATION RULE: this complete saved outfit was applied together with a meaningful visible accessory. Treat the recognizable outfit/theme and that clearly visible accessory as one combined look. The reaction must not ignore the accessory or discuss the clothes alone: notice naturally whether the accessory reinforces, transforms, contradicts, or humorously clashes with the outfit theme. Use the attached image and equipped-visual support to understand the combination. If its exact identity is uncertain, describe only the broad visible effect instead of inventing details. Do not force attention onto tiny, makeup-like, or visually unclear pieces.");
 
             if (context.IsOutfitChange)
                 CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SavedOutfitFocusGuidance ?? PromptStyleService.FallbackSavedOutfitFocusGuidance, context);

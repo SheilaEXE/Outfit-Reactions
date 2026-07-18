@@ -46,6 +46,11 @@ public sealed partial class ModEntry : Mod
 		{
 			try
 			{
+				ModEntry activeInstance = Instance;
+				if (activeInstance?.Config?.Enabled != true)
+				{
+					return true;
+				}
 				if (!firstRunLogged)
 				{
 					firstRunLogged = true;
@@ -92,7 +97,7 @@ public sealed partial class ModEntry : Mod
 		{
 			try
 			{
-				if (__instance == null || Instance?.otherNpcClothesReactionSystem == null)
+				if (__instance == null || Instance?.Config?.Enabled != true || Instance.otherNpcClothesReactionSystem == null)
 				{
 					return true;
 				}
@@ -752,6 +757,11 @@ public sealed partial class ModEntry : Mod
 
 	internal bool TryHandleOutfitDialogueOrBlockNpcInteraction(NPC npc)
 	{
+		if (Config?.Enabled != true)
+		{
+			return false;
+		}
+
 		if (Game1.player?.modData != null && Game1.player.modData.ContainsKey(AutoKissClickActiveModDataKey))
 		{
 			// Lots of Kisses marks its simulated checkAction click with this flag.
@@ -762,6 +772,30 @@ public sealed partial class ModEntry : Mod
 		if (ShouldDeferAutomaticOutfitReaction())
 			return false;
 		return otherNpcClothesReactionSystem?.TryPrioritizePendingDialogueForClick(npc) ?? false;
+	}
+
+	internal void SetModEnabled(bool enabled)
+	{
+		if (Config == null || Config.Enabled == enabled)
+		{
+			return;
+		}
+
+		Config.Enabled = enabled;
+		if (enabled)
+		{
+			if (Context.IsWorldReady)
+			{
+				BeginDayStartReactionGate();
+			}
+			return;
+		}
+
+		waitingForDayStartFreeRoam = false;
+		dayStartFreeRoamTicks = 0;
+		ResetClothesState(clearChangeFlag: true);
+		otherNpcClothesReactionSystem?.Reset();
+		Game1.player?.modData?.Remove(ReactionActiveModDataKey);
 	}
 
 	private static bool IsActiveFestivalEventForOutfitReaction()

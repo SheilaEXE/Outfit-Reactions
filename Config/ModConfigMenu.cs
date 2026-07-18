@@ -349,7 +349,7 @@ namespace OutfitReactions
                 name: () => T("gmcm.option.enabled.name"),
                 tooltip: () => T("gmcm.option.enabled.tooltip"),
                 getValue: () => mod.Config.Enabled,
-                setValue: value => mod.Config.Enabled = value
+                setValue: mod.SetModEnabled
             );
 
             configMenu.AddBoolOption(

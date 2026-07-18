@@ -217,6 +217,10 @@ public sealed partial class ModEntry : Mod
 			NoticedChangeType = fashionSenseChangeType,
 			NoticedChangeName = fashionSenseChangedItemId,
 			SafeNoticedChangeHint = safeNoticedChangeHint,
+			SavedOutfitIncludesMeaningfulAccessory = (effectiveFashionSenseChangeInfoForNpc != null
+				&& effectiveFashionSenseChangeInfoForNpc.ChangedOutfit
+				&& effectiveFashionSenseChangeInfoForNpc.ChangedAccessory
+				&& ShouldTreatAccessoryAsCurrentComboFocus(effectiveFashionSenseChangeInfoForNpc.NewAccessoryId, AreVisionOnlyFashionSenseTriggersEnabled())),
 			WasCaughtPeeking = (!isSpouseDialogue && (otherNpcClothesReactionSystem?.WasNpcCaughtPeeking(npc) ?? false)),
 			OutfitMemoryContext = BuildOutfitMemoryContext(npc, currentSavedFashionSenseOutfitIdForAi)
 		};
@@ -675,9 +679,9 @@ public sealed partial class ModEntry : Mod
 		int farmerBirthdayDay = Config.FarmerBirthdayDay;
 		if (string.IsNullOrWhiteSpace(text) || farmerBirthdayDay <= 0)
 		{
-			return "Farmer birthday is not configured.";
+			return "";
 		}
-		return (farmerBirthdayDay == Game1.dayOfMonth && text.Equals(Game1.currentSeason, StringComparison.OrdinalIgnoreCase)) ? "Today is the farmer's birthday. The compliment may feel a little more special if it fits the NPC and relationship." : ("Today is not the farmer's birthday. Farmer birthday is configured as " + text + " " + farmerBirthdayDay + ".");
+		return (farmerBirthdayDay == Game1.dayOfMonth && text.Equals(Game1.currentSeason, StringComparison.OrdinalIgnoreCase)) ? "Today is the farmer's birthday. The reaction may feel a little more special if it fits the NPC and relationship." : "";
 	}
 
 	private string GetCurrentWeatherForAiPrompt(GameLocation location)

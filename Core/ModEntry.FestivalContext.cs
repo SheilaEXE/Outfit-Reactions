@@ -63,67 +63,42 @@ public sealed partial class ModEntry
                 .Select(entry => (entry.festival, entry.Item2))
                 .ToList();
 
-            List<FestivalOccurrence> currentSeason = festivals
-                .Where(festival => festival.SeasonIndex == currentSeasonIndex)
-                .OrderBy(festival => festival.StartDay)
-                .ThenBy(festival => festival.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
             StringBuilder context = new StringBuilder();
-            context.Append("Authoritative festival calendar (localized and mod-aware). ");
             if (!string.IsNullOrWhiteSpace(activeFestivalName))
             {
                 string presenceRule = outfitAiService?.PromptStyle?.ActiveFestivalPresenceRule
                     ?? PromptStyleService.FallbackActiveFestivalPresenceRule;
                 context.Append(ApplyActiveFestivalPromptName(presenceRule, PromptStyleService.FallbackActiveFestivalPresenceRule, activeFestivalName)).Append(' ');
+                context.Append("TODAY: ")
+                    .Append(today.Count > 0
+                        ? string.Join("; ", today.Select(festival => FormatFestivalDate(festival, includeStatus: false)))
+                        : activeFestivalName)
+                    .Append(". ");
+                string outfitRule = outfitAiService?.PromptStyle?.ActiveFestivalOutfitRule
+                    ?? PromptStyleService.FallbackActiveFestivalOutfitRule;
+                context.Append(ApplyActiveFestivalPromptName(outfitRule, PromptStyleService.FallbackActiveFestivalOutfitRule, activeFestivalName));
+                return context.ToString();
             }
 
             if (today.Count > 0)
             {
-                context.Append("TODAY: ")
+                context.Append("Calendar events today (the speaker is not necessarily attending one now): ")
                     .Append(string.Join("; ", today.Select(festival => FormatFestivalDate(festival, includeStatus: false))))
                     .Append(". ");
             }
             else
             {
-                context.Append("There is no festival today. ");
+                context.Append("No festival is active now. ");
             }
-
-            if (previous != null && !today.Contains(previous))
+            if (previous != null)
             {
-                context.Append("Most recently passed: ")
-                    .Append(previous.Name)
-                    .Append(" ended ")
-                    .Append(previousDaysAgo)
-                    .Append(previousDaysAgo == 1 ? " day ago" : " days ago")
-                    .Append(". ");
+                context.Append("Most recent: ")
+                    .Append(previous.Name).Append(", ")
+                    .Append(previousDaysAgo).Append(previousDaysAgo == 1 ? " day ago. " : " days ago. ");
             }
-
             if (upcoming.Count > 0)
-            {
-                context.Append("Next festivals: ")
-                    .Append(string.Join("; ", upcoming.Select(entry =>
-                        $"{entry.Festival.Name} in {entry.DaysUntil} {(entry.DaysUntil == 1 ? "day" : "days")} ({FormatFestivalDate(entry.Festival, includeStatus: false)})")))
-                    .Append(". ");
-            }
-
-            if (currentSeason.Count > 0)
-            {
-                context.Append("Current-season schedule: ")
-                    .Append(string.Join("; ", currentSeason.Select(festival => FormatFestivalWithRelativeStatus(festival, currentDayIndex))))
-                    .Append(". ");
-            }
-
-            if (!string.IsNullOrWhiteSpace(activeFestivalName))
-            {
-                string outfitRule = outfitAiService?.PromptStyle?.ActiveFestivalOutfitRule
-                    ?? PromptStyleService.FallbackActiveFestivalOutfitRule;
-                context.Append(ApplyActiveFestivalPromptName(outfitRule, PromptStyleService.FallbackActiveFestivalOutfitRule, activeFestivalName));
-            }
-            else
-            {
-                context.Append("This is calendar awareness only: do not claim the NPC or farmer is attending a festival unless the current location supports that. Mention a festival only when it naturally matters to the outfit, timing, or conversation.");
-            }
+                context.Append("Upcoming: ").Append(string.Join("; ", upcoming.Select(entry => $"{entry.Festival.Name} in {entry.DaysUntil} {(entry.DaysUntil == 1 ? "day" : "days")}"))).Append(". ");
+            context.Append("Use calendar awareness only when it naturally matters; never claim anyone is attending a festival unless it is active.");
             return context.ToString();
         }
         catch (Exception ex)

@@ -657,8 +657,6 @@ namespace OutfitReactions.Ai
                 return;
 
             builder.AppendLine("CHARACTER PRIORITY RULE: this is a visual reaction, not a mandatory compliment. Choose the reaction by this order: 1) the NPC's canon personality and saved profile rules, 2) relationship status and heart level, 3) current context/location/season/weather/privacy, 4) the farmer's visible outfit/change/theme, 5) wording and portrait choice. Do not flatten grumpy, shy, blunt, awkward, proud, sarcastic, formal, or emotionally guarded NPCs into generically sweet praise.");
-            if (context != null)
-                builder.AppendLine("Current relationship strength for tone calibration: " + context.RelationshipStatus + ", hearts=" + context.RelationshipHearts + ". Low or mid hearts should not sound as intimate, warm, or openly admiring as high hearts/spouse unless that specific NPC would naturally act that way.");
             builder.AppendLine("A valid reaction may be positive, reluctant, dry, annoyed, skeptical, teasing, confused, practical, indifferent, flustered, or warm. Praise is allowed only when it fits the NPC and heart level; otherwise keep the NPC's edge, restraint, awkwardness, or bluntness intact.");
             AppendPromptBlock(builder, promptStyle?.OpeningVarietyRule ?? PromptStyleService.FallbackOpeningVarietyRule, context);
         }

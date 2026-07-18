@@ -96,6 +96,12 @@ namespace OutfitReactions.Ai
                 issue = validationIssue;
                 return false;
             }
+            string seasonIssue = ValidateLocalSeasonReferences(" " + DialogueValidator.StripDialogueMarkup(cleaned).ToLowerInvariant() + " ", context);
+            if (!string.IsNullOrWhiteSpace(seasonIssue))
+            {
+                issue = seasonIssue;
+                return false;
+            }
             if (ActiveAiSettingsResolver.IsLocal(ai) && config.LocalAiSafeMode)
             {
                 string localIssue = ValidateLocalGeneratedDialogueText(cleaned, context, profile, config);
@@ -107,6 +113,7 @@ namespace OutfitReactions.Ai
             }
 
             dialogue = PortraitResolver.ApplyPortraitsFromFields(profile, cleaned, parsed, inlinePortraitFallback, context?.AvailablePortraitCount ?? 0);
+            LogPortraitSelection(context, parsed, dialogue);
 
             if (parsed.NeedsClarification && context != null && context.IsAccessoryChange)
                 dialogue = AccessoryClarificationMarker + dialogue;
@@ -160,13 +167,39 @@ namespace OutfitReactions.Ai
                 return false;
             }
 
+            // Lenient mode may relax style and length rules, but it must never accept a
+            // fabricated season comparison that contradicts the authoritative scene context.
+            string seasonIssue = ValidateLocalSeasonReferences(" " + DialogueValidator.StripDialogueMarkup(cleaned).ToLowerInvariant() + " ", context);
+            if (!string.IsNullOrWhiteSpace(seasonIssue))
+            {
+                issue = seasonIssue;
+                return false;
+            }
+
             dialogue = PortraitResolver.ApplyPortraitsFromFields(profile, cleaned, parsed, inlinePortraitFallback, context?.AvailablePortraitCount ?? 0);
+            LogPortraitSelection(context, parsed, dialogue);
 
             if (parsed.NeedsClarification && context != null && context.IsAccessoryChange)
                 dialogue = AccessoryClarificationMarker + dialogue;
 
             issue = null;
             return true;
+        }
+
+        private void LogPortraitSelection(OutfitAiContext context, AiComplimentResult parsed, string dialogue)
+        {
+            if (!OutfitReactions.ModEntry.DebugLog)
+                return;
+
+            string applied = string.Join(",", (dialogue ?? "").Split(new[] { "#$b#" }, StringSplitOptions.None)
+                .Select(box => Regex.Match(box.TrimEnd(), @"\$[A-Za-z0-9]+$"))
+                .Where(match => match.Success)
+                .Select(match => match.Value));
+            string requestedPerBox = parsed?.Portraits == null ? "" : string.Join(",", parsed.Portraits);
+            monitor.Log("[AI PORTRAIT] NPC=" + (context?.NpcName ?? "<unknown>")
+                + " primary='" + (parsed?.Portrait ?? "")
+                + "' perBox=[" + requestedPerBox
+                + "] applied=[" + applied + "]", LogLevel.Trace);
         }
     }
 }
