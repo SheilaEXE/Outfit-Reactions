@@ -129,7 +129,7 @@ namespace OutfitReactions.Ai
             {
                 // Portrait-per-box is intentionally optional for now so the model can decide
                 // whether an expression should stay the same or change during the dialogue.
-                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate. No markdown. No explanation. No narration. No analysis.";
+                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.";
 
                 double temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0;
                 if (provider.IsLocal)
@@ -240,7 +240,7 @@ namespace OutfitReactions.Ai
                 model = ai.Model,
                 max_tokens = maxTokens,
                 temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
-                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate. No markdown. No explanation. No narration. No analysis.",
+                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.",
                 messages = new[]
                 {
                     new { role = "user", content = userContent }
@@ -319,7 +319,7 @@ namespace OutfitReactions.Ai
                 {
                     parts = new[]
                     {
-                        new { text = "You return one compact JSON object only. No markdown. No introduction. No explanation. Shape example: {\"text\":\"...\",\"portrait\":\"neutral fallback only\",\"portraits\":[],\"needsClarification\":false}. Do not put Stardew portrait $commands inside text; use portrait only as a neutral/default fallback. The portraits array is optional and may be empty; when used, choose portraits naturally and reuse or change expressions as appropriate." }
+                        new { text = "Return one compact JSON object only with text, portrait, portraits, and needsClarification. No markdown, introduction, or explanation. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain one valid key per box; reuse while the mood stays the same and change it when the emotional beat changes." }
                     }
                 },
                 contents = new[]

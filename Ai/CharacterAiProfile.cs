@@ -127,6 +127,10 @@ namespace OutfitReactions.Ai
         public string NoticedChangeType { get; set; } = "";
         public string NoticedChangeName { get; set; } = "";
         public string SafeNoticedChangeHint { get; set; } = "";
+        // A saved outfit can equip a meaningful visible accessory in the same Hand Mirror
+        // action. Keep the reaction classified as Outfit, but preserve this fact so the prompt
+        // treats both pieces as one combined look instead of silently dropping the accessory.
+        public bool SavedOutfitIncludesMeaningfulAccessory { get; set; }
         // True when the NPC was caught peeking at the farmer while walking (the player looked at them
         // mid-stare) and then the player approached them. Lets the reaction acknowledge being caught.
         public bool WasCaughtPeeking { get; set; }
@@ -177,7 +181,7 @@ namespace OutfitReactions.Ai
         public string Text { get; set; } = "";
 
         /// <summary>
-        /// Fallback portrait key for the whole dialogue if per-box portrait keys are not supplied.
+        /// Primary portrait key for the dialogue when per-box portrait keys don't override it.
         /// The key may be a vanilla key (h/s/a/l), a custom ExtraPortraits key, or the raw $command.
         /// </summary>
         public string Portrait { get; set; } = "";

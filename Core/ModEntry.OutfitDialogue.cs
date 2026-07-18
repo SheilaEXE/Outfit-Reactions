@@ -316,7 +316,12 @@ public sealed partial class ModEntry : Mod
 		}
 		string text = location.Name ?? "";
 		string text2 = location.NameOrUniqueName ?? "";
-		return text.Equals("Beach", StringComparison.OrdinalIgnoreCase) || text2.Equals("Beach", StringComparison.OrdinalIgnoreCase) || text.StartsWith("Island", StringComparison.OrdinalIgnoreCase) || text2.StartsWith("Island", StringComparison.OrdinalIgnoreCase);
+		return text.Equals("Beach", StringComparison.OrdinalIgnoreCase)
+			|| text2.Equals("Beach", StringComparison.OrdinalIgnoreCase)
+			|| text.Equals("ElliottHouse", StringComparison.OrdinalIgnoreCase)
+			|| text2.Equals("ElliottHouse", StringComparison.OrdinalIgnoreCase)
+			|| text.StartsWith("Island", StringComparison.OrdinalIgnoreCase)
+			|| text2.StartsWith("Island", StringComparison.OrdinalIgnoreCase);
 	}
 
 	private bool IsMarriageCandidateNpcRoom(NPC npc, GameLocation location)
