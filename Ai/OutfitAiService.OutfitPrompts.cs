@@ -68,7 +68,12 @@ namespace OutfitReactions.Ai
             // to prevent the model from drifting into outfit commentary.
             // Exception: when SpecialItemCombinedMode is true (user chose "Outfit + item"),
             // the outfit context is intentionally kept so the NPC can compare the two.
-            if (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode)
+            // Vanilla hat-only mode must suppress these clues too; otherwise a saved outfit name
+            // can compete with the equipped/removed hat and make the model describe the outfit as
+            // the thing that changed.
+            bool includeOutfitContext = !context.VanillaHatHatOnlyMode
+                && (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode);
+            if (includeOutfitContext)
             {
                 bool outfitNameIsTechnical = !string.IsNullOrWhiteSpace(context.OutfitName)
                     && OutfitNameLooksTechnical(context.OutfitName);
@@ -106,7 +111,7 @@ namespace OutfitReactions.Ai
             // In HAT-ONLY mode, skip the full-outfit visual summary so the model has nothing about
             // the clothes to latch onto — it should only see the hat-related context below. But the
             // hat equip/removal framing must still reach the model, so pass it on its own.
-            if (!context.VanillaHatHatOnlyMode && (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode))
+            if (includeOutfitContext)
                 AppendFashionSenseVisualSummaryForPrompt(builder, context, PromptStyle);
             else if (context.VanillaHatHatOnlyMode && context.HasVanillaHatFraming)
                 builder.AppendLine("Hat status: " + context.VanillaHatFraming);
@@ -124,15 +129,15 @@ namespace OutfitReactions.Ai
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
                 builder.AppendLine("Farmer birthday context: " + context.FarmerBirthdayContext);
-            string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
+            string seasonalInstruction = includeOutfitContext ? BuildSeasonalAwarenessInstruction(context) : "";
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
             int environmentEnd = builder.Length;
 
             // Outfit memory + situational overrides (kept; these are scene facts).
-            if (context.HasOutfitMemory && !context.VanillaHatHatOnlyMode && (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode))
+            if (context.HasOutfitMemory && includeOutfitContext)
                 builder.AppendLine(context.OutfitMemoryContext);
-            string finalOverride2 = BuildFinalSituationalOverride(context);
+            string finalOverride2 = includeOutfitContext ? BuildFinalSituationalOverride(context) : "";
             if (!string.IsNullOrWhiteSpace(finalOverride2))
                 builder.AppendLine(finalOverride2);
             string privateRevealingRule = BuildPrivateRevealingPromptRule(context);
@@ -233,6 +238,8 @@ namespace OutfitReactions.Ai
             string portraitCommands = PortraitResolver.BuildPortraitCommandList(profile);
             ModConfig config = getConfig?.Invoke() ?? new ModConfig();
             bool strictLocalMode = config.LocalAiSafeMode;
+            bool includeOutfitContext = !context.VanillaHatHatOnlyMode
+                && (!context.SpecialItemOnlyMode || context.SpecialItemCombinedMode);
 
             StringBuilder builder = new();
             builder.AppendLine("LOCAL JSON MODE.");
@@ -290,7 +297,7 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Do not write narration, third-person descriptions, or stage directions. The JSON text field must contain only the exact spoken dialogue entry.");
                 builder.AppendLine("Do not turn private context labels into dialogue. Never expose internal labels for seasonal context, indoor or outdoor classification, NPC room state, or outfit categories.");
             }
-            string seasonalInstruction = BuildSeasonalAwarenessInstruction(context);
+            string seasonalInstruction = includeOutfitContext ? BuildSeasonalAwarenessInstruction(context) : "";
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
             builder.AppendLine("Approximate spoken dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. This is a soft estimate, not a hard cutoff; finish the reaction naturally if it needs to go over.");
@@ -303,20 +310,39 @@ namespace OutfitReactions.Ai
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
             builder.AppendLine(BuildRelationshipDepthGuidance(context));
-            builder.AppendLine("Private outfit category clue, for choosing the right theme only. Do not say this label: " + HumanizeTechnicalLabelForPrompt(context.DialogueKey));
-            if (!string.IsNullOrWhiteSpace(context.ThemeContext))
-                builder.AppendLine("Theme clues: " + CollapseForPrompt(SanitizeThemeContextForPrompt(context.ThemeContext), 650));
-            if (!string.IsNullOrWhiteSpace(context.SafeOutfitHint))
-                builder.AppendLine("Readable outfit/theme clue: " + context.SafeOutfitHint + ". Use its meaning naturally; if it names a recognizable reference/theme, the NPC may mention it when fitting. Do not recite technical slot/file names.");
-            AppendNoticedChangeContextForPrompt(builder, context, PromptStyle);
-            AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
-            AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
+            if (includeOutfitContext)
+            {
+                builder.AppendLine("Private outfit category clue, for choosing the right theme only. Do not say this label: " + HumanizeTechnicalLabelForPrompt(context.DialogueKey));
+                if (!string.IsNullOrWhiteSpace(context.ThemeContext))
+                    builder.AppendLine("Theme clues: " + CollapseForPrompt(SanitizeThemeContextForPrompt(context.ThemeContext), 650));
+                if (!string.IsNullOrWhiteSpace(context.SafeOutfitHint))
+                    builder.AppendLine("Readable outfit/theme clue: " + context.SafeOutfitHint + ". Use its meaning naturally; if it names a recognizable reference/theme, the NPC may mention it when fitting. Do not recite technical slot/file names.");
+                AppendNoticedChangeContextForPrompt(builder, context, PromptStyle);
+            }
+            if (context.VanillaHatHatOnlyMode)
+            {
+                if (context.HasVanillaHatFraming)
+                {
+                    CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.RemovedVanillaHatOnlyMode ?? PromptStyleService.FallbackRemovedVanillaHatOnlyMode, context);
+                    builder.AppendLine("Hat status: " + context.VanillaHatFraming);
+                }
+                else
+                {
+                    CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.VisibleVanillaHatOnlyMode ?? PromptStyleService.FallbackVisibleVanillaHatOnlyMode, context);
+                }
+            }
+            AppendSpecialItemReactionForPrompt(builder, context, PromptStyle);
+            if (!context.SpecialItemOnlyMode)
+            {
+                AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
+                AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
+            }
             AppendCompactLocationContext(builder, context);
             builder.AppendLine("Season/day/year: " + context.Season + " " + context.DayOfSeason + ", year " + context.Year);
             builder.AppendLine("Authoritative current season only: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". Outfit seasonal clues are not the current date.");
             builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + ", day period: " + context.DayPart);
             AppendWeatherLocationRule(builder, context);
-            string contextNaturalization = BuildNaturalContextHint(context);
+            string contextNaturalization = includeOutfitContext ? BuildNaturalContextHint(context) : "";
             if (!string.IsNullOrWhiteSpace(contextNaturalization))
                 builder.AppendLine(contextNaturalization);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
@@ -327,10 +353,10 @@ namespace OutfitReactions.Ai
                 builder.AppendLine(focusedProfile);
 
             // Outfit memory — inject so the NPC recognises repeat outfits.
-            if (context.HasOutfitMemory)
+            if (context.HasOutfitMemory && includeOutfitContext)
                 builder.AppendLine(context.OutfitMemoryContext);
 
-            string finalOverride3 = BuildFinalSituationalOverride(context);
+            string finalOverride3 = includeOutfitContext ? BuildFinalSituationalOverride(context) : "";
             if (!string.IsNullOrWhiteSpace(finalOverride3))
                 builder.AppendLine(finalOverride3);
 
