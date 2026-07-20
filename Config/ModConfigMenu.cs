@@ -1,5 +1,6 @@
 using System;
 using StardewModdingAPI;
+using OutfitReactions.Ai;
 using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions
@@ -13,14 +14,28 @@ namespace OutfitReactions
 
             mod.Config.ApplyAiDefaultsAndLimits();
 
+            (string Provider, string Model, string ApiKey, string Endpoint, int TimeoutSeconds) CaptureAiConnectionSettings()
+            {
+                ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(mod.Config);
+                return (ai.Provider, ai.Model, ai.ApiKey, ai.Endpoint, ai.TimeoutSeconds);
+            }
+
+            var savedAiConnectionSettings = CaptureAiConnectionSettings();
+
             configMenu.Register(
                 mod: mod.ModManifest,
                 reset: () => mod.Config = new ModConfig(),
                 save: () =>
                 {
                     mod.Config.ApplyAiDefaultsAndLimits();
+                    var currentAiConnectionSettings = CaptureAiConnectionSettings();
                     mod.Helper.WriteConfig(mod.Config);
-                    mod.QueueAiConnectionTestFromConfigMenu();
+
+                    if (currentAiConnectionSettings != savedAiConnectionSettings)
+                    {
+                        savedAiConnectionSettings = currentAiConnectionSettings;
+                        mod.QueueAiConnectionTestFromConfigMenu();
+                    }
                 }
             );
 
