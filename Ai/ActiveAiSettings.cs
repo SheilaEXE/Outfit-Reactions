@@ -13,6 +13,6 @@ namespace OutfitReactions.Ai
         public string Endpoint { get; set; } = "";
         public int TemperaturePercent { get; set; } = 75;
         public int TimeoutSeconds { get; set; } = 60;
-        public int MaxCharacters { get; set; } = 280;
+        public int MaxCharacters { get; set; } = 120;
     }
 }

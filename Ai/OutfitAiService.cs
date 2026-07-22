@@ -111,7 +111,7 @@ namespace OutfitReactions.Ai
                         ? "Connection test. Return exactly one line beginning with '- ' and no explanation: - Connection successful."
                         : "Connection test. Return exactly one compact JSON object only with this exact shape: {\"text\":\"Connection successful.\",\"portrait\":\"\"}";
 
-                    string raw = await aiClient.GenerateRawAsync(testAi, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), testAi));
+                    string raw = await aiClient.GenerateRawAsync(testAi, prompt);
                     if (string.IsNullOrWhiteSpace(raw))
                     {
                         monitor.Log($" AI connection test reached {provider}/{model}, but the provider returned an empty response.", LogLevel.Info);
@@ -169,7 +169,7 @@ namespace OutfitReactions.Ai
             {
                 if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" Sending outfit compliment request for {context.NpcName} using {ai.Provider}/{ai.Model}.", LogLevel.Info);
 
-                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage, cancellationToken).GetAwaiter().GetResult();
+                string raw = aiClient.GenerateRawAsync(ai, prompt, context.VisionImage, cancellationToken).GetAwaiter().GetResult();
                 if (string.IsNullOrWhiteSpace(raw))
                 {
                     monitor.Log(" Provider returned an empty response. Using fallback.", LogLevel.Warn);
@@ -255,7 +255,7 @@ namespace OutfitReactions.Ai
             {
                 monitor.Log($" Sending player-reply follow-up request for {context.NpcName} using {ai.Provider}/{ai.Model}.", LogLevel.Debug);
 
-                string raw = aiClient.GenerateRawAsync(ai, prompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), context.VisionImage, cancellationToken).GetAwaiter().GetResult();
+                string raw = aiClient.GenerateRawAsync(ai, prompt, context.VisionImage, cancellationToken).GetAwaiter().GetResult();
                 if (string.IsNullOrWhiteSpace(raw))
                 {
                     monitor.Log(" Provider returned an empty follow-up response.", LogLevel.Warn);
@@ -297,7 +297,7 @@ namespace OutfitReactions.Ai
                                 retryPrompt.Length,
                                 false,
                                 new KeyValuePair<string, int>("complete-retry-prompt", retryPrompt.Length));
-                            string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, GetMinimumLengthTarget(getConfig?.Invoke() ?? new ModConfig(), ai), null, cancellationToken).GetAwaiter().GetResult();
+                            string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, null, cancellationToken).GetAwaiter().GetResult();
 
                             if (string.IsNullOrWhiteSpace(retryRaw))
                             {

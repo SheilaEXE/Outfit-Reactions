@@ -9,22 +9,17 @@ namespace OutfitReactions.Ai
 {
     /// <summary>
     /// Validates and cleans AI-generated dialogue before it reaches the player. The orchestrator
-    /// ValidateGeneratedDialogueText runs the individual checks (length, pacing, theme specificity,
+    /// ValidateGeneratedDialogueText runs the individual checks (pacing, theme specificity,
     /// forbidden literals, technical-label leaks, wrong language, copied-format/instruction leaks,
     /// gender terms, private-reveal fluster cue) and returns an issue string (or null if clean).
-    /// Also hosts the dialogue text cleaners. Pure text processing: the caller supplies the
-    /// configured minimum-length target (computed elsewhere) so this class needs no game state.
+    /// Also hosts the dialogue text cleaners. This is pure text processing and needs no game state.
     /// </summary>
     internal static class DialogueValidator
     {
-        public static string ValidateGeneratedDialogueText(string text, OutfitAiContext context, ModConfig config, ActiveAiSettings ai, int minLengthTarget)
+        public static string ValidateGeneratedDialogueText(string text, OutfitAiContext context, ModConfig config, ActiveAiSettings ai)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return "empty dialogue text";
-
-            string minimumIssue = ValidateConfiguredMinimumLength(text, config, ai, minLengthTarget);
-            if (!string.IsNullOrWhiteSpace(minimumIssue))
-                return minimumIssue;
 
             // A #$b# break is useful for longer Stardew dialogue, but short natural one-box
             // reactions are allowed. Only require a break when the configured/actual length
@@ -298,42 +293,9 @@ namespace OutfitReactions.Ai
 
         private static bool ShouldRequireDialogueBreak(string text, ModConfig config, ActiveAiSettings ai)
         {
-            // Do not require a break just because the configured minimum is high. Only
-            // require a break for truly huge one-box lines that would be cramped in Stardew.
+            // Require a break only for truly huge one-box lines that would be cramped in Stardew.
             int visible = CountVisibleDialogueCharacters(text);
             return visible >= 360;
-        }
-
-        private static string ValidateConfiguredMinimumLength(string text, ModConfig config, ActiveAiSettings ai, int minLengthTarget)
-        {
-            if (string.IsNullOrWhiteSpace(text) || config == null)
-                return null;
-
-            int desiredMin = Math.Max(0, config.AiMinimumCharacters);
-            if (desiredMin <= 0)
-                return null;
-
-            int effectiveMin = minLengthTarget;
-            if (effectiveMin <= 0)
-                return null;
-
-            string visible = StripDialogueMarkup(text);
-            int visibleLength = CountVisibleDialogueCharacters(visible);
-
-            // Cost-saving leniency:
-            // The configured minimum is a strong target, but a line that is only a little short
-            // should not trigger a second paid API call. Retry only when it is meaningfully below
-            // the target. This keeps public releases safer for players using paid providers.
-            int allowedShortfall = Math.Max(
-                effectiveMin >= 300 ? 70 : effectiveMin >= 180 ? 45 : 25,
-                (int)Math.Round(effectiveMin * 0.18)
-            );
-            int hardMin = Math.Max(40, effectiveMin - allowedShortfall);
-
-            if (visibleLength < hardMin)
-                return "dialogue was too short for configured minimum (" + visibleLength + "/" + effectiveMin + " visible characters; requested " + desiredMin + ", retry threshold " + hardMin + ")";
-
-            return null;
         }
 
         private static int CountVisibleDialogueCharacters(string text)

@@ -31,6 +31,11 @@
       "SecretReactionHint": "The NPC now knows these are Mayor Lewis's personal underwear — found in Marnie's bedroom. React to the full scandal: the farmer is publicly wearing the mayor's intimate underwear. This is mortifying, hilarious, or shocking depending on personality and relationship with Lewis and Marnie.",
       "NpcOverrides": {
         "Lewis": {
+          "ScriptedDialogueKeys": {
+            "Escape": [ "Lewis-shorts-escape.1", "Lewis-shorts-escape.2", "Lewis-shorts-escape.3", "Lewis-shorts-escape.4", "Lewis-shorts-escape.5" ],
+            "Confiscated": [ "Lewis-shorts-confiscated.1", "Lewis-shorts-confiscated.2", "Lewis-shorts-confiscated.3", "Lewis-shorts-confiscated.4", "Lewis-shorts-confiscated.5" ],
+            "Escaped": [ "Lewis-shorts-escaped.1", "Lewis-shorts-escaped.2", "Lewis-shorts-escaped.3", "Lewis-shorts-escaped.4", "Lewis-shorts-escaped.5" ]
+          },
           "KnowsSecretByDefault": true,
           "ReactionHint": "Lewis immediately recognizes these as HIS personal underwear. He is beyond furious and mortified — someone is walking around town wearing his most private garment. He wants them off immediately and will not discuss it calmly. He may demand to know where they were found while desperately trying to keep his composure.",
           "SecretReactionHint": "Lewis sees his own intimate underwear being worn publicly and is at maximum fury and embarrassment. Even if the farmer reveals the full story, he only gets more desperate to end the situation immediately and shut down any further discussion."
@@ -60,6 +65,11 @@
       "SecretReactionHint": "The NPC now knows the underwear on the farmer's head belongs to Mayor Lewis, found in Marnie's bedroom. The situation is even more absurd: the farmer is wearing the mayor's personal intimate underwear as a hat in public. React to this full scandal shaped entirely by personality.",
       "NpcOverrides": {
         "Lewis": {
+          "ScriptedDialogueKeys": {
+            "Escape": [ "Lewis-shorts-escape.1", "Lewis-shorts-escape.2", "Lewis-shorts-escape.3", "Lewis-shorts-escape.4", "Lewis-shorts-escape.5" ],
+            "Confiscated": [ "Lewis-shorts-confiscated.1", "Lewis-shorts-confiscated.2", "Lewis-shorts-confiscated.3", "Lewis-shorts-confiscated.4", "Lewis-shorts-confiscated.5" ],
+            "Escaped": [ "Lewis-shorts-escaped.1", "Lewis-shorts-escaped.2", "Lewis-shorts-escaped.3", "Lewis-shorts-escaped.4", "Lewis-shorts-escaped.5" ]
+          },
           "KnowsSecretByDefault": true,
           "ReactionHint": "Lewis recognizes his own intimate underwear being worn on the farmer's HEAD in public. He is beyond furious and absolutely mortified — this is the worst possible outcome. He wants them off immediately and is horrified that anyone might see this.",
           "SecretReactionHint": "Lewis sees his own personal underwear on the farmer's head and is at maximum fury. Even if the farmer reveals the full story, he only gets more desperate to end the situation and will not discuss it calmly under any circumstances."

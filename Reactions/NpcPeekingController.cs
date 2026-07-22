@@ -9,18 +9,30 @@ namespace OutfitReactions
     /// <summary>Owns walking detection and the non-spouse NPC peeking state machine.</summary>
     internal sealed class NpcPeekingController
     {
-        private const int WalkingGraceTicks = 30;
+        // Movement is sampled by the throttled discovery scan (~8.5 times/second),
+        // so five samples preserve roughly the original half-second turn grace.
+        private const int WalkingGraceScans = 5;
+        // A route can remove its controller slightly before the destination pose or special
+        // animation is fully applied. Nine discovery samples are roughly one second, giving
+        // vanilla and schedule mods time to settle that state before it can be snapshotted.
+        private const int StationarySettleScans = 9;
         private readonly Random random;
         private readonly Dictionary<string, PendingPrompt> pendingPrompts;
         private readonly Action<NPC> armPendingReaction;
+        private readonly Func<GameLocation, int, int, bool> isVisionIgnoredTile;
         private readonly Dictionary<string, SpyingState> spyingNpcs = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> ticksSinceLastMoving = new(StringComparer.OrdinalIgnoreCase);
 
-        public NpcPeekingController(Random random, Dictionary<string, PendingPrompt> pendingPrompts, Action<NPC> armPendingReaction)
+        public NpcPeekingController(
+            Random random,
+            Dictionary<string, PendingPrompt> pendingPrompts,
+            Action<NPC> armPendingReaction,
+            Func<GameLocation, int, int, bool> isVisionIgnoredTile)
         {
             this.random = random;
             this.pendingPrompts = pendingPrompts;
             this.armPendingReaction = armPendingReaction;
+            this.isVisionIgnoredTile = isVisionIgnoredTile;
         }
 
         public void Clear()
@@ -68,12 +80,18 @@ namespace OutfitReactions
             else if (ticksSinceLastMoving.TryGetValue(npc.Name, out int ticks))
                 ticksSinceLastMoving[npc.Name] = ticks + 1;
             else
-                ticksSinceLastMoving[npc.Name] = WalkingGraceTicks + 1;
+                ticksSinceLastMoving[npc.Name] = WalkingGraceScans + 1;
         }
 
         public bool IsRecentlyMoving(string npcName)
         {
-            return ticksSinceLastMoving.TryGetValue(npcName ?? "", out int ticks) && ticks < WalkingGraceTicks;
+            return ticksSinceLastMoving.TryGetValue(npcName ?? "", out int ticks) && ticks < WalkingGraceScans;
+        }
+
+        public bool HasStableStationaryState(string npcName)
+        {
+            return ticksSinceLastMoving.TryGetValue(npcName ?? "", out int ticks)
+                && ticks >= StationarySettleScans;
         }
 
         public void Update(float noticeDistance, float cancelDistance)
@@ -196,6 +214,10 @@ namespace OutfitReactions
                 float progress = (float)i / steps;
                 int tileX = (int)Math.Round(npcTile.X + dx * progress);
                 int tileY = (int)Math.Round(npcTile.Y + dy * progress);
+
+                if (isVisionIgnoredTile?.Invoke(location, tileX, tileY) == true)
+                    continue;
+
                 try
                 {
                     xTile.Dimensions.Location tileLocation = new(tileX, tileY);

@@ -90,7 +90,7 @@ namespace OutfitReactions.Ai
                 return false;
             }
 
-            string validationIssue = DialogueValidator.ValidateGeneratedDialogueText(cleaned, context, config, ai, GetMinimumLengthTarget(config, ai));
+            string validationIssue = DialogueValidator.ValidateGeneratedDialogueText(cleaned, context, config, ai);
             if (!string.IsNullOrWhiteSpace(validationIssue))
             {
                 issue = validationIssue;

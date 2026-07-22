@@ -15,8 +15,7 @@ namespace OutfitReactions.Ai
     /// Owns all direct communication with AI providers: building the HTTP request for each
     /// provider family (OpenAI-compatible, Anthropic, Gemini), sending it, handling the
     /// vision-fallback retry, and extracting the raw text from the response. The caller passes
-    /// resolved ActiveAiSettings plus a minimum visible-length target; this class is otherwise
-    /// self-contained.
+    /// resolved ActiveAiSettings; this class is otherwise self-contained.
     /// </summary>
     internal sealed class AiProviderClient
     {
@@ -28,7 +27,7 @@ namespace OutfitReactions.Ai
             this.monitor = monitor;
         }
 
-        public async Task<string> GenerateRawAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, OutfitVisionImage visionImage = null, CancellationToken cancellationToken = default)
+        public async Task<string> GenerateRawAsync(ActiveAiSettings ai, string prompt, OutfitVisionImage visionImage = null, CancellationToken cancellationToken = default)
         {
             IAiProvider provider = AiProviderRegistry.Get(ai.Provider);
             using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -37,12 +36,12 @@ namespace OutfitReactions.Ai
             try
             {
                 if (provider.Transport == AiTransportKind.GeminiGenerateContent)
-                    return await GenerateGeminiAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
+                    return await GenerateGeminiAsync(ai, prompt, timeout.Token, visionImage);
 
                 if (provider.Transport == AiTransportKind.AnthropicMessages)
-                    return await GenerateAnthropicAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
+                    return await GenerateAnthropicAsync(ai, prompt, timeout.Token, visionImage);
 
-                return await GenerateOpenAiCompatibleAsync(ai, prompt, minLengthTarget, timeout.Token, visionImage);
+                return await GenerateOpenAiCompatibleAsync(ai, prompt, timeout.Token, visionImage);
             }
             catch (InvalidOperationException ex) when (ShouldRetryWithoutVision(ex, ai, visionImage))
             {
@@ -55,12 +54,12 @@ namespace OutfitReactions.Ai
                     + "Do not invent exact visual details, scene objects, props, or current actions that are not explicitly stated.";
 
                 if (provider.Transport == AiTransportKind.GeminiGenerateContent)
-                    return await GenerateGeminiAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
+                    return await GenerateGeminiAsync(ai, textOnlyPrompt, timeout.Token, null);
 
                 if (provider.Transport == AiTransportKind.AnthropicMessages)
-                    return await GenerateAnthropicAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
+                    return await GenerateAnthropicAsync(ai, textOnlyPrompt, timeout.Token, null);
 
-                return await GenerateOpenAiCompatibleAsync(ai, textOnlyPrompt, minLengthTarget, timeout.Token, null);
+                return await GenerateOpenAiCompatibleAsync(ai, textOnlyPrompt, timeout.Token, null);
             }
         }
 
@@ -70,7 +69,7 @@ namespace OutfitReactions.Ai
             return provider.ResolveEndpoint(ai?.Endpoint, ai?.Model);
         }
 
-        private async Task<string> GenerateOpenAiCompatibleAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
+        private async Task<string> GenerateOpenAiCompatibleAsync(ActiveAiSettings ai, string prompt, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
             IAiProvider provider = AiProviderRegistry.Get(ai.Provider);
             string endpoint = NormalizeEndpoint(ai);
@@ -81,7 +80,7 @@ namespace OutfitReactions.Ai
             // This is NOT a hard final-dialogue limit; MaxCharacters is a soft visible-length target.
             // We give enough space for nuance, tone, JSON formatting, and moderate model reasoning,
             // without going back to the old 4000+ headroom that made Pro/Thinking models crawl.
-            int visibleTarget = Math.Max(ai.MaxCharacters, minLengthTarget);
+            int visibleTarget = Math.Clamp(ai.MaxCharacters, 80, 400);
             string modelLower = (ai.Model ?? "").ToLowerInvariant();
             bool looksLikeReasoningModel =
                 modelLower.Contains("reasoner") || modelLower.Contains("reasoning") ||
@@ -185,13 +184,13 @@ namespace OutfitReactions.Ai
             return ExtractOpenAiCompatibleText(json);
         }
 
-        private async Task<string> GenerateAnthropicAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
+        private async Task<string> GenerateAnthropicAsync(ActiveAiSettings ai, string prompt, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
             string endpoint = AiProviderRegistry.Get("Anthropic").ResolveEndpoint(ai.Endpoint, ai.Model);
 
             if (OutfitReactions.ModEntry.DebugLog) monitor.Log($" HTTP endpoint: {endpoint}", LogLevel.Info);
 
-            int visibleTarget = Math.Max(ai.MaxCharacters, minLengthTarget);
+            int visibleTarget = Math.Clamp(ai.MaxCharacters, 80, 400);
             string modelLower = (ai.Model ?? "").ToLowerInvariant();
             bool looksLikeReasoningModel =
                 modelLower.Contains("opus") || modelLower.Contains("thinking") || modelLower.Contains("reasoning");
@@ -279,7 +278,7 @@ namespace OutfitReactions.Ai
             return "";
         }
 
-        private async Task<string> GenerateGeminiAsync(ActiveAiSettings ai, string prompt, int minLengthTarget, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
+        private async Task<string> GenerateGeminiAsync(ActiveAiSettings ai, string prompt, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
         {
             string endpoint = AiProviderRegistry.Get("Gemini").ResolveEndpoint(ai.Endpoint, ai.Model);
 
@@ -291,7 +290,7 @@ namespace OutfitReactions.Ai
             // Quality-friendly output budget for Gemini.
             // MaxCharacters is a soft visible-dialogue target; this only gives the model
             // enough room to preserve tone and nuance.
-            int visibleTarget = Math.Max(ai.MaxCharacters, minLengthTarget);
+            int visibleTarget = Math.Clamp(ai.MaxCharacters, 80, 400);
             string geminiModelLower = (ai.Model ?? "").ToLowerInvariant();
             bool geminiReasoning =
                 geminiModelLower.Contains("-pro") || geminiModelLower.Contains("pro-") || geminiModelLower.EndsWith("pro") ||
@@ -471,11 +470,10 @@ namespace OutfitReactions.Ai
 
         private static int CalculateQualityOutputTokenBudget(int visibleTarget, bool reasoningLikeModel)
         {
-            visibleTarget = Math.Clamp(visibleTarget, 80, 2000);
+            visibleTarget = Math.Clamp(visibleTarget, 80, 400);
 
-            // Token budget is derived purely from the visible character target, with no hard upper
-            // cap. This avoids truncated JSON on models that use more tokens internally (e.g. Gemini
-            // Flash/Pro) while still being naturally proportional to the requested dialogue length.
+            // Keep enough output headroom for complete JSON and model reasoning while scaling
+            // proportionally with the player's soft visible-character target.
             int visibleBudget = visibleTarget * 3;
             int nuanceHeadroom = (int)(visibleTarget * 1.75);
 

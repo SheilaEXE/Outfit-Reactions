@@ -283,15 +283,6 @@ namespace OutfitReactions.Ai
             string stripped = DialogueValidator.StripDialogueMarkup(text);
             string lower = " " + stripped.ToLowerInvariant() + " ";
 
-            int desiredMin = Math.Max(40, GetMinimumLengthTarget(config, ai: null));
-            int allowedShortfall = Math.Max(
-                desiredMin >= 300 ? 70 : desiredMin >= 180 ? 45 : 25,
-                (int)Math.Round(desiredMin * 0.18)
-            );
-            int hardMin = Math.Max(40, desiredMin - allowedShortfall);
-            if (stripped.Length < hardMin)
-                return "local dialogue was too short for configured minimum (" + stripped.Length + "/" + desiredMin + " visible characters, retry threshold " + hardMin + ")";
-
             if (LooksLikeThirdPersonNarrationForNpc(lower, context?.NpcDisplayName ?? context?.NpcName))
                 return "local response was narration instead of spoken dialogue";
 
