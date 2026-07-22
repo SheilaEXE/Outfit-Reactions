@@ -344,7 +344,11 @@ public sealed partial class ModEntry : Mod
 
 	private IFashionSenseApi fsApi;
 
+	private TileMarkerVisionIntegration tileMarkerVisionIntegration;
+
 	private OtherNpcClothesReactionSystem otherNpcClothesReactionSystem;
+
+	private LewisShortsChaseController lewisShortsChaseController;
 
 	private OutfitAiService outfitAiService;
 
@@ -653,6 +657,10 @@ public sealed partial class ModEntry : Mod
 		{
 			return true;
 		}
+		if (lewisShortsChaseController?.IsActive == true)
+		{
+			return true;
+		}
 		return false;
 	}
 
@@ -689,9 +697,11 @@ public sealed partial class ModEntry : Mod
 		hatMemoryService = new HatMemoryService(helper, ((Mod)this).Monitor);
 		outfitVisionService = new OutfitVisionService(((Mod)this).Monitor);
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
+		tileMarkerVisionIntegration = new TileMarkerVisionIntegration(helper, ((Mod)this).Monitor, ((Mod)this).ModManifest);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
-		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => IsActiveFestivalEventForOutfitReaction() || ShouldDeferAutomaticOutfitReaction(logDecision: false));
+		lewisShortsChaseController = new LewisShortsChaseController(((Mod)this).Monitor, helper.Translation, GetEquippedLewisShortsSlot, ConfiscateEquippedLewisShorts, GetLewisShortsChaseDialogueKey, MarkCurrentOutfitAsNoticed);
+		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => IsActiveFestivalEventForOutfitReaction() || ShouldDeferAutomaticOutfitReaction(logDecision: false), (location, x, y) => tileMarkerVisionIntegration?.IsVisionIgnoredTile(location, x, y) == true, (npc, pending) => lewisShortsChaseController?.TryBeginAfterReaction(npc, pending) == true);
 		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
 		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
 		helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -794,6 +804,7 @@ public sealed partial class ModEntry : Mod
 		waitingForDayStartFreeRoam = false;
 		dayStartFreeRoamTicks = 0;
 		ResetClothesState(clearChangeFlag: true);
+		lewisShortsChaseController?.Reset(restoreIfPossible: true);
 		otherNpcClothesReactionSystem?.Reset();
 		Game1.player?.modData?.Remove(ReactionActiveModDataKey);
 	}
@@ -911,6 +922,7 @@ public sealed partial class ModEntry : Mod
 	private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
 	{
 		fsApi = ((Mod)this).Helper.ModRegistry.GetApi<IFashionSenseApi>("PeacefulEnd.FashionSense");
+		tileMarkerVisionIntegration?.Initialize();
 		((Mod)this).Monitor.Log((fsApi != null) ? "Fashion Sense API loaded successfully." : "Fashion Sense API not found. Outfit compliments will not detect clothing changes.", (LogLevel)((fsApi != null) ? 1 : 3));
 		outfitAiService?.LoadProfiles();
 		try
@@ -942,6 +954,7 @@ public sealed partial class ModEntry : Mod
 		lastKnownVanillaShirtName = null;
 		lastKnownVanillaShoesName = null;
 		ResetClothesState(clearChangeFlag: true);
+		lewisShortsChaseController?.Reset(restoreIfPossible: true);
 		otherNpcClothesReactionSystem?.Reset();
 		outfitAiService?.LoadProfiles(quiet: true);
 		RearmCurrentAppearanceNoticeAfterLifecycleReset("loading the save");
@@ -952,6 +965,7 @@ public sealed partial class ModEntry : Mod
 		BeginDayStartReactionGate();
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
+		lewisShortsChaseController?.Reset(restoreIfPossible: true);
 		otherNpcClothesReactionSystem?.Reset();
 		RearmCurrentAppearanceNoticeAfterLifecycleReset("starting a new day");
 		Farmer player = Game1.player;
@@ -968,6 +982,7 @@ public sealed partial class ModEntry : Mod
 		dayStartFreeRoamTicks = 0;
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
+		lewisShortsChaseController?.Reset(restoreIfPossible: false);
 		otherNpcClothesReactionSystem?.Reset();
 	}
 

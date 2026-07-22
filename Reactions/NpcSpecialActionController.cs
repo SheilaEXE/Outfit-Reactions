@@ -18,6 +18,57 @@ namespace OutfitReactions
             this.monitor = monitor;
         }
 
+        /// <summary>
+        /// Reads a special stationary pose without stopping it or changing any NPC fields. This is
+        /// used to protect a romantic partner's real destination state before the player approaches.
+        /// </summary>
+        public NpcOutfitSpecialActionSnapshot CaptureReadOnly(NPC npc)
+        {
+            if (npc == null || npc.Sprite == null || npc.currentLocation == null || npc.isMoving())
+                return null;
+
+            List<FarmerSprite.AnimationFrame> animation = null;
+            if (npc.Sprite.CurrentAnimation != null && npc.Sprite.CurrentAnimation.Count > 0)
+                animation = new List<FarmerSprite.AnimationFrame>(npc.Sprite.CurrentAnimation);
+
+            bool hasSpecialAnimation = animation != null && animation.Count > 0;
+            bool hasSpecialStaticFrame = npc.Sprite.CurrentFrame >= 16;
+            if (!hasSpecialAnimation && !hasSpecialStaticFrame)
+                return null;
+
+            NpcOutfitSpecialActionSnapshot snapshot = new()
+            {
+                Npc = npc,
+                Location = npc.currentLocation,
+                FacingDirection = npc.FacingDirection,
+                CurrentFrame = npc.Sprite.CurrentFrame,
+                Flip = npc.flip,
+                MovementPause = (int)npc.movementPause,
+                AddedSpeed = (int)npc.addedSpeed,
+                CurrentAnimation = animation
+            };
+
+            string endOfRouteBehaviorName = TryGetNetStringField(npc, "endOfRouteBehaviorName");
+            bool isFishingBehavior = !string.IsNullOrEmpty(endOfRouteBehaviorName)
+                && endOfRouteBehaviorName.IndexOf("fish", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isFishingBehavior)
+            {
+                snapshot.SavedIgnoreSourceRectUpdates = TryGetPrivateField(npc.Sprite, "ignoreSourceRectUpdates") as bool? ?? false;
+                snapshot.SavedSpriteWidth = TryGetPrivateField(npc.Sprite, "spriteWidth") as int? ?? npc.Sprite.SpriteWidth;
+                snapshot.SavedTempSpriteHeight = TryGetPrivateField(npc.Sprite, "tempSpriteHeight") as int? ?? -1;
+                snapshot.HasSavedSpriteDimensions = true;
+                snapshot.SavedDoingEndOfRouteAnimation = TryGetNetBoolField(npc, "doingEndOfRouteAnimation");
+                snapshot.SavedCurrentlyDoingEndOfRouteAnimation = TryGetPrivateField(npc, "currentlyDoingEndOfRouteAnimation") as bool?;
+                snapshot.SavedStartedEndOfRouteBehavior = endOfRouteBehaviorName;
+                snapshot.SavedYOffset = TryGetPrivateField(npc, "yOffset") as float? ?? 0f;
+                snapshot.SavedLoadedEndOfRouteBehavior = TryGetPrivateField(npc, "loadedEndOfRouteBehavior") as string;
+                snapshot.SavedDrawOffset = TryGetPrivateField(npc, "drawOffset") as Vector2? ?? Vector2.Zero;
+                snapshot.HasSavedRodLayerFields = true;
+            }
+
+            return snapshot;
+        }
+
         public void Capture(NPC npc, PendingPrompt pending)
         {
             if (npc == null || pending == null || npc.Sprite == null || npc.currentLocation == null)

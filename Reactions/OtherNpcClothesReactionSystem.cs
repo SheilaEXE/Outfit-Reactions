@@ -1,6 +1,5 @@
 using StardewModdingAPI;
 using StardewValley;
-using StardewValley.Locations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,8 +8,9 @@ namespace OutfitReactions
 {
     /// <summary>
     /// Unified outfit reactions for villagers, including dating partners and spouses.
-    /// This system never starts pathfinding, never halts schedules, and keeps saved outfits eligible
-    /// until each NPC actually reads the current pending outfit compliment.
+    /// Romantic partners may temporarily approach the player through the isolated approach controller;
+    /// other villagers keep their schedules untouched. Saved outfits remain eligible until each NPC
+    /// actually reads the current pending outfit compliment.
     /// </summary>
     internal sealed class OtherNpcClothesReactionSystem
     {
@@ -26,8 +26,10 @@ namespace OutfitReactions
         private readonly Func<NPC, bool> hasNpcSeenCurrentVisualBefore;
         private readonly Func<NPC, bool> isRomanticPartner;
         private readonly Func<bool> shouldDeferAutomaticNotices;
+        private readonly Func<NPC, PendingPrompt, bool> tryBeginPostDialogueAction;
         private readonly NpcSpecialActionController specialActionController;
         private readonly NpcPeekingController peekingController;
+        private readonly RomanticPartnerApproachController romanticApproachController;
         private readonly Random random = new();
         // The discovery scan (foreach over every NPC in the location, checking distance/facing/
         // line-of-sight for new notices) is the expensive part of Update(). It's throttled to run
@@ -46,7 +48,7 @@ namespace OutfitReactions
         private const float NpcSpecialActionRestoreDistance = 300f;
         private const int PendingBubbleCooldownTicks = 240;
         private const float RomanticWalkingHoldDistance = 300f;
-        private const float RomanticPendingCancelDistance = 500f;
+        private const float RomanticPendingCancelDistance = RomanticPartnerApproachController.NoticeDistance;
 
         private readonly HashSet<string> reactedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> festivalRollAttemptedNpcsThisOutfit = new(StringComparer.OrdinalIgnoreCase);
@@ -65,7 +67,9 @@ namespace OutfitReactions
             Func<NPC, bool> canNpcReactToOutfit,
             Func<NPC, bool> hasNpcSeenCurrentVisualBefore,
             Func<NPC, bool> isRomanticPartner,
-            Func<bool> shouldDeferAutomaticNotices)
+            Func<bool> shouldDeferAutomaticNotices,
+            Func<GameLocation, int, int, bool> isVisionIgnoredTile,
+            Func<NPC, PendingPrompt, bool> tryBeginPostDialogueAction = null)
         {
             this.monitor = monitor;
             this.getConfig = getConfig;
@@ -79,12 +83,16 @@ namespace OutfitReactions
             this.hasNpcSeenCurrentVisualBefore = hasNpcSeenCurrentVisualBefore;
             this.isRomanticPartner = isRomanticPartner;
             this.shouldDeferAutomaticNotices = shouldDeferAutomaticNotices;
+            this.tryBeginPostDialogueAction = tryBeginPostDialogueAction;
             this.specialActionController = new NpcSpecialActionController(monitor);
-            this.peekingController = new NpcPeekingController(random, pendingPrompts, ArmPendingReactionForSpy);
+            this.peekingController = new NpcPeekingController(random, pendingPrompts, ArmPendingReactionForSpy, isVisionIgnoredTile);
+            this.romanticApproachController = new RomanticPartnerApproachController(monitor);
         }
 
         public void Reset(bool clearPrompts = true)
         {
+            romanticApproachController.Reset(restoreIfPossible: true);
+
             if (clearPrompts)
                 ClearAllPendingPrompts(removeQueuedDialogues: true);
 
@@ -97,6 +105,7 @@ namespace OutfitReactions
 
         public void NotifyOutfitChanged()
         {
+            romanticApproachController.Reset(restoreIfPossible: true);
             ClearAllPendingPrompts(removeQueuedDialogues: true);
 
             reactedNpcsThisOutfit.Clear();
@@ -122,6 +131,7 @@ namespace OutfitReactions
             if (config == null)
                 return;
 
+            romanticApproachController.Update();
             UpdateRollCooldowns();
             UpdatePendingPrompts(config);
 
@@ -171,10 +181,13 @@ namespace OutfitReactions
 
                 bool romanticPartner = isRomanticPartner?.Invoke(npc) == true;
                 float npcNoticeDistance = romanticPartner
-                    ? Math.Min(noticeDistance, RomanticPendingCancelDistance)
+                    ? RomanticPartnerApproachController.NoticeDistance
                     : noticeDistance;
 
                 if (pendingPrompts.ContainsKey(npc.Name))
+                    continue;
+
+                if (romanticPartner && romanticApproachController.IsHandling(npc))
                     continue;
 
                 // Robust "is this NPC walking its schedule?" check. npc.isMoving() flickers false for
@@ -185,26 +198,45 @@ namespace OutfitReactions
                 peekingController.UpdateMovementTracking(npc);
                 bool npcIsWalking = peekingController.IsRecentlyMoving(npc.Name);
 
+                // A route may remove its controller just before vanilla (or the schedule mod)
+                // applies the final destination pose. Don't let that transition become the
+                // protected stationary snapshot merely because the player approached quickly.
+                if (romanticPartner
+                    && npc.controller == null
+                    && npc.temporaryController == null)
+                {
+                    if (!peekingController.HasStableStationaryState(npc.Name))
+                        continue;
+
+                    // Save the settled pose before distance, facing, line-of-sight, and random
+                    // notice checks. Approaching later can no longer replace it with a pose that
+                    // another system turned toward the player in response to their proximity.
+                    romanticApproachController.ObserveStationaryOrigin(npc);
+                }
+
                 // ── Peeping mechanic (NPC is walking) ────────────────────────────
                 // While an NPC is actively moving through their schedule and the player
-                // is in range, give them a 1% per-tick chance to "notice" the outfit and
+                // is in range, give them a small chance on each throttled discovery scan to
                 // stop to peek. Peeking IS the "notice" for a walking NPC: it arms the same
                 // pending reaction, so if the player goes over and clicks, the NPC reacts.
                 // Only movementPause is used — no controller/schedule interference.
-                // Cheap checks first, expensive line-of-sight raycast last: the ~0.3% roll fails
-                // the vast majority of ticks, so testing it before HasLineOfSightToPlayer avoids
-                // running the tile-by-tile raycast for every nearby walking NPC on every tick.
+                // Cheap checks first, expensive line-of-sight raycast last: the roll usually fails,
+                // so the tile-by-tile raycast only runs when a peek may actually begin.
                 if (!romanticPartner && npcIsWalking
                     && !peekingController.Contains(npc.Name)
                     && !reactedNpcsThisOutfit.Contains(npc.Name)
                     && DistanceToPlayer(npc) <= noticeDistance
-                    && random.Next(1000) < 3   // ~0.3% per tick ≈ one notice every ~5-7s nearby
+                    // This runs on the throttled discovery scan (~8.5 scans/second), so 2%
+                    // restores the intended average of roughly one peek every 5-7 seconds.
+                    && random.Next(100) < 2
                     && HasLineOfSightToPlayer(npc))
                 {
                     peekingController.Begin(npc);
                     // Peeking counts as noticing: arm the pending reaction (no bubble/pause here —
                     // the peeking visuals are driven by NpcPeekingController) so a click still reacts.
                     ArmPendingReactionForSpy(npc);
+                    if (ModEntry.DebugLog)
+                        monitor?.Log($"[NPC OUTFIT] {npc.Name} noticed the outfit while walking and started peeking.", LogLevel.Info);
                 }
 
                 // NPCs already in the spying state are handled by NpcPeekingController;
@@ -288,25 +320,22 @@ namespace OutfitReactions
             if (npc == null)
                 return;
 
-            PendingPrompt pending = new PendingPrompt
-            {
-                OriginalFacingDirection = npc.FacingDirection,
-                WasLookingAtPlayer = false,
-                IsRomanticPartner = romanticPartner,
-                WasMovingWhenNoticed = wasMovingWhenNoticed,
-                NoticeDelayTimer = 75,
-                DialogueQueued = false,
-                NoticePauseActive = false,
-                PendingBubbleCooldown = 0
-            };
+            PendingPrompt pending = CreatePendingPrompt(npc);
+            pending.IsRomanticPartner = romanticPartner;
+            pending.WasMovingWhenNoticed = wasMovingWhenNoticed;
+            pending.NoticeDelayTimer = 75;
 
             reactedNpcsThisOutfit.Add(npc.Name);
             pendingPrompts[npc.Name] = pending;
             // If this NPC was peeping, end the spy state cleanly — the full reaction takes over.
             peekingController.Remove(npc.Name);
 
+            if (romanticPartner)
+                pending.RomanticApproachStarted = romanticApproachController.TryBegin(npc, pending, wasMovingWhenNoticed);
+
             ShowPendingDialogueBubbleIfNeeded(npc, pending, config, force: true);
-            UpdateNpcLookState(npc, pending, config);
+            if (!pending.RomanticApproachStarted)
+                UpdateNpcLookState(npc, pending, config);
 
             // Do NOT generate/queue the AI line here. The NPC has only noticed the outfit.
             // The expensive AI call starts when the player actually clicks this NPC.
@@ -325,16 +354,9 @@ namespace OutfitReactions
             if (npc == null)
                 return;
 
-            PendingPrompt pending = new PendingPrompt
-            {
-                OriginalFacingDirection = npc.FacingDirection,
-                WasLookingAtPlayer = false,
-                CameFromPeeking = true,
-                NoticeDelayTimer = 0,
-                DialogueQueued = false,
-                NoticePauseActive = false,
-                PendingBubbleCooldown = 0
-            };
+            PendingPrompt pending = CreatePendingPrompt(npc);
+            pending.CameFromPeeking = true;
+            pending.NoticeDelayTimer = 0;
 
             reactedNpcsThisOutfit.Add(npc.Name);
             pendingPrompts[npc.Name] = pending;
@@ -407,6 +429,7 @@ namespace OutfitReactions
             // partner resumes their route, even beyond the normal romantic 1000f boundary.
             // The exception ends only when the player deliberately clicks to read this reaction.
             pending.IgnoreRomanticDistanceForPublicMultiKiss = false;
+            romanticApproachController.NotifyInteraction(npc);
 
             if (pending.DialogueWasConsumed)
             {
@@ -520,16 +543,10 @@ namespace OutfitReactions
                 return false;
             }
 
-            PendingPrompt pending = new PendingPrompt
-            {
-                OriginalFacingDirection = npc.FacingDirection,
-                IsRomanticPartner = isRomanticPartner?.Invoke(npc) == true,
-                NoticeDelayTimer = 0,
-                DialogueQueued = false,
-                NoticePauseActive = false,
-                PendingBubbleCooldown = 0,
-                SuppressNoticeEmote = true
-            };
+            PendingPrompt pending = CreatePendingPrompt(npc);
+            pending.IsRomanticPartner = isRomanticPartner?.Invoke(npc) == true;
+            pending.NoticeDelayTimer = 0;
+            pending.SuppressNoticeEmote = true;
 
             reactedNpcsThisOutfit.Add(npc.Name);
             pendingPrompts[npc.Name] = pending;
@@ -553,6 +570,7 @@ namespace OutfitReactions
             pending.RomanticHoldSuspendedForKiss = true;
             pending.ExternalKissProtectionTimer = 90;
             pending.NoticePauseActive = false;
+            romanticApproachController.SetSuspended(npc, suspended: true);
             npc.movementPause = 0;
 
             if (ModEntry.DebugLog)
@@ -610,6 +628,21 @@ namespace OutfitReactions
                     pending.ExternalKissProtectionTimer = 0;
                     pending.WasLookingAtPlayer = false;
                     pending.SpecialActionSnapshot = null;
+                    romanticApproachController.ReleaseForExternalAction(npc);
+                }
+
+                if (pending.IsRomanticPartner
+                    && romanticApproachController.TryConsumeOutcome(npc, out RomanticPartnerApproachOutcome approachOutcome))
+                {
+                    pending.RomanticApproachStarted = false;
+                    pending.RomanticApproachFinished = true;
+
+                    if (approachOutcome == RomanticPartnerApproachOutcome.CancelPending)
+                    {
+                        CancelPendingPrompt(npc, pending);
+                        pendingPrompts.Remove(npcName);
+                        continue;
+                    }
                 }
 
                 if (pending.PendingBubbleCooldown > 0)
@@ -633,6 +666,7 @@ namespace OutfitReactions
                     bool invalidLocation = Game1.player == null || npc.currentLocation != Game1.player.currentLocation;
                     bool beyondCancelDistance = !invalidLocation
                         && !pending.IgnoreRomanticDistanceForPublicMultiKiss
+                        && !romanticApproachController.IsHandling(npc)
                         && DistanceToPlayer(npc) > cancelDistance;
                     if (invalidLocation || beyondCancelDistance)
                     {
@@ -686,6 +720,7 @@ namespace OutfitReactions
                 bool queuedInvalidLocation = Game1.player == null || npc.currentLocation != Game1.player.currentLocation;
                 bool queuedBeyondCancelDistance = !queuedInvalidLocation
                     && !pending.IgnoreRomanticDistanceForPublicMultiKiss
+                    && !romanticApproachController.IsHandling(npc)
                     && DistanceToPlayer(npc) > cancelDistance;
                 if (queuedInvalidLocation || queuedBeyondCancelDistance)
                 {
@@ -994,6 +1029,16 @@ namespace OutfitReactions
 
                 pending.PostDialogueRestoreApplied = true;
 
+                if (pending.PostDialogueOutfitWasRead
+                    && tryBeginPostDialogueAction?.Invoke(npc, pending) == true)
+                {
+                    pending.PostDialogueLingerActive = false;
+                    pending.WaitingForPostDialogueRestore = false;
+                    if (ModEntry.DebugLog)
+                        monitor?.Log($"[NPC OUTFIT] {npc.Name}'s post-dialogue state was handed to a specialized action.", LogLevel.Info);
+                    return;
+                }
+
                 beginLinger = pending.PostDialogueOutfitWasRead
                     && Game1.player != null
                     && npc.currentLocation == Game1.player.currentLocation;
@@ -1016,22 +1061,36 @@ namespace OutfitReactions
             }
         }
 
+        private static PendingPrompt CreatePendingPrompt(NPC npc)
+        {
+            List<FarmerSprite.AnimationFrame> animation = null;
+            if (npc?.Sprite?.CurrentAnimation != null && npc.Sprite.CurrentAnimation.Count > 0)
+                animation = new List<FarmerSprite.AnimationFrame>(npc.Sprite.CurrentAnimation);
+
+            return new PendingPrompt
+            {
+                OriginalFacingDirection = npc?.FacingDirection ?? 2,
+                OriginalPosition = npc?.Position ?? Microsoft.Xna.Framework.Vector2.Zero,
+                OriginalTile = npc?.TilePoint ?? Microsoft.Xna.Framework.Point.Zero,
+                OriginalFrame = npc?.Sprite?.CurrentFrame ?? 0,
+                OriginalFlip = npc?.flip ?? false,
+                OriginalMovementPause = npc == null ? 0 : (int)npc.movementPause,
+                OriginalAddedSpeed = npc == null ? 0 : (int)npc.addedSpeed,
+                OriginalAnimation = animation,
+                HasOriginalVisualState = npc != null,
+                WasLookingAtPlayer = false,
+                DialogueQueued = false,
+                NoticePauseActive = false,
+                PendingBubbleCooldown = 0
+            };
+        }
+
         private void UpdateNpcLookState(NPC npc, PendingPrompt pending, ModConfig config)
         {
             if (npc == null || pending == null || Game1.player == null)
                 return;
 
             if (npc.currentLocation != Game1.player.currentLocation)
-            {
-                pending.NoticePauseActive = false;
-                return;
-            }
-
-            // Inside the farmhouse, romantic partners may still notice the outfit, emote, and
-            // keep their dialogue pending, but Outfit Reactions must not interrupt their indoor
-            // activity or force a waiting pose. Using the location type also covers compatible
-            // farmhouse replacements which inherit Stardew's FarmHouse class.
-            if (pending.IsRomanticPartner && npc.currentLocation is FarmHouse)
             {
                 pending.NoticePauseActive = false;
                 return;
@@ -1063,6 +1122,7 @@ namespace OutfitReactions
                 // consuming it or touching the schedule controller.
                 pending.RomanticHoldSuspendedForKiss = false;
                 pending.NoticePauseActive = true;
+                romanticApproachController.SetSuspended(npc, suspended: false);
             }
 
             // Vanilla's kiss animation temporarily freezes controls. Do not refresh the outfit
@@ -1070,6 +1130,13 @@ namespace OutfitReactions
             // romantic reaction resumes waiting without having queued any dialogue.
             if (pending.IsRomanticPartner && Game1.freezeControls)
                 return;
+
+            if (pending.IsRomanticPartner
+                && (romanticApproachController.IsHandling(npc) || pending.RomanticApproachFinished))
+            {
+                pending.NoticePauseActive = false;
+                return;
+            }
 
             float distance = DistanceToPlayer(npc);
 
@@ -1141,7 +1208,9 @@ namespace OutfitReactions
             if (Game1.activeClickableMenu != null)
                 return;
 
-            float noticeDistance = Math.Max(64f, config.OutfitNoticeDistance);
+            float noticeDistance = pending.IsRomanticPartner
+                ? RomanticPartnerApproachController.NoticeDistance
+                : Math.Max(64f, config.OutfitNoticeDistance);
             if (DistanceToPlayer(npc) > noticeDistance)
                 return;
 
@@ -1225,8 +1294,6 @@ namespace OutfitReactions
             if (config == null)
                 yield break;
 
-            float noticeDistance = Math.Max(64f, config.OutfitNoticeDistance);
-
             foreach (string npcName in pendingPrompts.Keys.ToList())
             {
                 if (!pendingPrompts.TryGetValue(npcName, out PendingPrompt pending) || pending == null)
@@ -1242,6 +1309,9 @@ namespace OutfitReactions
                 if (npc == null || npc.currentLocation != Game1.player.currentLocation)
                     continue;
 
+                float noticeDistance = pending.IsRomanticPartner
+                    ? RomanticPartnerApproachController.NoticeDistance
+                    : Math.Max(64f, config.OutfitNoticeDistance);
                 if (DistanceToPlayer(npc) > noticeDistance)
                     continue;
 
@@ -1254,6 +1324,16 @@ namespace OutfitReactions
             if (npc == null || pending == null)
                 return;
 
+            if (pending.IsRomanticPartner && romanticApproachController.IsHandling(npc))
+                return;
+
+            if (pending.IsRomanticPartner && pending.RomanticApproachFinished)
+            {
+                pending.PostDialogueLingerActive = false;
+                pending.WaitingForPostDialogueRestore = false;
+                return;
+            }
+
             bool sameLocation = Game1.player != null && npc.currentLocation == Game1.player.currentLocation;
             float distance = sameLocation ? DistanceToPlayer(npc) : PostDialogueLingerDistance;
             bool hasCapturedSpecialAction = pending.SpecialActionSnapshot != null;
@@ -1261,10 +1341,8 @@ namespace OutfitReactions
             if (pending.PostDialogueLingerTimer > 0)
                 pending.PostDialogueLingerTimer--;
 
-            bool romanticPartnerInsideFarmHouse = pending.IsRomanticPartner
-                && npc.currentLocation is FarmHouse;
             bool shouldFinish = pending.IsRomanticPartner
-                ? (romanticPartnerInsideFarmHouse || !sameLocation || distance >= RomanticPendingCancelDistance)
+                ? (!sameLocation || distance >= RomanticPendingCancelDistance)
                 : hasCapturedSpecialAction
                 ? (!sameLocation || distance >= NpcSpecialActionRestoreDistance)
                 : (!sameLocation || distance >= PostDialogueLingerDistance || pending.PostDialogueLingerTimer <= 0);
@@ -1394,6 +1472,8 @@ namespace OutfitReactions
             if (npc == null || pending == null)
                 return;
 
+            romanticApproachController.ReleaseWithoutPending(npc);
+
             if (pending.DialogueQueued)
             {
                 RemoveQueuedDialogueIfStillPending(npc, pending);
@@ -1404,11 +1484,12 @@ namespace OutfitReactions
 
             if (pending.IsRomanticPartner)
             {
-                // Moving beyond the romantic wait range cancels only this pending opportunity. Do not mark the
-                // outfit as consumed: approaching again should run the configured chance anew.
+                // Moving away cancels only this pending opportunity. Keep a short cooldown so the
+                // same partner can't immediately interrupt their newly resumed route again on the
+                // very same update cycle.
                 reactedNpcsThisOutfit.Remove(npc.Name);
-                rollCooldowns.Remove(npc.Name);
-                if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Romantic partner {npc.Name} moved out of the {RomanticPendingCancelDistance:F0}f wait range; released and made eligible to notice again.", LogLevel.Info);
+                rollCooldowns[npc.Name] = CancelledReactionCooldownTicks;
+                if (ModEntry.DebugLog) monitor?.Log($"[NPC OUTFIT] Romantic partner {npc.Name} was released; a short notice cooldown now protects the resumed route.", LogLevel.Info);
             }
             else
             {

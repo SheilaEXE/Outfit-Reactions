@@ -519,24 +519,12 @@ namespace OutfitReactions
 
             configMenu.AddNumberOption(
                 mod: mod.ModManifest,
-                name: () => T("gmcm.option.min-characters.name"),
-                tooltip: () => T("gmcm.option.min-characters.tooltip"),
-                getValue: () => mod.Config.AiMinimumCharacters,
-                setValue: value => mod.Config.AiMinimumCharacters = value,
-                min: 0,
-                max: 2000,
-                interval: 10,
-                formatValue: value => value <= 0 ? T("gmcm.value.no-minimum") : TWithValue("gmcm.value.characters", value)
-            );
-
-            configMenu.AddNumberOption(
-                mod: mod.ModManifest,
                 name: () => T("gmcm.option.max-characters.name"),
                 tooltip: () => T("gmcm.option.max-characters.tooltip"),
                 getValue: GetActiveMaxCharacters,
                 setValue: SetActiveMaxCharacters,
                 min: 80,
-                max: 2000,
+                max: 400,
                 interval: 10,
                 formatValue: value => TWithValue("gmcm.value.characters", value)
             );

@@ -21,6 +21,7 @@ Created by **NatrollEXE**.
 * [SMAPI](https://smapi.io/) 4.0.0+
 * [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/9969) 7.5.0+ (required)
 * [Generic Mod Config Menu](https://www.nexusmods.com/stardewvalley/mods/5098) (optional, but recommended for easy configuration)
+* Tile Marker 1.1.0+ (optional, for choosing furniture and map tiles that should not block an NPC's view)
 * A personal API key from a compatible AI provider. Profile 1 is enabled by default with Google Gemini and the `gemini-3.1-flash-lite` model, so new players only need to add their own Gemini API key.
 
 ## 🔧 Installation
@@ -40,6 +41,18 @@ The mod can be configured through Generic Mod Config Menu, including:
 * Additional reaction frequency and behavior settings.
 
 > **Dialogue quality depends on the AI model you choose.** Outfit Reactions provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
+
+## Ignoring transparent vision obstacles
+
+With the optional Tile Marker framework installed, open its editor and choose **Outfit Reactions:
+transparent vision obstacles**. Mark counters, tables, chairs, decorative objects, or custom-map
+tiles that block movement but should still allow an NPC to see the farmer's appearance. These
+marks affect only Outfit Reactions' line-of-sight check; they do not change collision or maps.
+
+Tile Marker stores this category separately from other mods. If Lots of Kisses is also installed,
+enable **Merge compatible categories** in Tile Marker's GMCM to let both mods use the union of
+their vision markings. Turning the option off restores the separate selections without deleting
+them. Outfit Reactions continues working normally when Tile Marker is not installed.
 
 ## 🚧 Development Status and Custom NPC Compatibility
 

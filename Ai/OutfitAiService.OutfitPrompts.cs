@@ -175,12 +175,8 @@ namespace OutfitReactions.Ai
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
             AppendProfanityIntensityRule(builder, context, config.EnableProfanityFilter);
-            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. Treat this as a soft estimate, not a hard cutoff: prefer staying near it, but always finish the current thought naturally even if the dialogue goes over.");
-            int minCharacters = GetMinimumLengthTarget(config, ai);
-            if (minCharacters > 0)
-                builder.AppendLine("Minimum final dialogue length target: at least " + minCharacters + " visible characters (mandatory). Use #$b# breaks for natural pacing only, not a fixed pattern. Do not ramble or repeat yourself, and do not pad: the personality and reaction matter more than the length.");
-            else
-                builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
+            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 400) + " visible characters. Treat this as a soft estimate, not a hard cutoff: prefer staying near it, but always finish the current thought naturally even if the dialogue goes over. Do not pad, ramble, or repeat yourself.");
+            builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
             builder.AppendLine("Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. The text contains spoken dialogue, optional expressive cues, and #$b# breaks only: no metadata, explanations, markdown, or Stardew $portrait commands. Use portrait for the primary expression. If text has multiple #$b# boxes, portraits MUST contain exactly one valid key per box in order.");
             builder.AppendLine("Available portrait keys (use only the keys, never their $commands):");
@@ -275,16 +271,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine(BuildTechnicalContextLabelInstruction(context));
             builder.AppendLine(BuildSceneGroundingInstruction(context));
             AppendCompactReactionGuidance(builder, context);
-            int minCharacters = GetMinimumLengthTarget(config, ai);
-            if (minCharacters > 0)
-            {
-                builder.AppendLine("Minimum spoken dialogue length target: at least " + minCharacters + " visible characters. This is mandatory. Do not ramble or repeat yourself.");
-                builder.AppendLine("Do not answer with a tiny one-sentence compliment when the minimum is high.");
-            }
-            else
-            {
-                builder.AppendLine("Keep it casual and natural, like a quick real-life remark. It may be one sentence, several sentences, or a longer naturally paced comment if the character has more to say.");
-            }
+            builder.AppendLine("Keep it casual and natural, like a quick real-life remark. It may be one sentence, several sentences, or a longer naturally paced comment if the character has more to say.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
             AppendExpressiveCuesRule(builder, config.EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
@@ -300,7 +287,7 @@ namespace OutfitReactions.Ai
             string seasonalInstruction = includeOutfitContext ? BuildSeasonalAwarenessInstruction(context) : "";
             if (!string.IsNullOrWhiteSpace(seasonalInstruction))
                 builder.AppendLine(seasonalInstruction);
-            builder.AppendLine("Approximate spoken dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. This is a soft estimate, not a hard cutoff; finish the reaction naturally if it needs to go over.");
+            builder.AppendLine("Approximate spoken dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 400) + " visible characters. This is a soft estimate, not a hard cutoff; finish the reaction naturally if it needs to go over. Do not pad, ramble, or repeat yourself.");
             // PORTRAIT_SCORE_SYSTEM removed: mandatory portrait restriction for private/revealing outfits disabled.
             builder.AppendLine("Available portrait keys (read the descriptions and choose keys for the JSON portrait/portraits fields; write ONLY keys, never $commands):");
             builder.AppendLine(CollapseForPrompt(PortraitResolver.BuildPortraitKeyDescriptionList(profile), 1000));
@@ -538,27 +525,6 @@ namespace OutfitReactions.Ai
 
             return "Private room/home tone rule: the farmer is in this NPC's personal/private space. Let the NPC's profile and heart level decide the tone. Low hearts should stay more guarded or surprised; mid hearts can be familiar or awkward; high hearts can be warmer, richer, teasing, or shy. Do not force blush, stammer, romance, or a specific portrait unless the outfit and relationship naturally support it.";
         }
-
-        private static int GetMinimumLengthTarget(ModConfig config, ActiveAiSettings ai)
-        {
-            if (config == null)
-                return 0;
-
-            int requested = Math.Max(0, config.AiMinimumCharacters);
-            if (requested <= 0)
-                return 0;
-
-            int activeMax = Math.Clamp(ai?.MaxCharacters ?? config.AiMaxCharacters, 80, 2000);
-
-            // Keep a small margin for portrait commands and cleanup, but don't mutilate the
-            // player's requested minimum. If requested > max, aim as close as possible.
-            int closestReachable = Math.Max(40, activeMax - 10);
-            return Math.Min(requested, closestReachable);
-        }
-
-
-
-
 
         /// <summary>
         /// Public wrapper used by prompt builders to decide whether the outfit name

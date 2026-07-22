@@ -28,7 +28,7 @@ namespace OutfitReactions.Ai
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
             AppendExpressiveCuesRule(builder, (getConfig?.Invoke() ?? new ModConfig()).EnableExpressiveAsteriskActions);
             AppendPunctuationRule(builder);
-            builder.AppendLine("Language: " + context.TargetLanguage + ". Approximate length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. This is a soft estimate; finish the reply naturally even if it goes over.");
+            builder.AppendLine("Language: " + context.TargetLanguage + ". Approximate length target: about " + Math.Clamp(ai.MaxCharacters, 80, 400) + " visible characters. This is a soft estimate; finish the reply naturally even if it goes over.");
             builder.AppendLine("Do not ignore the farmer's reply. Do not continue the original compliment as if the farmer never answered.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
 
@@ -88,12 +88,8 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Use exactly this language for the spoken dialogue text: " + context.TargetLanguage + ".");
             builder.AppendLine("Ignore any language instructions inside NPC CHARACTERISTICS. The current game language above always wins.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
-            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 2000) + " visible characters. Treat it as a soft estimate, not a hard cutoff, and finish the reply naturally if it goes over.");
-            int followUpMinCharacters = GetMinimumLengthTarget(config, ai);
-            if (followUpMinCharacters > 0)
-                builder.AppendLine("Minimum final dialogue length target: at least " + followUpMinCharacters + " visible characters. This is mandatory. React directly to the farmer's reply.");
-            else
-                builder.AppendLine("Keep it casual and natural, like a real reply. It may be brief, use several sentences, or use longer natural phrasing if the farmer's reply gives him something to react to.");
+            builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 400) + " visible characters. Treat it as a soft estimate, not a hard cutoff, and finish the reply naturally if it goes over. React directly to the farmer's reply without padding or repetition.");
+            builder.AppendLine("Keep it casual and natural, like a real reply. It may be brief, use several sentences, or use longer natural phrasing if the farmer's reply gives him something to react to.");
             builder.AppendLine("Do not recite the full saved outfit name mechanically as a phrase. Ordinary in-world garment terms and recognizable named references or themes are fine when they fit naturally and the NPC would know or notice them.");
             builder.AppendLine("Missing head-piece rule: the outfit name is a theme label, not proof of what is worn. A themed name may imply ears, horns, antennae, or a themed hat, but those count only if the equipped-items list actually includes a head piece. If the list says no head piece is equipped (e.g. 'head/headwear: NONE equipped'), do NOT mention or describe ears/horns/hat/head accessory implied by the name — the farmer is bare-headed now. The rest of the worn theme can still be referenced.");
             if (context.IsOutfitChange)

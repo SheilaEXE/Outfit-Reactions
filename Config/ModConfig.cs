@@ -48,8 +48,7 @@ namespace OutfitReactions
         public string AiCustomEndpoint { get; set; } = "";
         public int AiTemperaturePercent { get; set; } = 75;
         public int AiTimeoutSeconds { get; set; } = 60;
-        public int AiMaxCharacters { get; set; } = 300;
-        public int AiMinimumCharacters { get; set; } = 100;
+        public int AiMaxCharacters { get; set; } = 120;
 
         // Five reusable credential slots shown in GMCM. Each slot has its own provider, an
         // enabled checkbox, model, API key and (optional) endpoint. The mod uses the ENABLED
@@ -95,35 +94,35 @@ namespace OutfitReactions
         public string DeepSeekAiCustomEndpoint { get; set; } = "";
         public int DeepSeekAiTemperaturePercent { get; set; } = 75;
         public int DeepSeekAiTimeoutSeconds { get; set; } = 60;
-        public int DeepSeekAiMaxCharacters { get; set; } = 1000;
+        public int DeepSeekAiMaxCharacters { get; set; } = 120;
 
         public string GeminiAiModel { get; set; } = "";
         public string GeminiAiApiKey { get; set; } = "";
         public string GeminiAiCustomEndpoint { get; set; } = "";
         public int GeminiAiTemperaturePercent { get; set; } = 75;
         public int GeminiAiTimeoutSeconds { get; set; } = 60;
-        public int GeminiAiMaxCharacters { get; set; } = 1000;
+        public int GeminiAiMaxCharacters { get; set; } = 120;
 
         public string OpenAiAiModel { get; set; } = "";
         public string OpenAiAiApiKey { get; set; } = "";
         public string OpenAiAiCustomEndpoint { get; set; } = "";
         public int OpenAiAiTemperaturePercent { get; set; } = 75;
         public int OpenAiAiTimeoutSeconds { get; set; } = 60;
-        public int OpenAiAiMaxCharacters { get; set; } = 1000;
+        public int OpenAiAiMaxCharacters { get; set; } = 120;
 
         public string OpenRouterAiModel { get; set; } = "";
         public string OpenRouterAiApiKey { get; set; } = "";
         public string OpenRouterAiCustomEndpoint { get; set; } = "";
         public int OpenRouterAiTemperaturePercent { get; set; } = 75;
         public int OpenRouterAiTimeoutSeconds { get; set; } = 60;
-        public int OpenRouterAiMaxCharacters { get; set; } = 1000;
+        public int OpenRouterAiMaxCharacters { get; set; } = 120;
 
         public string LocalAiModel { get; set; } = "";
         public string LocalAiApiKey { get; set; } = "";
         public string LocalAiCustomEndpoint { get; set; } = "";
         public int LocalAiTemperaturePercent { get; set; } = 75;
         public int LocalAiTimeoutSeconds { get; set; } = 60;
-        public int LocalAiMaxCharacters { get; set; } = 1000;
+        public int LocalAiMaxCharacters { get; set; } = 120;
         public bool LocalAiSafeMode { get; set; } = true;
         public bool LocalAiConservativePortraits { get; set; } = true;
 
@@ -132,42 +131,42 @@ namespace OutfitReactions
         public string MistralAiCustomEndpoint { get; set; } = "";
         public int MistralAiTemperaturePercent { get; set; } = 75;
         public int MistralAiTimeoutSeconds { get; set; } = 60;
-        public int MistralAiMaxCharacters { get; set; } = 1000;
+        public int MistralAiMaxCharacters { get; set; } = 120;
 
         public string GroqAiModel { get; set; } = "";
         public string GroqAiApiKey { get; set; } = "";
         public string GroqAiCustomEndpoint { get; set; } = "";
         public int GroqAiTemperaturePercent { get; set; } = 75;
         public int GroqAiTimeoutSeconds { get; set; } = 60;
-        public int GroqAiMaxCharacters { get; set; } = 1000;
+        public int GroqAiMaxCharacters { get; set; } = 120;
 
         public string TogetherAiModel { get; set; } = "";
         public string TogetherAiApiKey { get; set; } = "";
         public string TogetherAiCustomEndpoint { get; set; } = "";
         public int TogetherAiTemperaturePercent { get; set; } = 75;
         public int TogetherAiTimeoutSeconds { get; set; } = 60;
-        public int TogetherAiMaxCharacters { get; set; } = 1000;
+        public int TogetherAiMaxCharacters { get; set; } = 120;
 
         public string AnthropicAiModel { get; set; } = "";
         public string AnthropicAiApiKey { get; set; } = "";
         public string AnthropicAiCustomEndpoint { get; set; } = "";
         public int AnthropicAiTemperaturePercent { get; set; } = 75;
         public int AnthropicAiTimeoutSeconds { get; set; } = 60;
-        public int AnthropicAiMaxCharacters { get; set; } = 1000;
+        public int AnthropicAiMaxCharacters { get; set; } = 120;
 
         public string XAiModel { get; set; } = "";
         public string XAiApiKey { get; set; } = "";
         public string XAiCustomEndpoint { get; set; } = "";
         public int XAiTemperaturePercent { get; set; } = 75;
         public int XAiTimeoutSeconds { get; set; } = 60;
-        public int XAiMaxCharacters { get; set; } = 1000;
+        public int XAiMaxCharacters { get; set; } = 120;
 
         public string CerebrasAiModel { get; set; } = "";
         public string CerebrasAiApiKey { get; set; } = "";
         public string CerebrasAiCustomEndpoint { get; set; } = "";
         public int CerebrasAiTemperaturePercent { get; set; } = 75;
         public int CerebrasAiTimeoutSeconds { get; set; } = 60;
-        public int CerebrasAiMaxCharacters { get; set; } = 1000;
+        public int CerebrasAiMaxCharacters { get; set; } = 120;
 
         public bool UseAiCache { get; set; } = true;
         public bool EnableVisionOutfitAnalysis { get; set; } = false;
@@ -376,22 +375,19 @@ namespace OutfitReactions
             XAiTimeoutSeconds = Clamp(XAiTimeoutSeconds, 3, 120);
             CerebrasAiTimeoutSeconds = Clamp(CerebrasAiTimeoutSeconds, 3, 120);
 
-            DeepSeekAiMaxCharacters = Clamp(DeepSeekAiMaxCharacters, 80, 2000);
-            GeminiAiMaxCharacters = Clamp(GeminiAiMaxCharacters, 80, 2000);
-            OpenAiAiMaxCharacters = Clamp(OpenAiAiMaxCharacters, 80, 2000);
-            OpenRouterAiMaxCharacters = Clamp(OpenRouterAiMaxCharacters, 80, 2000);
-            LocalAiMaxCharacters = Clamp(LocalAiMaxCharacters, 80, 2000);
-            MistralAiMaxCharacters = Clamp(MistralAiMaxCharacters, 80, 2000);
-            GroqAiMaxCharacters = Clamp(GroqAiMaxCharacters, 80, 2000);
-            TogetherAiMaxCharacters = Clamp(TogetherAiMaxCharacters, 80, 2000);
-            AnthropicAiMaxCharacters = Clamp(AnthropicAiMaxCharacters, 80, 2000);
-            XAiMaxCharacters = Clamp(XAiMaxCharacters, 80, 2000);
-            CerebrasAiMaxCharacters = Clamp(CerebrasAiMaxCharacters, 80, 2000);
+            DeepSeekAiMaxCharacters = Clamp(DeepSeekAiMaxCharacters, 80, 400);
+            GeminiAiMaxCharacters = Clamp(GeminiAiMaxCharacters, 80, 400);
+            OpenAiAiMaxCharacters = Clamp(OpenAiAiMaxCharacters, 80, 400);
+            OpenRouterAiMaxCharacters = Clamp(OpenRouterAiMaxCharacters, 80, 400);
+            LocalAiMaxCharacters = Clamp(LocalAiMaxCharacters, 80, 400);
+            MistralAiMaxCharacters = Clamp(MistralAiMaxCharacters, 80, 400);
+            GroqAiMaxCharacters = Clamp(GroqAiMaxCharacters, 80, 400);
+            TogetherAiMaxCharacters = Clamp(TogetherAiMaxCharacters, 80, 400);
+            AnthropicAiMaxCharacters = Clamp(AnthropicAiMaxCharacters, 80, 400);
+            XAiMaxCharacters = Clamp(XAiMaxCharacters, 80, 400);
+            CerebrasAiMaxCharacters = Clamp(CerebrasAiMaxCharacters, 80, 400);
 
-            AiMaxCharacters = Clamp(AiMaxCharacters, 80, 2000);
-            // Let the player choose the minimum freely. Runtime prompt/validation will use
-            // the closest possible target if the chosen minimum is higher than the active max.
-            AiMinimumCharacters = Clamp(AiMinimumCharacters, 0, 2000);
+            AiMaxCharacters = Clamp(AiMaxCharacters, 80, 400);
             AiTimeoutSeconds = Clamp(AiTimeoutSeconds, 3, 120);
             AiTemperaturePercent = Clamp(AiTemperaturePercent, 0, 200);
             NpcOutfitReactionChance = Clamp(NpcOutfitReactionChance, 0, 100);

@@ -147,6 +147,39 @@ namespace OutfitReactions.Ai
         }
 
         /// <summary>
+        /// Gets a randomly selected translation key for a scripted special-item action.
+        /// The JSON selects keys, while the visible text remains in the mod's i18n files.
+        /// </summary>
+        public string GetNpcScriptedDialogueKey(string entryId, string npcName, string situation)
+        {
+            if (string.IsNullOrWhiteSpace(entryId) || string.IsNullOrWhiteSpace(npcName) || string.IsNullOrWhiteSpace(situation))
+                return "";
+
+            try
+            {
+                SpecialItemDefinitions data = LoadDefinitions();
+                if (data?.Items == null
+                    || !data.Items.TryGetValue(entryId, out SpecialItemEntry entry)
+                    || entry?.NpcOverrides == null
+                    || !entry.NpcOverrides.TryGetValue(npcName, out SpecialItemNpcOverride npcOverride)
+                    || npcOverride?.ScriptedDialogueKeys == null
+                    || !npcOverride.ScriptedDialogueKeys.TryGetValue(situation, out List<string> keys))
+                {
+                    return "";
+                }
+
+                List<string> usableKeys = keys.Where(key => !string.IsNullOrWhiteSpace(key)).ToList();
+                return usableKeys.Count == 0 ? "" : usableKeys[Game1.random.Next(usableKeys.Count)];
+            }
+            catch (Exception ex)
+            {
+                if (ModEntry.DebugLog)
+                    monitor?.Log("[SPECIAL ITEM] Could not resolve scripted dialogue key: " + ex.Message, LogLevel.Info);
+                return "";
+            }
+        }
+
+        /// <summary>
         /// Directly reveals the secret for the given secretId to the given NPC,
         /// persisting the flag in modData. Returns true if newly revealed.
         /// </summary>
@@ -703,6 +736,7 @@ namespace OutfitReactions.Ai
             public bool SecretRevealable { get; set; }
             public string ReactionHint { get; set; } = "";
             public string SecretReactionHint { get; set; } = "";
+            public Dictionary<string, List<string>> ScriptedDialogueKeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

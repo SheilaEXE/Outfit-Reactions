@@ -10,9 +10,19 @@ namespace OutfitReactions
         public int DialogueCountBeforePush { get; set; }
         public int DialogueCountAfterPush { get; set; }
         public int OriginalFacingDirection { get; set; }
+        public Vector2 OriginalPosition { get; set; }
+        public Point OriginalTile { get; set; }
+        public int OriginalFrame { get; set; }
+        public bool OriginalFlip { get; set; }
+        public int OriginalMovementPause { get; set; }
+        public int OriginalAddedSpeed { get; set; }
+        public List<FarmerSprite.AnimationFrame> OriginalAnimation { get; set; }
+        public bool HasOriginalVisualState { get; set; }
         public bool WasLookingAtPlayer { get; set; }
         public bool IsRomanticPartner { get; set; }
         public bool WasMovingWhenNoticed { get; set; }
+        public bool RomanticApproachStarted { get; set; }
+        public bool RomanticApproachFinished { get; set; }
         public bool RomanticHoldSuspendedForKiss { get; set; }
         public int ExternalKissProtectionTimer { get; set; }
         public bool IgnoreRomanticDistanceForPublicMultiKiss { get; set; }

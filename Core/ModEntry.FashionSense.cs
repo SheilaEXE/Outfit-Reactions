@@ -268,16 +268,23 @@ public sealed partial class ModEntry : Mod
 
 	private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
 	{
-		if (Context.IsWorldReady && Config.Enabled)
+		if (!Context.IsWorldReady)
+			return;
+
+		if (!Config.Enabled)
 		{
-			UpdateDayStartReactionGate();
-			UpdateReactionActiveModDataFlag();
-			RefreshCurrentSavedOutfitNoticeCandidate();
-			PollVanillaHatAndPantsChange();
-			UpdatePendingOwnAiGenerations();
-			UpdatePendingOwnAiPlayerReplyGenerations();
-			otherNpcClothesReactionSystem?.Update();
+			lewisShortsChaseController?.Reset(restoreIfPossible: true);
+			return;
 		}
+
+		UpdateDayStartReactionGate();
+		UpdateReactionActiveModDataFlag();
+		RefreshCurrentSavedOutfitNoticeCandidate();
+		PollVanillaHatAndPantsChange();
+		UpdatePendingOwnAiGenerations();
+		UpdatePendingOwnAiPlayerReplyGenerations();
+		otherNpcClothesReactionSystem?.Update();
+		lewisShortsChaseController?.Update();
 	}
 
 	private void BeginDayStartReactionGate()
@@ -736,6 +743,10 @@ public sealed partial class ModEntry : Mod
 
 	private bool CanNpcReactToCurrentOutfitNotice(NPC npc)
 	{
+		if (lewisShortsChaseController?.IsHandling(npc) == true)
+		{
+			return false;
+		}
 		return CanNpcReactToOutfit(npc) && ShouldStartClothesReaction(npc);
 	}
 
