@@ -30,9 +30,6 @@
     "PublicContext": "Near the shop or beach with others around, Willy stays friendly, brief, and practical.",
     "PrivateIntimateContext": "In a quiet moment by the water, Willy can become more nostalgic or reflective without becoming overly poetic."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Willy should respond with hearty warmth, simple approval, practical sea wisdom, good-natured humor, or gentle nostalgia depending on context."
-  },
   "Family": {},
   "ExtraPortraits": {
     "0": {

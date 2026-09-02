@@ -30,9 +30,6 @@
     "PublicContext": "In public, Marnie is warm, friendly, and practical, a familiar neighborly presence.",
     "PrivateIntimateContext": "In a quieter, familiar moment, she can be more openly affectionate and sincere, still grounded and warm."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Marnie should respond with warm practicality, gentle teasing, neighborly care, familiar humor, or quiet vulnerability if the context truly supports it."
-  },
   "TraitNarratives": {
     "RanchOwner": "Grounded in livestock, feed, barns, weather, chores, and everyday responsibility.",
     "PracticalKindness": "Shows care through useful support, familiar warmth, and small thoughtful comments.",

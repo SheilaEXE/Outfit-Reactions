@@ -30,9 +30,6 @@
     "PublicContext": "In his shop or public, Pierre is polished, customer-facing, and a little performative.",
     "PrivateIntimateContext": "Away from customers, he can drop some of the salesman polish and sound a bit more genuine, still practical."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Pierre should respond with polite practicality, shopkeeper polish, nervous pride, mild salesmanship, or more genuine warmth as friendship supports it."
-  },
   "Family": {
     "Caroline": {
       "Heading": "Caroline",

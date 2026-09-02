@@ -8,116 +8,6 @@ using System.Collections.Generic;
 
 namespace OutfitReactions
 {
-    internal sealed class OutfitPlayerReplyChoiceMenu : IClickableMenu
-    {
-        private readonly string title;
-        private readonly string replyLabel;
-        private readonly string leaveLabel;
-        private readonly Action respond;
-        private readonly Action leave;
-        private readonly ClickableComponent replyButton;
-        private readonly ClickableComponent leaveButton;
-
-        public OutfitPlayerReplyChoiceMenu(string title, string replyLabel, string leaveLabel, Action respond, Action leave)
-            : base((Game1.uiViewport.Width - 760) / 2, Math.Max(64, Game1.uiViewport.Height - 360), 760, 260, true)
-        {
-            this.title = title ?? "Reply?";
-            this.replyLabel = replyLabel ?? "Reply";
-            this.leaveLabel = leaveLabel ?? "Leave";
-            this.respond = respond;
-            this.leave = leave;
-
-            int buttonWidth = 280;
-            int buttonHeight = 64;
-            int buttonY = yPositionOnScreen + 140;
-            replyButton = new ClickableComponent(new Rectangle(xPositionOnScreen + 90, buttonY, buttonWidth, buttonHeight), "reply");
-            leaveButton = new ClickableComponent(new Rectangle(xPositionOnScreen + width - 90 - buttonWidth, buttonY, buttonWidth, buttonHeight), "leave");
-        }
-
-        public override void receiveLeftClick(int x, int y, bool playSound = true)
-        {
-            if (replyButton.containsPoint(x, y))
-            {
-                Game1.playSound("smallSelect");
-                respond?.Invoke();
-                return;
-            }
-
-            if (leaveButton.containsPoint(x, y))
-            {
-                Game1.playSound("smallSelect");
-                leave?.Invoke();
-            }
-        }
-
-        public override void receiveKeyPress(Keys key)
-        {
-            if (key == Keys.Escape)
-            {
-                Game1.playSound("smallSelect");
-                leave?.Invoke();
-            }
-            else if (key == Keys.Enter)
-            {
-                Game1.playSound("smallSelect");
-                respond?.Invoke();
-            }
-        }
-
-        public override void draw(SpriteBatch b)
-        {
-            IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), xPositionOnScreen, yPositionOnScreen, width, height, Color.White, 1f, true);
-
-            // Draw title centered using dialogueFont (same size as NPC dialogue boxes).
-            SpriteFont font = Game1.dialogueFont;
-            int maxTextWidth = width - 128;
-            List<string> titleLines = WrapText(font, title, maxTextWidth);
-            float lineHeight = font.MeasureString("A").Y + 2f;
-            float totalHeight = titleLines.Count * lineHeight;
-            float textY = yPositionOnScreen + (140f - totalHeight) / 2f;
-            foreach (string line in titleLines)
-            {
-                float lineWidth = font.MeasureString(line).X;
-                float textX = xPositionOnScreen + (width - lineWidth) / 2f;
-                Utility.drawTextWithShadow(b, line, font, new Vector2(textX, textY), Game1.textColor);
-                textY += lineHeight;
-            }
-
-            DrawButton(b, replyButton.bounds, replyLabel);
-            DrawButton(b, leaveButton.bounds, leaveLabel);
-            drawMouse(b);
-        }
-
-        private static List<string> WrapText(SpriteFont font, string text, int maxWidth)
-        {
-            List<string> lines = new();
-            if (string.IsNullOrEmpty(text)) return lines;
-            string[] words = text.Split(' ');
-            string current = "";
-            foreach (string word in words)
-            {
-                string test = string.IsNullOrEmpty(current) ? word : current + " " + word;
-                if (font.MeasureString(test).X > maxWidth && !string.IsNullOrEmpty(current))
-                {
-                    lines.Add(current);
-                    current = word;
-                }
-                else current = test;
-            }
-            if (!string.IsNullOrEmpty(current))
-                lines.Add(current);
-            return lines;
-        }
-
-        private static void DrawButton(SpriteBatch b, Rectangle bounds, string label)
-        {
-            IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), bounds.X, bounds.Y, bounds.Width, bounds.Height, Color.White, 1f, true);
-            Vector2 size = Game1.smallFont.MeasureString(label ?? "");
-            Vector2 pos = new Vector2(bounds.Center.X - size.X / 2f, bounds.Center.Y - size.Y / 2f + 2f);
-            Utility.drawTextWithShadow(b, label ?? "", Game1.smallFont, pos, Game1.textColor);
-        }
-    }
-
     internal sealed class OutfitPlayerReplyTextInputMenu : IClickableMenu
     {
         private readonly string title;
@@ -126,8 +16,9 @@ namespace OutfitReactions
         private readonly Action<string> submit;
         private readonly Action cancel;
         private readonly TextBox textBox;
-        private readonly ClickableComponent sendButton;
-        private readonly ClickableComponent cancelButton;
+        private readonly ClickableTextureComponent sendButton;
+        private readonly ClickableTextureComponent cancelButton;
+        private string hoverText = "";
 
         // Multi-line input area drawn manually on top of the TextBox (which only renders one
         // line natively). We capture typed characters ourselves and wrap them for display.
@@ -164,11 +55,23 @@ namespace OutfitReactions
             };
             textBox.textLimit = 800;
 
-            int buttonWidth = 220;
-            int buttonHeight = 56;
-            int buttonY = yPositionOnScreen + height - 84;
-            sendButton = new ClickableComponent(new Rectangle(xPositionOnScreen + width - 64 - buttonWidth, buttonY, buttonWidth, buttonHeight), "send");
-            cancelButton = new ClickableComponent(new Rectangle(xPositionOnScreen + 64, buttonY, buttonWidth, buttonHeight), "cancel");
+            int buttonY = yPositionOnScreen + height - 88;
+            sendButton = new ClickableTextureComponent(
+                new Rectangle(xPositionOnScreen + width - 64 - 64, buttonY, 64, 64),
+                Game1.mouseCursors,
+                new Rectangle(128, 256, 64, 64),
+                1f)
+            {
+                name = "send"
+            };
+            cancelButton = new ClickableTextureComponent(
+                new Rectangle(xPositionOnScreen + 64, buttonY + 8, 48, 48),
+                Game1.mouseCursors,
+                new Rectangle(337, 494, 12, 12),
+                4f)
+            {
+                name = "cancel"
+            };
 
             Game1.keyboardDispatcher.Subscriber = textBox;
         }
@@ -243,6 +146,18 @@ namespace OutfitReactions
                 Game1.playSound("smallSelect");
                 DoCancel();
             }
+        }
+
+        public override void performHoverAction(int x, int y)
+        {
+            base.performHoverAction(x, y);
+            sendButton.tryHover(x, y, 0.2f);
+            cancelButton.tryHover(x, y, 0.2f);
+            hoverText = sendButton.containsPoint(x, y)
+                ? sendLabel
+                : cancelButton.containsPoint(x, y)
+                    ? cancelLabel
+                    : "";
         }
 
         public override void update(GameTime time)
@@ -325,8 +240,11 @@ namespace OutfitReactions
                 textY += lineHeight;
             }
 
-            DrawButton(b, cancelButton.bounds, cancelLabel);
-            DrawButton(b, sendButton.bounds, sendLabel);
+            cancelButton.draw(b);
+            sendButton.draw(b);
+            if (!string.IsNullOrWhiteSpace(hoverText))
+                drawHoverText(b, hoverText, Game1.smallFont);
+
             drawMouse(b);
         }
 
@@ -352,12 +270,5 @@ namespace OutfitReactions
             return lines;
         }
 
-        private static void DrawButton(SpriteBatch b, Rectangle bounds, string label)
-        {
-            IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), bounds.X, bounds.Y, bounds.Width, bounds.Height, Color.White, 1f, true);
-            Vector2 size = Game1.smallFont.MeasureString(label ?? "");
-            Vector2 pos = new Vector2(bounds.Center.X - size.X / 2f, bounds.Center.Y - size.Y / 2f + 2f);
-            Utility.drawTextWithShadow(b, label ?? "", Game1.smallFont, pos, Game1.textColor);
-        }
     }
 }

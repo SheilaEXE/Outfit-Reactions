@@ -203,6 +203,8 @@ public sealed partial class ModEntry : Mod
 
 		public string NewOutfitId;
 
+		public string PreviousOutfitId;
+
 		public int CountChanges()
 		{
 			int num = 0;
@@ -397,6 +399,7 @@ public sealed partial class ModEntry : Mod
 	private string lastEligibleSavedOutfitId = "";
 
 	internal const string ReactionActiveModDataKey = "NatrollEXE.OutfitReactions/ReactionActive";
+	internal const string RomanticApproachActiveModDataKey = "NatrollEXE.OutfitReactions/RomanticApproachActive";
 
 	private const string AutoKissClickActiveModDataKey = "NatrollEXE.LotsOfKisses/AutoKissClickActive";
 	internal const string PublicMultiKissInterruptionModDataKey = "NatrollEXE.LotsOfKisses/PublicMultiKissInterruption";
@@ -408,6 +411,8 @@ public sealed partial class ModEntry : Mod
 	private FashionSenseChangeInfo lastFashionSenseChangeInfo = null;
 
 	private readonly HashSet<string> npcsReactedToCurrentNotice = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly HashSet<string> npcsReactedToPreviousNotice = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 	private readonly AiGenerationCoordinator aiGenerationCoordinator = new AiGenerationCoordinator();
 
@@ -695,12 +700,12 @@ public sealed partial class ModEntry : Mod
 		outfitAiService.IsRomanceableNpc = IsNpcRomanceable;
 		outfitMemoryService = new OutfitMemoryService(helper, ((Mod)this).Monitor);
 		hatMemoryService = new HatMemoryService(helper, ((Mod)this).Monitor);
-		outfitVisionService = new OutfitVisionService(((Mod)this).Monitor);
+		outfitVisionService = new OutfitVisionService(((Mod)this).Monitor, helper.DirectoryPath, () => DebugLog);
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
 		tileMarkerVisionIntegration = new TileMarkerVisionIntegration(helper, ((Mod)this).Monitor, ((Mod)this).ModManifest);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
-		lewisShortsChaseController = new LewisShortsChaseController(((Mod)this).Monitor, helper.Translation, GetEquippedLewisShortsSlot, ConfiscateEquippedLewisShorts, GetLewisShortsChaseDialogueKey, MarkCurrentOutfitAsNoticed);
+		lewisShortsChaseController = new LewisShortsChaseController(((Mod)this).Monitor, helper.Translation, () => Config.EnableLewisShortsChase, GetEquippedLewisShortsSlot, ConfiscateEquippedLewisShorts, GetLewisShortsChaseDialogueKey, MarkCurrentOutfitAsNoticed);
 		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => IsActiveFestivalEventForOutfitReaction() || ShouldDeferAutomaticOutfitReaction(logDecision: false), (location, x, y) => tileMarkerVisionIntegration?.IsVisionIgnoredTile(location, x, y) == true, (npc, pending) => lewisShortsChaseController?.TryBeginAfterReaction(npc, pending) == true);
 		helper.Events.GameLoop.GameLaunched += OnGameLaunched;
 		helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
@@ -965,6 +970,8 @@ public sealed partial class ModEntry : Mod
 		BeginDayStartReactionGate();
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
+		npcsReactedToCurrentNotice.Clear();
+		npcsReactedToPreviousNotice.Clear();
 		lewisShortsChaseController?.Reset(restoreIfPossible: true);
 		otherNpcClothesReactionSystem?.Reset();
 		RearmCurrentAppearanceNoticeAfterLifecycleReset("starting a new day");
@@ -982,6 +989,8 @@ public sealed partial class ModEntry : Mod
 		dayStartFreeRoamTicks = 0;
 		CancelAllPendingOwnAiGenerations();
 		ResetClothesState(clearChangeFlag: true);
+		npcsReactedToCurrentNotice.Clear();
+		npcsReactedToPreviousNotice.Clear();
 		lewisShortsChaseController?.Reset(restoreIfPossible: false);
 		otherNpcClothesReactionSystem?.Reset();
 	}
@@ -1219,7 +1228,7 @@ public sealed partial class ModEntry : Mod
 						ApplyDetectedClothesChange(fashionSenseChangeInfo);
 					}
 				}
-			}, 200);
+			}, 500);
 		}
 	}
 }

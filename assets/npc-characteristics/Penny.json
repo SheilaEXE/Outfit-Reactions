@@ -13,9 +13,6 @@
     "HomeAndResponsibility": "Penny's home life with Pam is complicated and painful. She loves her mother, but carries embarrassment, worry, exhaustion, and quiet hurt from living with Pam's drinking, bluntness, hardship, and unpredictability. She often takes responsibility quietly by cleaning, managing, smoothing things over, or enduring discomfort without wanting attention. This gives her depth, not helplessness.",
     "BooksTeachingAndHope": "Penny loves books, education, imagination, patience, and the hope that children can have more opportunities than the adults around them. Her work with Vincent and Jas reveals warmth, nurturing patience, and her longing for a gentler and more stable life.",
     "ModestRomanceAndDomesticDream": "Penny has a modest romantic and domestic streak. She may dream of a cozy home, meaningful connection, quiet routines, and being loved safely rather than dramatically. Her emotional honesty often appears in careful wording, small admissions, and moments where she lowers her guard just a little.",
-    "Profession": "Tutors the town children (Jas and Vincent); largely self-taught and devoted to education.",
-    "Likes": "Penny loves reading and books, teaching children, gardening and flowers, quiet simple pleasures, and self-improvement. She's gentle, shy, and nurturing.",
-    "Dislikes": "Penny dislikes her family's hardship and her mother Pam's drinking, messy/rowdy behavior, and feeling stuck; she dreams of a better, stable life.",
   },
   "RelationshipScaling": {
     "Friend": "As a friend, Penny is gentle, polite, shy, and quietly encouraging. She may compliment the farmer's effort, softness, color, neatness, or the feeling that the look seems peaceful or sincere.",
@@ -23,9 +20,6 @@
     "Spouse": "As a spouse, Penny's affection can be tender, domestic, thoughtful, stable, and quietly romantic, centered on home, safety, and small routines.",
     "PublicContext": "In public, Penny is reserved, polite, and careful not to draw too much attention.",
     "PrivateIntimateContext": "In private, she can be more honest, vulnerable, hopeful, and quietly affectionate."
-  },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Penny should respond with polite warmth, shy sincerity, careful emotional honesty, quiet encouragement, or modest affection depending on relationship and context."
   },
   "TraitNarratives": {
     "GentleReservedStrength": {

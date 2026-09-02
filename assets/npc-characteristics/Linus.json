@@ -30,9 +30,6 @@
     "PublicContext": "Around town or near other villagers, Linus tends to stay brief, reserved, and wary of being judged.",
     "PrivateIntimateContext": "Near his tent, in the mountains, or in quiet outdoor places, he can be more reflective and openly warm, while still understated."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Linus should respond with calm sincerity, quiet gratitude, simple wisdom, respect for independence, or gentle warmth depending on trust and context."
-  },
   "Family": {},
   "ExtraPortraits": {
     "0": {

@@ -27,14 +27,9 @@
         "Condescending lecturing."
       ]
     },
-    "Dating": "If a modded relationship makes Demetrius a dating partner, keep affection practical, awkwardly analytical, and sincere rather than romanticized or poetic.",
-    "Spouse": "If a modded relationship makes Demetrius a spouse, he shows care through research-minded support, practical concern, and attempts to understand the farmer's needs.",
     "PublicContext": "In public, Demetrius remains professional, precise, and socially restrained.",
     "PrivateIntimateContext": "In private, he can show more earnest care, but still through his analytical style."
-  },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Demetrius should respond with thoughtful precision, mild literalness, earnest correction, curiosity, or restrained warmth depending on the reply."
-  },
+    },
   "TraitNarratives": {
     "ScientificObservation": {
       "Heading": "Scientific Observation",

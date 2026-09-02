@@ -771,6 +771,7 @@ public sealed partial class ModEntry : Mod
 			}
 			return;
 		}
+		bool hasHatReactionMemoryDraft = !string.IsNullOrWhiteSpace(text) && BeginVanillaHatReactionMemoryDraft(npc, text);
 		Action onFinished = null;
 		if (pending.IsSpouseDialogue)
 		{
@@ -808,9 +809,16 @@ public sealed partial class ModEntry : Mod
 		{
 			InstallPlayerReplyMenuAfterOutfitDialogue(npc, pending.IsSpouseDialogue, text, onFinished);
 		}
-		else if (pending.IsSpouseDialogue)
+		else
 		{
-			InstallSpouseAfterOutfitDialogue(npc);
+			if (pending.IsSpouseDialogue)
+			{
+				InstallSpouseAfterOutfitDialogue(npc, hasHatReactionMemoryDraft);
+			}
+			else if (hasHatReactionMemoryDraft)
+			{
+				InstallHatReactionMemoryCommitAfterDialogue(npc);
+			}
 		}
 		if (!pending.IsSpouseDialogue)
 		{
@@ -834,13 +842,26 @@ public sealed partial class ModEntry : Mod
 		return false;
 	}
 
-	private void InstallSpouseAfterOutfitDialogue(NPC npc)
+	private void InstallSpouseAfterOutfitDialogue(NPC npc, bool commitHatReactionMemory = false)
 	{
 		//IL_001c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0026: Expected O, but got Unknown
 		Game1.afterDialogues = delegate
 		{
 			CompleteSpouseAfterOutfitDialogue(npc);
+			if (commitHatReactionMemory)
+			{
+				hatMemoryService?.CommitReactionDraft(((Character)npc)?.Name);
+			}
+		};
+	}
+
+	private void InstallHatReactionMemoryCommitAfterDialogue(NPC npc)
+	{
+		string npcName = ((Character)npc)?.Name;
+		Game1.afterDialogues = delegate
+		{
+			hatMemoryService?.CommitReactionDraft(npcName);
 		};
 	}
 
@@ -964,7 +985,7 @@ public sealed partial class ModEntry : Mod
 				string title = (isPt ? ("Contar o segredo a " + text + "?") : ("Tell " + text + " the secret?"));
 				string replyLabel = (isPt ? "Contar" : "Tell them");
 				string leaveLabel = (isPt ? "Não" : "Not now");
-				Game1.activeClickableMenu = (IClickableMenu)(object)new OutfitPlayerReplyChoiceMenu(title, replyLabel, leaveLabel, delegate
+				ShowNativeOutfitReplyChoice(title, replyLabel, leaveLabel, delegate
 				{
 					specialItemReactionService?.RevealSecret(secretId, ((Character)npc).Name);
 					OutfitAiContext outfitAiContext = BuildOutfitAiContext(npc, isSpouseDialogue);
@@ -1024,13 +1045,13 @@ public sealed partial class ModEntry : Mod
 		{
 			Action onFinished2 = onFinished;
 			NPC obj = npc;
-			FinishPlayerReplyInteraction(onFinished2, (obj != null) ? ((Character)obj).Name : null);
+			FinishPlayerReplyInteraction(onFinished2, (obj != null) ? ((Character)obj).Name : null, commitHatReactionMemory: true);
 			return;
 		}
 		string title = (((int)LocalizedContentManager.CurrentLanguageCode == 4) ? "Responder ao comentário?" : "Reply to the comment?");
 		string replyLabel = (((int)LocalizedContentManager.CurrentLanguageCode == 4) ? "Responder" : "Reply");
 		string leaveLabel = (((int)LocalizedContentManager.CurrentLanguageCode == 4) ? "Ir embora" : "Leave");
-		Game1.activeClickableMenu = (IClickableMenu)(object)new OutfitPlayerReplyChoiceMenu(title, replyLabel, leaveLabel, delegate
+		ShowNativeOutfitReplyChoice(title, replyLabel, leaveLabel, delegate
 		{
 			OpenPlayerOutfitReplyInputMenu(npc, isSpouseDialogue, npcCompliment, onFinished);
 		}, delegate
@@ -1038,7 +1059,27 @@ public sealed partial class ModEntry : Mod
 			ModEntry modEntry = this;
 			Action onFinished3 = onFinished;
 			NPC obj2 = npc;
-			modEntry.FinishPlayerReplyInteraction(onFinished3, (obj2 != null) ? ((Character)obj2).Name : null);
+			modEntry.FinishPlayerReplyInteraction(onFinished3, (obj2 != null) ? ((Character)obj2).Name : null, commitHatReactionMemory: true);
+		});
+	}
+
+	private void ShowNativeOutfitReplyChoice(string title, string replyLabel, string leaveLabel, Action respond, Action leave)
+	{
+		const string ReplyKey = "OutfitReactions_Reply";
+		Response[] responses = new Response[2]
+		{
+			new Response(ReplyKey, replyLabel),
+			new Response("OutfitReactions_Leave", leaveLabel)
+		};
+		Game1.currentLocation.createQuestionDialogue(title, responses, delegate(Farmer _, string answer)
+		{
+			Action selectedAction = string.Equals(answer, ReplyKey, StringComparison.Ordinal)
+				? respond
+				: leave;
+			Game1.afterDialogues = delegate
+			{
+				selectedAction?.Invoke();
+			};
 		});
 	}
 
@@ -1132,6 +1173,7 @@ public sealed partial class ModEntry : Mod
 		{
 			context.ConversationTranscript = outfitReplyConversationHistory.BuildTranscript(((Character)npc).Name);
 		}
+		hatMemoryService?.SetDraftPlayerReply(((Character)npc).Name, playerReply);
 		Game1.activeClickableMenu = null;
 		Game1.afterDialogues = null;
 		PendingAiPlayerReplyGeneration pending = new PendingAiPlayerReplyGeneration
@@ -1271,13 +1313,14 @@ public sealed partial class ModEntry : Mod
 		string text = (pending.IsSpouseDialogue ? "OutfitReactions_SpousePlayerReplyFollowUp" : "OutfitReactions_GlobalPlayerReplyFollowUp");
 		npc.CurrentDialogue.Push(new Dialogue(npc, text, generated));
 		outfitReplyConversationHistory.Append(pending.NpcName, "NPC", generated);
+		hatMemoryService?.SetDraftNpcFollowUp(pending.NpcName, generated);
 		Game1.activeClickableMenu = null;
 		Game1.afterDialogues = delegate
 		{
 			// The generated follow-up is the final line of this outfit interaction.
 			// Finish only our temporary reply flow; any game/mod dialogue already
 			// queued beneath this line remains available for a later interaction.
-			FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName);
+			FinishPlayerReplyInteraction(pending.OnFinished, pending.NpcName, commitHatReactionMemory: true);
 		};
 		((Character)npc).faceGeneralDirection(((Character)Game1.player).getStandingPosition(), 0, false);
 		Game1.drawDialogue(npc);
@@ -1290,14 +1333,23 @@ public sealed partial class ModEntry : Mod
 		{
 			FinishPlayerReplyInteraction(item?.OnFinished, item?.NpcName);
 		}
+		hatMemoryService?.DiscardAllReactionDrafts();
 	}
 
-	private void FinishPlayerReplyInteraction(Action onFinished, string npcName = null)
+	private void FinishPlayerReplyInteraction(Action onFinished, string npcName = null, bool commitHatReactionMemory = false)
 	{
 		outfitReplyConversationHistory.Reset(npcName);
 		Game1.activeClickableMenu = null;
 		Game1.afterDialogues = null;
 		onFinished?.Invoke();
+		if (commitHatReactionMemory)
+		{
+			hatMemoryService?.CommitReactionDraft(npcName);
+		}
+		else
+		{
+			hatMemoryService?.DiscardReactionDraft(npcName);
+		}
 	}
 
 	private bool TryQueueOtherNpcOutfitDialogue(NPC npc)

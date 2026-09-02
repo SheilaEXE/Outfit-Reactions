@@ -31,9 +31,6 @@
     "PublicContext": "In public, Jodi keeps composure and politeness, even when tired.",
     "PrivateIntimateContext": "In private, she can be more honest about stress, gratitude, wistfulness, or the need to feel seen."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Jodi should respond with polite warmth, practical care, gentle humor, quiet gratitude, or subtle wistfulness depending on context."
-  },
   "Family": {
     "Kent": {
       "Heading": "Kent",

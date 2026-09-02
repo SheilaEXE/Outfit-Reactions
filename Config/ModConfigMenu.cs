@@ -606,6 +606,14 @@ namespace OutfitReactions
                 formatAllowedValue: value => T("gmcm.option.vanilla-special-item-mode.value." + (value ?? "ItemOnly"))
             );
 
+            configMenu.AddBoolOption(
+                mod: mod.ModManifest,
+                name: () => T("gmcm.option.lewis-shorts-chase.name"),
+                tooltip: () => T("gmcm.option.lewis-shorts-chase.tooltip"),
+                getValue: () => mod.Config.EnableLewisShortsChase,
+                setValue: value => mod.Config.EnableLewisShortsChase = value
+            );
+
             configMenu.AddNumberOption(
                 mod: mod.ModManifest,
                 name: () => T("gmcm.option.outfit-notice-distance.name"),

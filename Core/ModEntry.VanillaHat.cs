@@ -123,14 +123,14 @@ public sealed partial class ModEntry : Mod
 		}
 	}
 
-	private string BuildVanillaHatMemoryContext(NPC npc)
+	private string BuildVanillaHatMemoryContext(NPC npc, bool isHatRemoval = false)
 	{
 		if (hatMemoryService == null || npc == null)
 		{
 			return null;
 		}
 		string visibleVanillaHatId = GetVisibleVanillaHatId();
-		if (string.IsNullOrWhiteSpace(visibleVanillaHatId))
+		if (string.IsNullOrWhiteSpace(visibleVanillaHatId) && !isHatRemoval)
 		{
 			return null;
 		}
@@ -149,6 +149,71 @@ public sealed partial class ModEntry : Mod
 		{
 			hatMemoryService.RecordMemory(((Character)npc).Name, GetCurrentVanillaHatId(), GetCurrentVanillaHatName(), Game1.currentSeason, Game1.dayOfMonth, Game1.year);
 		}
+	}
+
+	private bool BeginVanillaHatReactionMemoryDraft(NPC npc, string npcOpeningLine)
+	{
+		if (hatMemoryService == null || npc == null)
+		{
+			return false;
+		}
+
+		string npcName = ((Character)npc).Name ?? "";
+		hatMemoryService.DiscardReactionDraft(npcName);
+		if (!TryResolveVanillaHatReactionMemoryTarget(npc, out string hatId, out string hatName, out bool wasRemoval))
+		{
+			return false;
+		}
+
+		hatMemoryService.BeginReactionDraft(npcName, hatId, hatName, wasRemoval, npcOpeningLine);
+		return hatMemoryService.HasReactionDraft(npcName);
+	}
+
+	private bool TryResolveVanillaHatReactionMemoryTarget(NPC npc, out string hatId, out string hatName, out bool wasRemoval)
+	{
+		hatId = "";
+		hatName = "";
+		wasRemoval = false;
+		if (npc == null || hatMemoryService == null || IsFashionSenseHatCoveringVanilla())
+		{
+			return false;
+		}
+
+		FashionSenseChangeInfo effectiveChange = GetEffectiveFashionSenseChangeInfoForNpc(npc);
+		if (effectiveChange == null)
+		{
+			return false;
+		}
+		if (TryResolveSpecialItemNoticeForNpc(npc, effectiveChange, requireNpcMemoryForRemoval: true, out SpecialItemNoticeInfo specialNotice)
+			&& specialNotice != null
+			&& specialNotice.IsValid)
+		{
+			return false;
+		}
+
+		bool isHatFocusedNotice = ShouldRecordCurrentNoticeAsVanillaHatOnlyReaction(npc)
+			|| effectiveChange.VanillaHatChanged;
+		if (!isHatFocusedNotice)
+		{
+			return false;
+		}
+
+		wasRemoval = effectiveChange.VanillaHatRemoved;
+		if (wasRemoval)
+		{
+			HatMemorySnapshot previousHat = hatMemoryService.GetLastHatMemoryForNpc(((Character)npc).Name);
+			if (previousHat == null || string.IsNullOrWhiteSpace(previousHat.HatId))
+			{
+				return false;
+			}
+			hatId = previousHat.HatId;
+			hatName = previousHat.HatName;
+			return true;
+		}
+
+		hatId = GetVisibleVanillaHatId();
+		hatName = GetCurrentVanillaHatName();
+		return !string.IsNullOrWhiteSpace(hatId);
 	}
 
 	private void RecordVanillaPantsMemory(NPC npc, string pantsName)

@@ -15,7 +15,8 @@ namespace OutfitReactions
     }
 
     /// <summary>
-    /// Experimental, ManorHouse-only chase used after Lewis reads a purple-shorts reaction.
+    /// Experimental chase used after Lewis reads a purple-shorts reaction. Outside ManorHouse,
+    /// it only starts and continues while Lewis has no visible witnesses nearby.
     /// Movement is driven by a small private A* path and direct position updates. This class
     /// deliberately never assigns, clears, replaces, or restores an NPC controller.
     /// </summary>
@@ -30,18 +31,22 @@ namespace OutfitReactions
         private const int PlayerStartleDelayTicks = 60;
         private const int PathRefreshTicks = 12;
         private const int GiveUpAfterFailedPathTicks = 180;
+        private const int WitnessEmoteTimeoutTicks = 240;
         private const int MaximumPathSearchNodes = 500;
         private const float ChaseSpeed = 4f;
         private const float ReturnSpeed = 2f;
         private const float CatchDistance = 52f;
+        private const float WitnessDistance = 1000f;
 
         private readonly IMonitor monitor;
         private readonly ITranslationHelper translation;
+        private readonly Func<bool> isEnabled;
         private readonly Func<LewisShortsSlot> getEquippedShortsSlot;
         private readonly Func<LewisShortsSlot, bool> confiscateShorts;
         private readonly Func<LewisShortsSlot, string, string> getDialogueKey;
         private readonly Action<NPC> markCurrentVisualAsNoticed;
         private readonly NpcSpecialActionController specialActionController;
+        private readonly Random random = new();
 
         private ChasePhase phase;
         private NPC lewis;
@@ -61,12 +66,15 @@ namespace OutfitReactions
         private int pathRefreshTimer;
         private int failedPathTicks;
         private int demandBubbleTimer;
+        private int witnessEmoteTimer;
         private bool playerStartlePlayed;
         private bool visualChangedDuringSequence;
+        private bool requiresPrivacy;
 
         public LewisShortsChaseController(
             IMonitor monitor,
             ITranslationHelper translation,
+            Func<bool> isEnabled,
             Func<LewisShortsSlot> getEquippedShortsSlot,
             Func<LewisShortsSlot, bool> confiscateShorts,
             Func<LewisShortsSlot, string, string> getDialogueKey,
@@ -74,6 +82,7 @@ namespace OutfitReactions
         {
             this.monitor = monitor;
             this.translation = translation;
+            this.isEnabled = isEnabled;
             this.getEquippedShortsSlot = getEquippedShortsSlot;
             this.confiscateShorts = confiscateShorts;
             this.getDialogueKey = getDialogueKey;
@@ -90,17 +99,23 @@ namespace OutfitReactions
 
         public bool TryBeginAfterReaction(NPC npc, PendingPrompt pending)
         {
-            if (IsActive || npc == null || pending == null || Game1.player == null)
+            if (isEnabled?.Invoke() != true || IsActive || npc == null || pending == null || Game1.player == null)
                 return false;
 
             if (!string.Equals(npc.Name, LewisName, StringComparison.OrdinalIgnoreCase)
-                || !IsManorHouse(npc.currentLocation)
                 || npc.currentLocation != Game1.player.currentLocation
                 || Game1.activeClickableMenu != null
                 || Game1.eventUp
                 || Game1.CurrentEvent != null
                 || Game1.currentMinigame != null)
             {
+                return false;
+            }
+
+            bool startsOutsideManorHouse = !IsManorHouse(npc.currentLocation);
+            if (startsOutsideManorHouse && FindVisibleWitness(npc, requireWithinWitnessDistance: false) != null)
+            {
+                LogDebug("Lewis chase was not started outside ManorHouse because another NPC was visible.");
                 return false;
             }
 
@@ -132,6 +147,7 @@ namespace OutfitReactions
             pending.SpecialActionSnapshot = null;
             chasedSlot = slot;
             visualChangedDuringSequence = false;
+            requiresPrivacy = startsOutsideManorHouse;
 
             phase = ChasePhase.DemandBubble;
             demandBubbleTimer = DemandBubbleTicks;
@@ -141,7 +157,7 @@ namespace OutfitReactions
             FaceTowardPlayer();
 
             ShowLewisDialogue(EscapeDialogueSituation, "lewis-shorts-chase.demand", "Give that back right now!");
-            LogDebug($"Lewis chase armed in ManorHouse for slot={slot}, origin={originTile}.");
+            LogDebug($"Lewis chase armed in {originLocation.NameOrUniqueName} for slot={slot}, origin={originTile}, requiresPrivacy={requiresPrivacy}.");
             return true;
         }
 
@@ -149,6 +165,12 @@ namespace OutfitReactions
         {
             if (!IsActive)
                 return;
+
+            if (isEnabled?.Invoke() != true)
+            {
+                Reset(restoreIfPossible: true);
+                return;
+            }
 
             if (!Context.IsWorldReady || lewis == null || originLocation == null || lewis.currentLocation == null)
             {
@@ -170,6 +192,14 @@ namespace OutfitReactions
                 return;
             }
 
+            if (requiresPrivacy
+                && (phase == ChasePhase.DemandBubble || phase == ChasePhase.Chasing)
+                && FindVisibleWitness(lewis, requireWithinWitnessDistance: true) is NPC witness)
+            {
+                BeginWitnessDisguise(witness);
+                return;
+            }
+
             switch (phase)
             {
                 case ChasePhase.DemandBubble:
@@ -177,6 +207,9 @@ namespace OutfitReactions
                     break;
                 case ChasePhase.Chasing:
                     UpdateChasing();
+                    break;
+                case ChasePhase.WitnessEmote:
+                    UpdateWitnessEmote();
                     break;
                 case ChasePhase.Returning:
                     UpdateReturning();
@@ -206,7 +239,7 @@ namespace OutfitReactions
 
             if (!PlayerIsInsideOriginLocation())
             {
-                BeginReturn("The player left ManorHouse during Lewis's demand bubble.");
+                BeginReturn("The player left the chase location during Lewis's demand bubble.");
                 return;
             }
 
@@ -242,7 +275,7 @@ namespace OutfitReactions
 
             if (!PlayerIsInsideOriginLocation())
             {
-                BeginReturn("The player left ManorHouse; Lewis is returning to his origin.");
+                BeginReturn("The player left the chase location; Lewis is returning to his origin.");
                 return;
             }
 
@@ -306,6 +339,40 @@ namespace OutfitReactions
 
             if (lewis != null && lewis.TilePoint == originTile)
                 CompleteReturn();
+        }
+
+        private void BeginWitnessDisguise(NPC witness)
+        {
+            if (!IsActive || phase == ChasePhase.WitnessEmote || phase == ChasePhase.Returning)
+                return;
+
+            lewis?.clearTextAboveHead();
+            StopLewisShaking();
+            lewis?.Halt();
+            ClearPath();
+
+            phase = ChasePhase.WitnessEmote;
+            witnessEmoteTimer = WitnessEmoteTimeoutTicks;
+            int emote = random.Next(2) == 0 ? 28 : 12;
+            lewis?.doEmote(emote);
+            HoldLewisStill();
+
+            LogDebug($"Lewis stopped the chase to disguise it because {witness?.Name ?? "a witness"} became visible within {WitnessDistance:F0}f; emote={emote}.");
+        }
+
+        private void UpdateWitnessEmote()
+        {
+            HoldLewisStill();
+
+            if (Game1.activeClickableMenu != null || Game1.dialogueUp || Game1.freezeControls || Game1.eventUp)
+                return;
+
+            witnessEmoteTimer--;
+            if (lewis?.IsEmoting == true && witnessEmoteTimer > 0)
+                return;
+
+            ShowLewisDialogue(EscapedDialogueSituation);
+            BeginReturn("Lewis disguised the chase after a witness appeared.", clearText: false);
         }
 
         private void ConfiscateAndReturn()
@@ -644,6 +711,46 @@ namespace OutfitReactions
             return npc != null && (npc.controller != null || npc.temporaryController != null);
         }
 
+        private NPC FindVisibleWitness(NPC subject, bool requireWithinWitnessDistance)
+        {
+            if (subject?.currentLocation == null || Game1.player?.currentLocation != subject.currentLocation)
+                return null;
+
+            Rectangle viewport = new(Game1.viewport.X, Game1.viewport.Y, Game1.viewport.Width, Game1.viewport.Height);
+            foreach (NPC candidate in NpcContextResolver.GetCurrentLocationNpcs())
+            {
+                if (candidate == null
+                    || ReferenceEquals(candidate, subject)
+                    || !candidate.IsVillager
+                    || candidate.IsInvisible
+                    || candidate.isSleeping.Value
+                    || candidate.currentLocation != subject.currentLocation
+                    || IsDecorativeCompanion(candidate))
+                {
+                    continue;
+                }
+
+                if (!viewport.Intersects(candidate.GetBoundingBox()))
+                    continue;
+
+                if (requireWithinWitnessDistance
+                    && Vector2.Distance(subject.Position, candidate.Position) > WitnessDistance)
+                {
+                    continue;
+                }
+
+                return candidate;
+            }
+
+            return null;
+        }
+
+        private static bool IsDecorativeCompanion(NPC npc)
+        {
+            string assemblyName = npc?.GetType().Assembly.GetName().Name ?? "";
+            return assemblyName.Contains("CustomCompanions", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool IsManorHouse(GameLocation location)
         {
             return location != null
@@ -671,8 +778,10 @@ namespace OutfitReactions
             chasedSlot = LewisShortsSlot.None;
             failedPathTicks = 0;
             demandBubbleTimer = 0;
+            witnessEmoteTimer = 0;
             playerStartlePlayed = false;
             visualChangedDuringSequence = false;
+            requiresPrivacy = false;
             ClearPath();
         }
 
@@ -687,6 +796,7 @@ namespace OutfitReactions
             None,
             DemandBubble,
             Chasing,
+            WitnessEmote,
             Returning
         }
     }

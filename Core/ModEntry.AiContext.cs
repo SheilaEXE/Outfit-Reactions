@@ -108,6 +108,9 @@ public sealed partial class ModEntry : Mod
 		string fashionSenseChangeType = GetFashionSenseChangeType(effectiveFashionSenseChangeInfoForNpc);
 		string fashionSenseChangedItemId = GetFashionSenseChangedItemId(effectiveFashionSenseChangeInfoForNpc, fashionSenseChangeType);
 		string safeNoticedChangeHint = ((flag && !string.IsNullOrWhiteSpace(fashionSenseChangedItemId)) ? BuildSafeOutfitNameHint(fashionSenseChangedItemId) : "");
+		bool accessoryWasRemovedDuringOutfitChange = string.Equals(fashionSenseChangeType, "Outfit", StringComparison.OrdinalIgnoreCase) && IsRemovedAccessoryChange(effectiveFashionSenseChangeInfoForNpc.NewAccessoryId);
+		string savedOutfitAccessoryHint = accessoryWasRemovedDuringOutfitChange ? "" : BuildSpecificAccessoryHint(effectiveFashionSenseChangeInfoForNpc.NewAccessoryId, flag);
+		string removedAccessoryHint = accessoryWasRemovedDuringOutfitChange && flag ? BuildSafeOutfitNameHint(StripRemovedAccessoryPrefix(effectiveFashionSenseChangeInfoForNpc.NewAccessoryId)) : "";
 		GameLocation currentLocation = Game1.currentLocation;
 		string locationName = ((currentLocation != null) ? currentLocation.NameOrUniqueName : "");
 		string currentSeason = Game1.currentSeason;
@@ -129,20 +132,31 @@ public sealed partial class ModEntry : Mod
 		}
 		bool flag5 = IsFarmHouseLocation(currentLocation);
 		bool flag6 = currentLocation != null && currentLocation.IsOutdoors;
+		bool isFarm = currentLocation is Farm;
 		bool isNpcRoom = !flag5 && !flag6 && IsMarriageCandidateNpcRoom(npc, currentLocation);
 		bool isNpcPersonalLocation = !flag5 && !flag6 && IsMarriageCandidatePersonalLocation(npc, currentLocation);
 		bool isIndoors = currentLocation != null && !flag6;
 		bool flag7 = !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId());
 		bool flag8 = effectiveFashionSenseChangeInfoForNpc?.VanillaHatRemoved ?? false;
-		OutfitVisionImage visionImage = ((flag7 || flag8) ? null : TryCaptureVisionOutfitImageForAi());
+		SpecialItemNoticeInfo notice;
+		bool flag10 = TryResolveSpecialItemNoticeForNpc(npc, effectiveFashionSenseChangeInfoForNpc, requireNpcMemoryForRemoval: true, out notice);
+		bool vanillaHatCombinedMode = ModConfigMenu.NormalizeVanillaHatReactionMode(Config?.VanillaHatReactionMode) == "Combined";
+		bool specialItemCombinedMode = ModConfigMenu.NormalizeVanillaSpecialItemReactionMode(Config?.VanillaSpecialItemReactionMode) == "Combined";
+		bool hasVanillaHatNotice = flag7 || flag8;
+		bool shouldCaptureVisionImage = !hasVanillaHatNotice
+			|| (!flag10 && vanillaHatCombinedMode)
+			|| (flag10 && specialItemCombinedMode);
+		OutfitVisionImage visionImage = shouldCaptureVisionImage ? TryCaptureVisionOutfitImageForAi() : null;
 		string summary = TryBuildFashionSenseVisualSummaryForAi(effectiveFashionSenseChangeInfoForNpc);
 		summary = MergeRenderedHairColorIntoSummary(summary, visionImage, effectiveFashionSenseChangeInfoForNpc);
 		if (!flag7 && !flag8)
 		{
 			summary = MergeRenderedHatColorIntoSummary(summary, visionImage, effectiveFashionSenseChangeInfoForNpc);
 		}
-		string text = ((!flag8) ? "" : (hatMemoryService?.GetLastHatNameForNpc(((Character)npc).Name) ?? ""));
-		bool flag9 = flag8 && !string.IsNullOrWhiteSpace(text);
+		HatMemorySnapshot removedHatMemory = flag8 ? hatMemoryService?.GetLastHatMemoryForNpc(((Character)npc).Name) : null;
+		string text = removedHatMemory?.HatName ?? "";
+		string removedHatId = removedHatMemory?.HatId ?? "";
+		bool flag9 = flag8 && (!string.IsNullOrWhiteSpace(text) || !string.IsNullOrWhiteSpace(removedHatId));
 		string vanillaHatFraming = "";
 		if (flag9)
 		{
@@ -150,10 +164,8 @@ public sealed partial class ModEntry : Mod
 			summary = (summary ?? "").TrimEnd() + text2;
 			vanillaHatFraming = text2.Trim();
 		}
-		string vanillaHatMemoryHint = BuildVanillaHatMemoryContext(npc);
-		string specialHatReactionContext = (flag9 ? (specialHatReactionService?.BuildContextForRemovedHat(text, currentGameLanguageForPrompt) ?? "") : ((!(!flag8 && flag7)) ? "" : (specialHatReactionService?.BuildContextForCurrentVanillaHat(Game1.player, currentGameLanguageForPrompt) ?? "")));
-		SpecialItemNoticeInfo notice;
-		bool flag10 = TryResolveSpecialItemNoticeForNpc(npc, effectiveFashionSenseChangeInfoForNpc, requireNpcMemoryForRemoval: true, out notice);
+		string vanillaHatMemoryHint = BuildVanillaHatMemoryContext(npc, flag8);
+		string specialHatReactionContext = (flag9 ? (specialHatReactionService?.BuildContextForRemovedHat(removedHatId, text, currentGameLanguageForPrompt) ?? "") : ((!(!flag8 && flag7)) ? "" : (specialHatReactionService?.BuildContextForCurrentVanillaHat(Game1.player, currentGameLanguageForPrompt) ?? "")));
 		string specialItemReactionContext = ((!flag10) ? "" : (notice?.ReactionContext ?? ""));
 		if (flag10 && !string.IsNullOrWhiteSpace(specialItemReactionContext))
 		{
@@ -179,7 +191,7 @@ public sealed partial class ModEntry : Mod
 			ThemeContext = "",
 			ThemePriorityInstruction = "",
 			LocationName = locationName,
-			DetailedLocationName = GetDetailedLocationNameForAiPrompt(currentLocation),
+			DetailedLocationName = flag5 ? "farmer farmhouse / home interior" : isFarm ? "farmer's farm / outdoors" : GetDetailedLocationNameForAiPrompt(currentLocation),
 			LocationType = GetLocationTypeForAiPrompt(currentLocation, flag5, flag6, isNpcRoom),
 			IsOutdoors = flag6,
 			IsIndoors = isIndoors,
@@ -187,6 +199,7 @@ public sealed partial class ModEntry : Mod
 			IsNpcPersonalLocation = isNpcPersonalLocation,
 			IsBeachOrIsland = IsBeachOrIslandLocation(currentLocation),
 			IsFarmHouse = flag5,
+			IsFarm = isFarm,
 			DayPart = GetDayPartForAiPrompt(timeOfDay),
 			FestivalContext = GetFestivalContextForAiPrompt(),
 			FarmerBirthdayContext = GetFarmerBirthdayContextForAiPrompt(),
@@ -202,14 +215,15 @@ public sealed partial class ModEntry : Mod
 			RelationshipHearts = item2,
 			VisionImage = visionImage,
 			FashionSenseVisualSummary = summary,
-			VanillaHatHatOnlyMode = (!flag10 && (flag7 || flag9) && ModConfigMenu.NormalizeVanillaHatReactionMode(Config?.VanillaHatReactionMode) == "HatOnly"),
+			VanillaHatHatOnlyMode = (!flag10 && (flag7 || flag9) && !vanillaHatCombinedMode),
 			VanillaHatFraming = vanillaHatFraming,
 			NpcWitnessedPreviousAccessory = DidNpcWitnessPreviousLook(npc),
 			SpecialHatReactionContext = specialHatReactionContext,
 			SpecialItemReactionContext = specialItemReactionContext,
+			SpecialItemEntryId = flag10 ? (notice?.EntryId ?? "") : "",
 			SpecialItemWasJustRemoved = flag11,
 			SpecialItemOnlyMode = flag10,
-			SpecialItemCombinedMode = (flag10 && ModConfigMenu.NormalizeVanillaSpecialItemReactionMode(Config?.VanillaSpecialItemReactionMode) == "Combined"),
+			SpecialItemCombinedMode = (flag10 && specialItemCombinedMode),
 			SpecialItemMemoryHint = text3,
 			VanillaPantsMemoryHint = vanillaPantsMemoryHint,
 			VanillaHatMemoryHint = vanillaHatMemoryHint,
@@ -220,7 +234,11 @@ public sealed partial class ModEntry : Mod
 			SavedOutfitIncludesMeaningfulAccessory = (effectiveFashionSenseChangeInfoForNpc != null
 				&& effectiveFashionSenseChangeInfoForNpc.ChangedOutfit
 				&& effectiveFashionSenseChangeInfoForNpc.ChangedAccessory
+				&& !accessoryWasRemovedDuringOutfitChange
 				&& ShouldTreatAccessoryAsCurrentComboFocus(effectiveFashionSenseChangeInfoForNpc.NewAccessoryId, AreVisionOnlyFashionSenseTriggersEnabled())),
+			SavedOutfitAccessoryHint = savedOutfitAccessoryHint,
+			AccessoryWasRemovedDuringOutfitChange = accessoryWasRemovedDuringOutfitChange,
+			RemovedAccessoryHint = removedAccessoryHint,
 			WasCaughtPeeking = (!isSpouseDialogue && (otherNpcClothesReactionSystem?.WasNpcCaughtPeeking(npc) ?? false)),
 			OutfitMemoryContext = BuildOutfitMemoryContext(npc, currentSavedFashionSenseOutfitIdForAi)
 		};
@@ -396,9 +414,39 @@ public sealed partial class ModEntry : Mod
 		}
 		if (FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(accessoryId))
 		{
-			return false;
+			// Generic Fashion Sense IDs carry no safe semantic clue, but vision can still
+			// reveal that the equipped accessory is a large part of the combined look.
+			return visionOn;
 		}
 		return visionOn || ItemNameRevealsShape(accessoryId);
+	}
+
+	private static string BuildSpecificAccessoryHint(string accessoryIds, bool useInternalIdAsHint)
+	{
+		if (!useInternalIdAsHint || string.IsNullOrWhiteSpace(accessoryIds))
+		{
+			return "";
+		}
+		return string.Join(" + ", accessoryIds.Split(new string[1] { " + " }, StringSplitOptions.RemoveEmptyEntries)
+			.Select((string id) => id.Trim())
+			.Where((string id) => !IsIgnoredFashionSenseAccessoryId(id) && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(id))
+			.Select(BuildSafeOutfitNameHint)
+			.Where((string hint) => !string.IsNullOrWhiteSpace(hint)));
+	}
+
+	private static bool IsRemovedAccessoryChange(string accessoryId)
+	{
+		return !string.IsNullOrWhiteSpace(accessoryId)
+			&& accessoryId.TrimStart().StartsWith("removed ", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static string StripRemovedAccessoryPrefix(string accessoryId)
+	{
+		if (!IsRemovedAccessoryChange(accessoryId))
+		{
+			return accessoryId ?? "";
+		}
+		return accessoryId.TrimStart().Substring("removed ".Length).Trim();
 	}
 
 	private bool ShouldTreatGenericHeadwearAsSavedOutfitPart(FashionSenseChangeInfo changeInfo)
@@ -466,7 +514,8 @@ public sealed partial class ModEntry : Mod
 		string currentSavedFashionSenseOutfitIdForAi = GetCurrentSavedFashionSenseOutfitIdForAi(fashionSenseChangeInfo?.NewOutfitId);
 		bool suppressHairAndGenericHeadwearForSavedOutfit = fashionSenseChangeInfo != null && (fashionSenseChangeInfo.ChangedOutfit || ShouldTreatGenericHeadwearAsSavedOutfitPart(fashionSenseChangeInfo));
 		bool visibleVanillaHatEquipped = !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId());
-		if (fashionSenseVisualService.TryBuildVisualSummary(Game1.player, currentSavedFashionSenseOutfitIdForAi, out var summary, out var reason, suppressHairAndGenericHeadwearForSavedOutfit, visibleVanillaHatEquipped))
+		bool includeInternalIdHints = Config?.UseFsInternalIdAsHint ?? true;
+		if (fashionSenseVisualService.TryBuildVisualSummary(Game1.player, currentSavedFashionSenseOutfitIdForAi, out var summary, out var reason, suppressHairAndGenericHeadwearForSavedOutfit, visibleVanillaHatEquipped, includeInternalIdHints))
 		{
 			string playerProvidedAccessoryDescriptionForCurrentChange = GetPlayerProvidedAccessoryDescriptionForCurrentChange(fashionSenseChangeInfo);
 			if (!string.IsNullOrWhiteSpace(playerProvidedAccessoryDescriptionForCurrentChange))

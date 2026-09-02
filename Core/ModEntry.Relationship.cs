@@ -89,11 +89,12 @@ public sealed partial class ModEntry : Mod
 				item2 = Math.Max(0, Math.Min(14, val.Points / 250));
 			}
 		}
-		if (!string.IsNullOrWhiteSpace(Game1.player.spouse) && ((Character)npc).Name.Equals(Game1.player.spouse, StringComparison.OrdinalIgnoreCase))
+		bool isKrobusRoommate = ((Character)npc).Name.Equals("Krobus", StringComparison.OrdinalIgnoreCase);
+		if (!isKrobusRoommate && ((!string.IsNullOrWhiteSpace(Game1.player.spouse) && ((Character)npc).Name.Equals(Game1.player.spouse, StringComparison.OrdinalIgnoreCase)) || IsMarriedFriendship(val)))
 		{
 			item = "Spouse";
 		}
-		else if (IsDatingOrEngagedFriendship(val))
+		else if (!isKrobusRoommate && IsDatingOrEngagedFriendship(val))
 		{
 			item = "Dating";
 		}
@@ -139,6 +140,22 @@ public sealed partial class ModEntry : Mod
 			}
 			string text = (type.GetProperty("Status", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(friendship) ?? type.GetField("Status", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(friendship))?.ToString() ?? "";
 			return text.Contains("Dating", StringComparison.OrdinalIgnoreCase) || text.Contains("Engaged", StringComparison.OrdinalIgnoreCase) || text.Contains("Fiance", StringComparison.OrdinalIgnoreCase) || text.Contains("Fiancé", StringComparison.OrdinalIgnoreCase);
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private bool IsMarriedFriendship(Friendship friendship)
+	{
+		if (friendship == null)
+		{
+			return false;
+		}
+		try
+		{
+			return friendship.IsMarried() || friendship.Status.ToString().Contains("Married", StringComparison.OrdinalIgnoreCase);
 		}
 		catch
 		{

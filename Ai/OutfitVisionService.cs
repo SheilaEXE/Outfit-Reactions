@@ -3,8 +3,10 @@ using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewValley;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Security.Cryptography;
 
 namespace OutfitReactions.Ai
@@ -54,12 +56,20 @@ namespace OutfitReactions.Ai
     {
         private const int ImageWidth = 256;
         private const int ImageHeight = 256;
+        private const int FrontStandingFrame = 0;
+        private const float FarmerRenderScale = 1f;
 
         private readonly IMonitor monitor;
+        private readonly string debugImageDirectory;
+        private readonly Func<bool> isDebugLoggingEnabled;
 
-        public OutfitVisionService(IMonitor monitor)
+        public OutfitVisionService(IMonitor monitor, string modDirectory, Func<bool> isDebugLoggingEnabled)
         {
             this.monitor = monitor;
+            this.debugImageDirectory = string.IsNullOrWhiteSpace(modDirectory)
+                ? ""
+                : Path.Combine(modDirectory, "debug", "vision");
+            this.isDebugLoggingEnabled = isDebugLoggingEnabled;
         }
 
         public bool TryCaptureFarmerAppearance(Farmer farmer, out OutfitVisionImage image, out string reason)
@@ -84,6 +94,7 @@ namespace OutfitReactions.Ai
             SpriteBatch spriteBatch = null;
             RenderTargetBinding[] previousTargets = null;
             bool previousUiDrawingFlag = FarmerRenderer.isDrawingForUI;
+            FarmerCaptureState captureState = new(farmer, monitor);
 
             try
             {
@@ -102,6 +113,7 @@ namespace OutfitReactions.Ai
                 // canvas, with generous padding for hats, umbrellas, wings, hair, and tall custom pieces.
                 // FRONT view (facing down = 2): shows face, glasses, bows, prints; this is also the view
                 // used for pixel color reading, so it must be consistent regardless of where the player faces.
+                captureState.PrepareFrame(2);
                 Vector2 position = new(96f, 56f);
                 farmer.FarmerRenderer.draw(
                     spriteBatch,
@@ -110,11 +122,10 @@ namespace OutfitReactions.Ai
                     farmer.FarmerSprite.SourceRect,
                     position,
                     Vector2.Zero,
-                    1f,
-                    2,
+                    0.8f,
                     Color.White,
                     0f,
-                    4f,
+                    FarmerRenderScale,
                     farmer
                 );
 
@@ -146,6 +157,8 @@ namespace OutfitReactions.Ai
                     Width = ImageWidth,
                     Height = ImageHeight
                 };
+
+                byte[] backPngBytes = Array.Empty<byte>();
 
                 // Read the rendered pixels back and estimate the dominant hair color from the
                 // top band of the sprite. This works for texture-painted hair (e.g. pink hair
@@ -188,6 +201,7 @@ namespace OutfitReactions.Ai
 
                         FarmerRenderer.isDrawingForUI = true;
                         backBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, RasterizerState.CullNone);
+                        captureState.PrepareFrame(0);
                         farmer.FarmerRenderer.draw(
                             backBatch,
                             farmer.FarmerSprite.CurrentAnimationFrame,
@@ -195,11 +209,10 @@ namespace OutfitReactions.Ai
                             farmer.FarmerSprite.SourceRect,
                             new Vector2(96f, 56f),
                             Vector2.Zero,
-                            1f,
-                            0,
+                            0.8f,
                             Color.White,
                             0f,
-                            4f,
+                            FarmerRenderScale,
                             farmer
                         );
                         backBatch.End();
@@ -213,7 +226,10 @@ namespace OutfitReactions.Ai
                         backTarget.SaveAsPng(backStream, ImageWidth, ImageHeight);
                         byte[] backBytes = backStream.ToArray();
                         if (backBytes.Length > 0)
+                        {
+                            backPngBytes = backBytes;
                             image.Base64DataBack = Convert.ToBase64String(backBytes);
+                        }
                     }
                     finally
                     {
@@ -225,6 +241,8 @@ namespace OutfitReactions.Ai
                 {
                     monitor?.Log("Back-view capture failed (front view still used): " + ex.Message, LogLevel.Trace);
                 }
+
+                SaveLatestDebugImages(pngBytes, backPngBytes);
 
                 reason = "ok";
                 return true;
@@ -267,8 +285,269 @@ namespace OutfitReactions.Ai
                 {
                     // ignore cleanup issues
                 }
+
+                captureState.Dispose();
             }
         }
+
+        private sealed class FarmerCaptureState : IDisposable
+        {
+            private const string FacingDirectionKey = "FashionSense.Animation.FacingDirection";
+            private static readonly string[] AnimationPropertyNames =
+            {
+                "Type", "Iterator", "StartingIndex", "FrameDuration",
+                "ElapsedDuration", "LightId", "FarmerFrame"
+            };
+
+            private readonly Farmer farmer;
+            private readonly IMonitor monitor;
+            private readonly int originalFacingDirection;
+            private readonly int originalFrame;
+            private readonly bool hadFashionSenseFacingDirection;
+            private readonly string originalFashionSenseFacingDirection;
+            private readonly List<ReflectedPropertySnapshot> animationSnapshots = new();
+            private readonly HashSet<object> trackedAnimationData = new(ReferenceEqualityComparer.Instance);
+            private object animationManager;
+            private MethodInfo getAllAnimationDataMethod;
+            private IDictionary movementDurations;
+            private bool hadMovementDuration;
+            private object originalMovementDuration;
+            private IDictionary elapsedDurations;
+            private bool hadElapsedDuration;
+            private object originalElapsedDuration;
+            private bool disposed;
+
+            public FarmerCaptureState(Farmer farmer, IMonitor monitor)
+            {
+                this.farmer = farmer;
+                this.monitor = monitor;
+                originalFacingDirection = farmer?.FacingDirection ?? 2;
+                originalFrame = farmer?.FarmerSprite?.CurrentFrame ?? FrontStandingFrame;
+                hadFashionSenseFacingDirection = farmer?.modData?.TryGetValue(FacingDirectionKey, out originalFashionSenseFacingDirection) == true;
+
+                TryInitializeFashionSenseState();
+            }
+
+            public void PrepareFrame(int facingDirection)
+            {
+                if (farmer == null)
+                    return;
+
+                if (movementDurations != null)
+                    movementDurations[farmer] = 0f;
+                if (elapsedDurations != null)
+                    elapsedDurations[farmer] = 0f;
+
+                TrackAndRestartAnimationDataThroughFashionSense();
+                farmer.faceDirection(facingDirection);
+            }
+
+            public void Dispose()
+            {
+                if (disposed)
+                    return;
+                disposed = true;
+
+                try
+                {
+                    for (int i = animationSnapshots.Count - 1; i >= 0; i--)
+                        animationSnapshots[i].Restore();
+
+                    if (movementDurations != null)
+                    {
+                        if (hadMovementDuration)
+                            movementDurations[farmer] = originalMovementDuration;
+                        else
+                            movementDurations.Remove(farmer);
+                    }
+
+                    if (elapsedDurations != null)
+                    {
+                        if (hadElapsedDuration)
+                            elapsedDurations[farmer] = originalElapsedDuration;
+                        else
+                            elapsedDurations.Remove(farmer);
+                    }
+
+                    if (farmer != null)
+                    {
+                        if (hadFashionSenseFacingDirection)
+                            farmer.modData[FacingDirectionKey] = originalFashionSenseFacingDirection;
+                        else
+                            farmer.modData.Remove(FacingDirectionKey);
+
+                        farmer.faceDirection(originalFacingDirection);
+                        farmer.FarmerSprite?.setCurrentFrame(originalFrame);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    monitor?.Log("Could not fully restore the temporary Fashion Sense capture state: " + ex.Message, LogLevel.Trace);
+                }
+            }
+
+            private void TryInitializeFashionSenseState()
+            {
+                try
+                {
+                    Assembly fashionSenseAssembly = null;
+                    foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        if (string.Equals(assembly.GetName().Name, "FashionSense", StringComparison.OrdinalIgnoreCase))
+                        {
+                            fashionSenseAssembly = assembly;
+                            break;
+                        }
+                    }
+
+                    Type modType = fashionSenseAssembly?.GetType("FashionSense.FashionSense", throwOnError: false);
+                    if (modType == null)
+                        return;
+
+                    const BindingFlags StaticFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+                    animationManager = modType.GetField("animationManager", StaticFlags)?.GetValue(null);
+                    object conditionData = modType.GetField("conditionData", StaticFlags)?.GetValue(null);
+
+                    getAllAnimationDataMethod = animationManager?.GetType().GetMethod(
+                        "GetAllAnimationData",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        binder: null,
+                        types: new[] { typeof(Farmer) },
+                        modifiers: null);
+
+                    FieldInfo movementField = conditionData?.GetType().GetField(
+                        "_farmerToMovementDuration",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    movementDurations = movementField?.GetValue(conditionData) as IDictionary;
+                    if (movementDurations != null)
+                    {
+                        hadMovementDuration = movementDurations.Contains(farmer);
+                        if (hadMovementDuration)
+                            originalMovementDuration = movementDurations[farmer];
+                    }
+
+                    FieldInfo elapsedField = conditionData?.GetType().GetField(
+                        "_farmerToElapsedMilliseconds",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    elapsedDurations = elapsedField?.GetValue(conditionData) as IDictionary;
+                    if (elapsedDurations != null)
+                    {
+                        hadElapsedDuration = elapsedDurations.Contains(farmer);
+                        if (hadElapsedDuration)
+                            originalElapsedDuration = elapsedDurations[farmer];
+                    }
+
+                    TrackAnimationData();
+                }
+                catch (Exception ex)
+                {
+                    monitor?.Log("Fashion Sense animation freeze is unavailable; using the normal static frame: " + ex.Message, LogLevel.Trace);
+                    animationManager = null;
+                    getAllAnimationDataMethod = null;
+                    movementDurations = null;
+                    elapsedDurations = null;
+                }
+            }
+
+            private void TrackAnimationData()
+            {
+                if (animationManager == null || getAllAnimationDataMethod == null)
+                    return;
+
+                if (getAllAnimationDataMethod.Invoke(animationManager, new object[] { farmer }) is not IEnumerable animationDataItems)
+                    return;
+
+                foreach (object data in animationDataItems)
+                {
+                    if (data == null)
+                        continue;
+
+                    if (trackedAnimationData.Add(data))
+                    {
+                        foreach (string propertyName in AnimationPropertyNames)
+                        {
+                            PropertyInfo property = data.GetType().GetProperty(
+                                propertyName,
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (property?.CanRead == true && property.CanWrite)
+                                animationSnapshots.Add(new ReflectedPropertySnapshot(data, property, property.GetValue(data)));
+                        }
+                    }
+                }
+            }
+
+            private void TrackAndRestartAnimationDataThroughFashionSense()
+            {
+                TrackAnimationData();
+                if (animationManager == null || getAllAnimationDataMethod == null)
+                    return;
+
+                if (getAllAnimationDataMethod.Invoke(animationManager, new object[] { farmer }) is not IEnumerable animationDataItems)
+                    return;
+
+                foreach (object data in animationDataItems)
+                {
+                    if (data == null)
+                        continue;
+
+                    // Mark the cached type as moving while Fashion Sense's movement duration is
+                    // temporarily zero. On draw, Fashion Sense performs its own normal transition
+                    // to Idle/Uniform, honoring the content pack's starting index, zero-duration
+                    // transition frames, syncing rules, and per-layer offsets.
+                    PropertyInfo typeProperty = data.GetType().GetProperty(
+                        "Type",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (typeProperty?.CanWrite == true && typeProperty.PropertyType.IsEnum)
+                        typeProperty.SetValue(data, Enum.Parse(typeProperty.PropertyType, "Moving", ignoreCase: true));
+                }
+            }
+
+            private sealed class ReflectedPropertySnapshot
+            {
+                private readonly object target;
+                private readonly PropertyInfo property;
+                private readonly object value;
+
+                public ReflectedPropertySnapshot(object target, PropertyInfo property, object value)
+                {
+                    this.target = target;
+                    this.property = property;
+                    this.value = value;
+                }
+
+                public void Restore()
+                {
+                    property.SetValue(target, value);
+                }
+            }
+        }
+
+        private void SaveLatestDebugImages(byte[] frontPngBytes, byte[] backPngBytes)
+        {
+            if (isDebugLoggingEnabled?.Invoke() != true || string.IsNullOrWhiteSpace(debugImageDirectory))
+                return;
+
+            try
+            {
+                Directory.CreateDirectory(debugImageDirectory);
+
+                string frontPath = Path.Combine(debugImageDirectory, "last-outfit-front.png");
+                string backPath = Path.Combine(debugImageDirectory, "last-outfit-back.png");
+
+                File.WriteAllBytes(frontPath, frontPngBytes ?? Array.Empty<byte>());
+                if (backPngBytes != null && backPngBytes.Length > 0)
+                    File.WriteAllBytes(backPath, backPngBytes);
+                else if (File.Exists(backPath))
+                    File.Delete(backPath);
+
+                monitor?.Log("[FS VISION DEBUG] Saved the latest exact AI vision capture to '" + debugImageDirectory + "'. Files are overwritten on each capture.", LogLevel.Info);
+            }
+            catch (Exception ex)
+            {
+                monitor?.Log("[FS VISION DEBUG] Could not save the latest vision capture: " + ex.Message, LogLevel.Warn);
+            }
+        }
+
         // Estimates the dominant hair color from the top band of the rendered sprite.
         // Strategy: find the opaque sprite's bounding box, look only at the top ~38% (the head
         // top, which is hair rather than face/skin/clothes), drop transparent, near-outline

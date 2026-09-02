@@ -49,6 +49,10 @@ namespace OutfitReactions.Ai
             if (!string.IsNullOrWhiteSpace(accessoryCombinationIssue))
                 return accessoryCombinationIssue;
 
+            string specialItemToneIssue = ValidateMayorShortsTone(text, context);
+            if (!string.IsNullOrWhiteSpace(specialItemToneIssue))
+                return specialItemToneIssue;
+
             string privateFlusterIssue = ValidatePrivateRevealingFlusterCue(text, context);
             if (!string.IsNullOrWhiteSpace(privateFlusterIssue))
                 return privateFlusterIssue;
@@ -62,6 +66,27 @@ namespace OutfitReactions.Ai
                 return languageIssue;
 
             return null;
+        }
+
+        private static string ValidateMayorShortsTone(string text, OutfitAiContext context)
+        {
+            if (string.IsNullOrWhiteSpace(text) || context?.IsMayorShortsSpecialItem != true)
+                return null;
+
+            string lower = " " + StripDialogueMarkup(text).ToLowerInvariant() + " ";
+            bool romanticized = ContainsAny(lower,
+                " fica sexy", " ficou sexy", " está sexy", " esta sexy", " tá sexy", " ta sexy",
+                " atraente demais", " tão atraente", " tao atraente", " sedutora", " sedutor",
+                " irresistível", " irresistivel", " gostosa", " gostoso", " excitante",
+                " perigosa com essa roupa", " perigoso com essa roupa",
+                " não consigo desviar o olhar", " nao consigo desviar o olhar",
+                " não consigo tirar os olhos", " nao consigo tirar os olhos",
+                " you look sexy", " you look hot", " so attractive", " seductive", " irresistible",
+                " can't look away", " cannot look away", " can't take my eyes off", " turning me on");
+
+            return romanticized
+                ? "Mayor's shorts reaction romanticized or sexualized the farmer; treat the item only as absurd, embarrassing, scandalous, disgusting, concerning, or shocking"
+                : null;
         }
 
         private static string ValidatePlayerGenderTerms(string text, OutfitAiContext context)
@@ -161,7 +186,9 @@ namespace OutfitReactions.Ai
 
         public static string ValidateAccessoryOutfitCombinationSpecificity(string text, OutfitAiContext context)
         {
-            if (string.IsNullOrWhiteSpace(text) || context == null || !context.IsAccessoryChange)
+            bool accessoryChangeWithOutfit = context?.IsAccessoryChange == true;
+            bool savedOutfitWithAccessory = context?.IsOutfitChange == true && context.SavedOutfitIncludesMeaningfulAccessory;
+            if (string.IsNullOrWhiteSpace(text) || (!accessoryChangeWithOutfit && !savedOutfitWithAccessory))
                 return null;
 
             if (!HasRecognizableThemeClue(context) || !HasRecognizableOutfitThemeClue(context))
@@ -171,7 +198,8 @@ namespace OutfitReactions.Ai
             {
                 context.SafeNoticedChangeHint,
                 context.NoticedChangeName,
-                context.NoticedChangeType
+                context.NoticedChangeType,
+                context.SavedOutfitAccessoryHint
             }).ToLowerInvariant();
 
             // Only enforce this for clear, visible accessory concepts. Tiny makeup/earrings can
@@ -181,7 +209,8 @@ namespace OutfitReactions.Ai
                 "wing", "wings", "asa", "asas", "angel", "anjo", "fairy", "fada",
                 "cape", "capa", "backpack", "mochila", "umbrella", "guarda-chuva",
                 "tail", "cauda", "horn", "horns", "chifre", "chifres", "halo",
-                "bag", "bolsa", "shield", "escudo", "weapon", "sword", "espada");
+                "bag", "bolsa", "shield", "escudo", "weapon", "sword", "espada",
+                "claw", "claws", "garra", "garras", "spike", "spikes", "espinho", "espinhos");
 
             if (!clearLargeAccessory)
                 return null;
@@ -196,6 +225,7 @@ namespace OutfitReactions.Ai
                 "gato", "cat", "coelho", "rabbit", "roupa", "visual", "look",
                 "junto", "junto com", "por cima", "em cima", "com essa", "com esse",
                 "mistura", "misturou", "combinação", "combinacao", "híbrido", "hibrido",
+                "combina", "combinou", "reforça", "reforca", "contrasta", "contraste", "transforma",
                 "não existe", "nao existe", "agora tem", "ganhou asa", "ganhou asas",
                 "asas em", "asa em", "com asas", "com asa", "sem asas", "voar",
                 "fazenda", "galinha", "vaca", "slime", "mina", "saloon", "festival");
@@ -203,8 +233,40 @@ namespace OutfitReactions.Ai
             if (combinedAngle)
                 return null;
 
-            return "accessory reaction ignored the existing themed outfit; compare the accessory with the saved outfit/theme or react to the combined look instead of only describing the accessory";
+            return "reaction ignored a clearly named large accessory or the existing themed outfit; relate both parts or react to the combined look instead of describing only one of them";
         }
+
+        public static string ValidateSemanticThemeAnchor(string dialogueText, string themeAnchor, bool required)
+        {
+            if (!required)
+                return null;
+
+            string anchor = (themeAnchor ?? "").Trim().Trim('"', '\'', '“', '”');
+            if (string.IsNullOrWhiteSpace(anchor))
+                return "semantic theme anchor is missing for a readable saved-outfit theme combined with a large accessory";
+
+            if (anchor.Length > 100 || Regex.Matches(anchor, @"\S+").Count > 8)
+                return "semantic theme anchor must be a short exact excerpt from the spoken dialogue";
+
+            string spoken = StripDialogueMarkup(dialogueText ?? "");
+            if (spoken.IndexOf(anchor, StringComparison.OrdinalIgnoreCase) < 0)
+                return "semantic theme anchor is not an exact excerpt from the spoken dialogue";
+
+            string semanticRemainder = Regex.Replace(anchor.ToLowerInvariant(), @"[^\p{L}\p{M}\p{N}]+", " ");
+            semanticRemainder = Regex.Replace(
+                semanticRemainder,
+                @"(?i)\b(the|a|an|this|that|these|those|with|and|or|of|your|look|outfit|clothes|clothing|dress|shirt|skirt|visual|roupa|vestido|camisa|saia|esse|essa|isso|com|e|ou|de|do|da|seu|sua|red|blue|green|yellow|pink|purple|orange|black|white|brown|gray|grey|dark|light|vermelho|vermelha|azul|verde|amarelo|amarela|rosa|roxo|roxa|laranja|preto|preta|branco|branca|marrom|cinza|escuro|escura|claro|clara|wing|wings|asa|asas|cape|capa|backpack|mochila|umbrella|moth|butterfly|mariposa|borboleta|accessory|acessório|acessorio)\b",
+                " ");
+            semanticRemainder = Regex.Replace(semanticRemainder, @"\s+", " ").Trim();
+            if (!semanticRemainder.Any(char.IsLetterOrDigit))
+                return "semantic theme anchor contains only colors, clothing, or the accessory; it must quote the outfit theme or a natural thematic allusion";
+
+            return null;
+        }
+
+        public static bool IsSemanticThemeAnchorIssue(string issue)
+            => !string.IsNullOrWhiteSpace(issue)
+                && issue.StartsWith("semantic theme anchor", StringComparison.OrdinalIgnoreCase);
 
         private static bool HasRecognizableOutfitThemeClue(OutfitAiContext context)
         {
@@ -228,7 +290,7 @@ namespace OutfitReactions.Ai
                 "chicken", "galinha", "cow", "vaca", "goat", "cabra", "pig", "porco",
                 "fairy", "fada", "witch", "bruxa", "vampire", "vampiro", "angel", "anjo", "demon", "demônio", "demonio",
                 "mermaid", "sereia", "slime", "monster", "monstro", "mascot", "mascote", "cosplay",
-                "strawberry", "morango", "orange", "laranja", "chocolate", "coffee", "café", "cafe",
+                "strawberry", "morango", "apple", "maçã", "maca", "orange", "laranja", "chocolate", "coffee", "café", "cafe",
                 "cake", "bolo", "candy", "doce", "pumpkin", "abóbora", "abobora", "halloween", "christmas", "natal");
         }
 
@@ -257,7 +319,7 @@ namespace OutfitReactions.Ai
                 "chicken", "galinha", "cow", "vaca", "goat", "cabra", "pig", "porco",
                 "fairy", "fada", "witch", "bruxa", "vampire", "vampiro", "angel", "anjo", "demon", "demônio", "demonio",
                 "mermaid", "sereia", "slime", "monster", "monstro", "mascot", "mascote", "cosplay",
-                "strawberry", "morango", "orange", "laranja", "chocolate", "coffee", "café", "cafe",
+                "strawberry", "morango", "apple", "maçã", "maca", "orange", "laranja", "chocolate", "coffee", "café", "cafe",
                 "cake", "bolo", "candy", "doce", "pumpkin", "abóbora", "abobora", "halloween", "christmas", "natal");
         }
 

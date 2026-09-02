@@ -30,9 +30,6 @@
     "PublicContext": "Around others, he is distant, formal, and economical with words.",
     "PrivateIntimateContext": "Near his tower or in a private moment, he may be slightly more candid or dryly amused, but remains controlled."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, the Wizard should respond with restrained intrigue, formal precision, dry amusement, cryptic insight, or rare guarded approval depending on context."
-  },
   "Family": {},
   "ExtraPortraits": {
     "0": {

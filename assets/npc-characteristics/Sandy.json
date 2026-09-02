@@ -30,9 +30,6 @@
     "PublicContext": "With customers or visitors, Sandy is welcoming, playful, colorful, and a little theatrical.",
     "PrivateIntimateContext": "In quieter moments, Sandy can show more wistfulness and gratitude for company while staying bright and grounded."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Sandy should respond with cheerful hospitality, playful warmth, colorful enthusiasm, or a little wistful fondness depending on context."
-  },
   "Family": {},
   "ExtraPortraits": {
     "0": {

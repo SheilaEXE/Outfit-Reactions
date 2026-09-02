@@ -128,7 +128,7 @@ namespace OutfitReactions.Ai
             {
                 // Portrait-per-box is intentionally optional for now so the model can decide
                 // whether an expression should stay the same or change during the dialogue.
-                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.";
+                string systemMessage = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, needsClarification, and optional themeAnchor when the user prompt requires it. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.";
 
                 double temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0;
                 if (provider.IsLocal)
@@ -239,7 +239,7 @@ namespace OutfitReactions.Ai
                 model = ai.Model,
                 max_tokens = maxTokens,
                 temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
-                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.",
+                system = "You are a strict JSON API. Return only one compact JSON object with keys text, portrait, portraits, needsClarification, and optional themeAnchor when the user prompt requires it. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. If text has multiple #$b# dialogue boxes, portraits must contain one valid key per box in order; reuse a key only while the mood stays the same and change it when the emotional beat changes. No markdown. No explanation. No narration. No analysis.",
                 messages = new[]
                 {
                     new { role = "user", content = userContent }
@@ -307,6 +307,31 @@ namespace OutfitReactions.Ai
                     parts.Add(new Dictionary<string, object> { ["inline_data"] = new Dictionary<string, object> { ["mime_type"] = visionImage.MimeType, ["data"] = visionImage.Base64DataBack } });
             }
 
+            Dictionary<string, object> generationConfig = new()
+            {
+                ["temperature"] = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
+                ["topP"] = 0.9,
+                ["maxOutputTokens"] = maxTokens
+            };
+
+            if (geminiModelLower.StartsWith("gemini-3", StringComparison.OrdinalIgnoreCase))
+            {
+                // Gemini 3 uses thinking levels and Flash-Lite doesn't support fully disabling
+                // thinking. "minimal" is the lowest-cost supported setting for these models.
+                generationConfig["thinkingConfig"] = new Dictionary<string, object>
+                {
+                    ["thinkingLevel"] = "minimal"
+                };
+            }
+            else if (geminiModelLower.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase))
+            {
+                // Gemini 2.5 uses token budgets instead of Gemini 3 thinking levels.
+                generationConfig["thinkingConfig"] = new Dictionary<string, object>
+                {
+                    ["thinkingBudget"] = 0
+                };
+            }
+
             object body = new
             {
                 safetySettings = new[]
@@ -318,7 +343,7 @@ namespace OutfitReactions.Ai
                 {
                     parts = new[]
                     {
-                        new { text = "Return one compact JSON object only with text, portrait, portraits, and needsClarification. No markdown, introduction, or explanation. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain one valid key per box; reuse while the mood stays the same and change it when the emotional beat changes." }
+                        new { text = "Return one compact JSON object only with text, portrait, portraits, needsClarification, and optional themeAnchor when the user prompt requires it. No markdown, introduction, or explanation. Do not put Stardew portrait $commands inside text. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain one valid key per box; reuse while the mood stays the same and change it when the emotional beat changes." }
                     }
                 },
                 contents = new[]
@@ -329,16 +354,7 @@ namespace OutfitReactions.Ai
                         parts = parts.ToArray()
                     }
                 },
-                generationConfig = new
-                {
-                    temperature = Math.Clamp(ai.TemperaturePercent, 0, 200) / 100.0,
-                    topP = 0.9,
-                    maxOutputTokens = maxTokens,
-                    // Disable Gemini "thinking" to keep reactions fast/cheap. thinkingBudget=0 turns
-                    // it off on models that support the toggle (e.g. 2.5 Flash). Models that don't
-                    // support it ignore the field.
-                    thinkingConfig = new { thinkingBudget = 0 }
-                }
+                generationConfig
             };
 
             using HttpRequestMessage request = new(HttpMethod.Post, endpoint);
@@ -347,7 +363,11 @@ namespace OutfitReactions.Ai
             using HttpResponseMessage response = await Http.SendAsync(request, token);
             string json = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Gemini HTTP {(int)response.StatusCode}.");
+            {
+                string errorDetail = TryGetGeminiErrorMessage(json);
+                string detailSuffix = string.IsNullOrWhiteSpace(errorDetail) ? "" : $": {errorDetail}";
+                throw new InvalidOperationException($"Gemini HTTP {(int)response.StatusCode}{detailSuffix}.");
+            }
 
             using JsonDocument doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("candidates", out JsonElement candidates))
@@ -378,6 +398,31 @@ namespace OutfitReactions.Ai
 
             monitor.Log(" Gemini response did not contain candidates/content/parts text.", LogLevel.Warn);
             return "";
+        }
+
+        private static string TryGetGeminiErrorMessage(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return "";
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("error", out JsonElement error)
+                    || !error.TryGetProperty("message", out JsonElement message)
+                    || message.ValueKind != JsonValueKind.String)
+                {
+                    return "";
+                }
+
+                string sanitized = string.Join(" ", (message.GetString() ?? "")
+                    .Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+                return sanitized.Length <= 400 ? sanitized : sanitized.Substring(0, 400) + "...";
+            }
+            catch (JsonException)
+            {
+                return "";
+            }
         }
 
 

@@ -249,7 +249,7 @@ namespace OutfitReactions.Ai
             string status = context?.RelationshipStatus ?? "";
             if (context?.IsSpouse == true || status.IndexOf("spouse", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("married", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Spouse";
-            if (status.IndexOf("dating", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("boyfriend", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("girlfriend", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("namor", StringComparison.OrdinalIgnoreCase) >= 0 || (context != null && context.RelationshipHearts >= 8))
+            if (status.IndexOf("dating", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("engaged", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("fiance", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("fiancé", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("boyfriend", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("girlfriend", StringComparison.OrdinalIgnoreCase) >= 0 || status.IndexOf("namor", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Dating";
             return "Friend";
         }
@@ -513,12 +513,16 @@ namespace OutfitReactions.Ai
         private static bool IsRomanticRelationship(OutfitAiContext context)
         {
             return context != null && (context.IsSpouse
-                || context.RelationshipHearts >= 8
-                || ContainsAny(context.RelationshipStatus, "spouse", "married", "dating", "boyfriend", "girlfriend", "namor*"));
+                || ContainsAny(context.RelationshipStatus, "spouse", "married", "dating", "engaged", "fiance", "fiancé", "boyfriend", "girlfriend", "namor*"));
         }
 
         private static bool AllowIntimateContent(OutfitAiContext context, bool includePlayerReplyMode)
         {
+            // The Mayor's shorts are intimate because they are private underwear, not because
+            // this is a seductive scene. Never let romantic profile sections reframe the gag.
+            if (context?.IsMayorShortsSpecialItem == true)
+                return false;
+
             bool privateContext = context != null && (context.IsNpcRoom || context.IsNpcPersonalLocation || (context.IsIndoors && !context.IsOutdoors));
             return IsRomanticRelationship(context) && (privateContext || includePlayerReplyMode);
         }

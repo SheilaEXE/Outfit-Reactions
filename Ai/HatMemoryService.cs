@@ -14,7 +14,9 @@ namespace OutfitReactions.Ai
     internal sealed class HatMemoryService
     {
         private const string SaveKey = "VanillaHatMemories";
-        private const int CurrentSchemaVersion = 1;
+        private const int CurrentSchemaVersion = 3;
+        private const int MaxStoredNpcDialogueCharacters = 1200;
+        private const int MaxStoredPlayerReplyCharacters = 800;
 
         private readonly IModHelper helper;
         private readonly IMonitor monitor;
@@ -25,6 +27,11 @@ namespace OutfitReactions.Ai
 
         // npcName -> the hatId most recently RECORDED for that NPC (for "last time you wore X").
         private Dictionary<string, string> lastHatPerNpc
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        // Session-only drafts. A new exchange replaces the saved one only after the player either
+        // leaves after the opening line or reads a successfully generated follow-up.
+        private readonly Dictionary<string, HatReactionMemoryDraft> reactionDrafts
             = new(StringComparer.OrdinalIgnoreCase);
 
         public HatMemoryService(IModHelper helper, IMonitor monitor)
@@ -39,16 +46,42 @@ namespace OutfitReactions.Ai
         /// </summary>
         public string GetLastHatNameForNpc(string npcName)
         {
+            return GetLastHatMemoryForNpc(npcName)?.HatName ?? "";
+        }
+
+        /// <summary>
+        /// Returns the exact vanilla-hat entry most recently seen by this NPC. Keeping the stable
+        /// item ID together with the localized display name makes removals language-independent.
+        /// </summary>
+        public HatMemorySnapshot GetLastHatMemoryForNpc(string npcName)
+        {
             if (string.IsNullOrWhiteSpace(npcName))
-                return "";
-            if (!lastHatPerNpc.TryGetValue(npcName, out string lastId) || string.IsNullOrWhiteSpace(lastId))
-                return "";
-            if (memories.TryGetValue(npcName, out var npcHats)
-                && npcHats.TryGetValue(lastId, out var entry)
-                && entry != null
-                && !string.IsNullOrWhiteSpace(entry.HatName))
-                return entry.HatName;
-            return "";
+                return null;
+            string lastId = lastHatPerNpc.TryGetValue(npcName, out string recordedLastId) ? recordedLastId : "";
+            if (string.IsNullOrWhiteSpace(lastId)
+                && reactionDrafts.TryGetValue(npcName, out HatReactionMemoryDraft removalDraft)
+                && removalDraft.WasRemoval)
+            {
+                // While a removal exchange is still in progress, keep the prior hat addressable so
+                // the follow-up context can use the old completed conversation until atomic commit.
+                lastId = removalDraft.HatId;
+            }
+            if (string.IsNullOrWhiteSpace(lastId))
+                return null;
+            if (!memories.TryGetValue(npcName, out var npcHats)
+                || !npcHats.TryGetValue(lastId, out var entry)
+                || entry == null)
+                return null;
+
+            return new HatMemorySnapshot
+            {
+                HatId = entry.HatId ?? lastId,
+                HatName = entry.HatName ?? "",
+                LastReactionText = entry.LastReactionText ?? "",
+                LastPlayerReplyText = entry.LastPlayerReplyText ?? "",
+                LastNpcFollowUpText = entry.LastNpcFollowUpText ?? "",
+                LastReactionWasRemoval = entry.LastReactionWasRemoval
+            };
         }
 
         /// <summary>Load hat memories from the save (call on save loaded).</summary>
@@ -67,6 +100,7 @@ namespace OutfitReactions.Ai
                     memories = saved.Memories;
                     lastHatPerNpc = saved.LastHatPerNpc ?? new(StringComparer.OrdinalIgnoreCase);
                 }
+                reactionDrafts.Clear();
                 if (OutfitReactions.ModEntry.DebugLog) monitor.Log($"[HAT MEMORY] Loaded vanilla-hat memories for {memories.Count} NPC(s).", LogLevel.Info);
             }
             catch (Exception ex)
@@ -74,6 +108,7 @@ namespace OutfitReactions.Ai
                 if (OutfitReactions.ModEntry.DebugLog) monitor.Log("[HAT MEMORY] Failed to load hat memories: " + ex.Message, LogLevel.Info);
                 memories = new(StringComparer.OrdinalIgnoreCase);
                 lastHatPerNpc = new(StringComparer.OrdinalIgnoreCase);
+                reactionDrafts.Clear();
             }
         }
 
@@ -106,6 +141,12 @@ namespace OutfitReactions.Ai
                 return null;
 
             string previousHatForNpc = lastHatPerNpc.TryGetValue(npcName, out string prev) ? prev : "";
+            if (string.IsNullOrWhiteSpace(previousHatForNpc)
+                && reactionDrafts.TryGetValue(npcName, out HatReactionMemoryDraft removalDraft)
+                && removalDraft.WasRemoval)
+            {
+                previousHatForNpc = removalDraft.HatId;
+            }
 
             // No current hat: this is a "took the hat off" moment. Only meaningful if the NPC has
             // actually seen the farmer wear a hat before.
@@ -114,10 +155,11 @@ namespace OutfitReactions.Ai
                 return null;
 
             HatMemoryEntry entry = null;
-            if (!currentlyHatless
+            string relevantHatId = currentlyHatless ? previousHatForNpc : currentHatId;
+            if (!string.IsNullOrWhiteSpace(relevantHatId)
                 && memories.TryGetValue(npcName, out var npcHats))
             {
-                npcHats.TryGetValue(currentHatId, out entry);
+                npcHats.TryGetValue(relevantHatId, out entry);
             }
 
 
@@ -127,13 +169,18 @@ namespace OutfitReactions.Ai
                 CurrentHatName = currentHatName ?? "",
                 CurrentlyHatless = currentlyHatless,
                 PreviousHatId = previousHatForNpc,
+                PreviousHatName = currentlyHatless ? (entry?.HatName ?? "") : "",
                 TimesSeenBefore = entry?.TimesSeen ?? 0,
                 FirstSeenSeason = entry?.FirstSeenSeason ?? "",
                 FirstSeenDay = entry?.FirstSeenDay ?? 0,
                 FirstSeenYear = entry?.FirstSeenYear ?? 0,
                 LastSeenSeason = entry?.LastSeenSeason ?? "",
                 LastSeenDay = entry?.LastSeenDay ?? 0,
-                LastSeenYear = entry?.LastSeenYear ?? 0
+                LastSeenYear = entry?.LastSeenYear ?? 0,
+                LastReactionText = entry?.LastReactionText ?? "",
+                LastPlayerReplyText = entry?.LastPlayerReplyText ?? "",
+                LastNpcFollowUpText = entry?.LastNpcFollowUpText ?? "",
+                LastReactionWasRemoval = entry?.LastReactionWasRemoval ?? false
             };
         }
 
@@ -152,7 +199,7 @@ namespace OutfitReactions.Ai
             lastHatPerNpc[npcName] = hatId ?? "";
 
             if (string.IsNullOrWhiteSpace(hatId))
-                return; // nothing to count for a bare head
+                return; // a bare head is not another sighting of the hat
 
             if (!memories.TryGetValue(npcName, out var npcHats))
             {
@@ -162,7 +209,7 @@ namespace OutfitReactions.Ai
 
             if (!npcHats.TryGetValue(hatId, out var entry) || entry == null)
             {
-                npcHats[hatId] = new HatMemoryEntry
+                entry = new HatMemoryEntry
                 {
                     HatId = hatId,
                     HatName = hatName ?? "",
@@ -174,6 +221,7 @@ namespace OutfitReactions.Ai
                     LastSeenYear = year,
                     TimesSeen = 1
                 };
+                npcHats[hatId] = entry;
             }
             else
             {
@@ -184,6 +232,121 @@ namespace OutfitReactions.Ai
                 if (!string.IsNullOrWhiteSpace(hatName))
                     entry.HatName = hatName;
             }
+
+        }
+
+        public void BeginReactionDraft(string npcName, string hatId, string hatName, bool wasRemoval, string npcOpeningLine)
+        {
+            if (string.IsNullOrWhiteSpace(npcName))
+                return;
+
+            reactionDrafts.Remove(npcName);
+            string opening = CleanStoredText(npcOpeningLine, MaxStoredNpcDialogueCharacters);
+            if (string.IsNullOrWhiteSpace(hatId) || string.IsNullOrWhiteSpace(opening))
+                return;
+
+            reactionDrafts[npcName] = new HatReactionMemoryDraft
+            {
+                HatId = hatId.Trim(),
+                HatName = (hatName ?? "").Trim(),
+                WasRemoval = wasRemoval,
+                NpcOpeningLine = opening
+            };
+        }
+
+        public bool HasReactionDraft(string npcName)
+        {
+            return !string.IsNullOrWhiteSpace(npcName) && reactionDrafts.ContainsKey(npcName);
+        }
+
+        public void SetDraftPlayerReply(string npcName, string playerReply)
+        {
+            if (!string.IsNullOrWhiteSpace(npcName)
+                && reactionDrafts.TryGetValue(npcName, out HatReactionMemoryDraft draft))
+            {
+                draft.PlayerReply = CleanStoredText(playerReply, MaxStoredPlayerReplyCharacters);
+                // Retrying a reply must never retain an older generated follow-up in the draft.
+                draft.NpcFollowUp = "";
+            }
+        }
+
+        public void SetDraftNpcFollowUp(string npcName, string npcFollowUp)
+        {
+            if (!string.IsNullOrWhiteSpace(npcName)
+                && reactionDrafts.TryGetValue(npcName, out HatReactionMemoryDraft draft))
+            {
+                draft.NpcFollowUp = CleanStoredText(npcFollowUp, MaxStoredNpcDialogueCharacters);
+            }
+        }
+
+        public bool CommitReactionDraft(string npcName)
+        {
+            if (string.IsNullOrWhiteSpace(npcName)
+                || !reactionDrafts.TryGetValue(npcName, out HatReactionMemoryDraft draft))
+                return false;
+
+            try
+            {
+                if (!memories.TryGetValue(npcName, out var npcHats))
+                {
+                    npcHats = new Dictionary<string, HatMemoryEntry>(StringComparer.OrdinalIgnoreCase);
+                    memories[npcName] = npcHats;
+                }
+                if (!npcHats.TryGetValue(draft.HatId, out HatMemoryEntry entry) || entry == null)
+                {
+                    entry = new HatMemoryEntry
+                    {
+                        HatId = draft.HatId,
+                        HatName = draft.HatName,
+                        TimesSeen = 0
+                    };
+                    npcHats[draft.HatId] = entry;
+                }
+
+                if (!string.IsNullOrWhiteSpace(draft.HatName))
+                    entry.HatName = draft.HatName;
+
+                // Atomic replacement: empty reply/follow-up fields intentionally clear the prior
+                // exchange when the player chose to leave after this new opening reaction.
+                entry.LastReactionText = draft.NpcOpeningLine;
+                entry.LastPlayerReplyText = draft.PlayerReply;
+                entry.LastNpcFollowUpText = draft.NpcFollowUp;
+                entry.LastReactionWasRemoval = draft.WasRemoval;
+                if (OutfitReactions.ModEntry.DebugLog)
+                {
+                    monitor?.Log($"[HAT MEMORY] Committed completed hat exchange for {npcName} and '{draft.HatId}' (removal={draft.WasRemoval}, playerReply={!string.IsNullOrWhiteSpace(draft.PlayerReply)}, npcFollowUp={!string.IsNullOrWhiteSpace(draft.NpcFollowUp)}).", LogLevel.Info);
+                }
+                return true;
+            }
+            finally
+            {
+                reactionDrafts.Remove(npcName);
+            }
+        }
+
+        public void DiscardReactionDraft(string npcName)
+        {
+            if (!string.IsNullOrWhiteSpace(npcName)
+                && reactionDrafts.Remove(npcName)
+                && OutfitReactions.ModEntry.DebugLog)
+            {
+                monitor?.Log($"[HAT MEMORY] Discarded incomplete hat exchange for {npcName}; the previous completed memory was preserved.", LogLevel.Info);
+            }
+        }
+
+        public void DiscardAllReactionDrafts()
+        {
+            reactionDrafts.Clear();
+        }
+
+        private static string CleanStoredText(string text, int maxCharacters)
+        {
+            string cleaned = DialogueValidator.StripDialogueMarkup(text);
+            if (string.IsNullOrWhiteSpace(cleaned))
+                return "";
+            return cleaned.Length <= maxCharacters
+                ? cleaned
+                : cleaned.Substring(0, maxCharacters).TrimEnd();
         }
 
         /// <summary>
@@ -200,8 +363,12 @@ namespace OutfitReactions.Ai
             {
                 if (string.IsNullOrWhiteSpace(memory.PreviousHatId))
                     return null;
-                return "HAT MEMORY: the farmer was wearing a hat last time you saw them and is now bare-headed. "
-                     + "React to them having taken the hat off, like someone who noticed it is gone.";
+                string identity = BuildHatIdentity(memory.PreviousHatName, memory.PreviousHatId);
+                string priorReaction = BuildPriorReactionHint(memory.LastReactionText, memory.LastPlayerReplyText, memory.LastNpcFollowUpText, memory.LastReactionWasRemoval);
+                return "HAT MEMORY: the farmer is now bare-headed after removing the exact hat " + identity + ". "
+                     + "React to that specific removal. When its identity or your earlier opinion gives you a recognizable detail, "
+                     + "make clear which hat you remember instead of reducing the response to a generic comment about seeing the farmer's face. "
+                     + priorReaction;
             }
 
             // Case 2: first time ever seeing this hat → no memory hint (let it be a fresh reaction).
@@ -214,9 +381,36 @@ namespace OutfitReactions.Ai
                 ? "you have seen the farmer in this hat once before"
                 : $"you have seen the farmer in this hat {times} times before";
             string firstNote = string.IsNullOrWhiteSpace(firstSeen) ? "" : $" (first seen on {firstSeen})";
+            string previousReaction = BuildPriorReactionHint(memory.LastReactionText, memory.LastPlayerReplyText, memory.LastNpcFollowUpText, memory.LastReactionWasRemoval);
             return $"HAT MEMORY: {freq}{firstNote}. "
                  + "Show that you recognize this hat through familiarity, teasing, or another response that fits your personality. "
-                 + "Do NOT react as if seeing this hat for the first time.";
+                 + "Do NOT react as if seeing this hat for the first time. "
+                 + previousReaction;
+        }
+
+        private static string BuildHatIdentity(string hatName, string hatId)
+        {
+            string readableName = string.IsNullOrWhiteSpace(hatName) ? "" : hatName.Trim();
+            string stableId = string.IsNullOrWhiteSpace(hatId) ? "" : hatId.Trim();
+            if (!string.IsNullOrWhiteSpace(readableName))
+                return $"recorded as '{readableName}'";
+            return $"with stable item ID '{stableId}' (the ID must never be spoken aloud)";
+        }
+
+        private static string BuildPriorReactionHint(string reactionText, string playerReply, string npcFollowUp, bool wasRemoval)
+        {
+            if (string.IsNullOrWhiteSpace(reactionText))
+                return "";
+
+            string situation = wasRemoval ? "when the farmer last removed it" : "when the farmer last wore it";
+            string memory = $"Your most recent completed exchange about this exact hat, {situation}, was:\nNPC: {reactionText}";
+            if (!string.IsNullOrWhiteSpace(playerReply))
+                memory += $"\nFarmer: {playerReply}";
+            if (!string.IsNullOrWhiteSpace(npcFollowUp))
+                memory += $"\nNPC: {npcFollowUp}";
+
+            return memory + "\nTreat factual clarifications from the farmer as reliable continuity, including whether the item was cleaned, altered, borrowed, made, or worn for a stated reason. "
+                 + "Preserve the opinions and established facts behind the exchange, but write a fresh natural reaction; do not quote, closely paraphrase, or mechanically continue its wording.";
         }
 
         private static string FormatDate(string season, int day, int year)
@@ -229,7 +423,7 @@ namespace OutfitReactions.Ai
 
     internal sealed class HatMemoryData
     {
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 3;
         public Dictionary<string, Dictionary<string, HatMemoryEntry>> Memories { get; set; }
         public Dictionary<string, string> LastHatPerNpc { get; set; }
     }
@@ -245,6 +439,30 @@ namespace OutfitReactions.Ai
         public int LastSeenDay { get; set; }
         public int LastSeenYear { get; set; }
         public int TimesSeen { get; set; } = 1;
+        public string LastReactionText { get; set; } = "";
+        public string LastPlayerReplyText { get; set; } = "";
+        public string LastNpcFollowUpText { get; set; } = "";
+        public bool LastReactionWasRemoval { get; set; }
+    }
+
+    internal sealed class HatMemorySnapshot
+    {
+        public string HatId { get; set; } = "";
+        public string HatName { get; set; } = "";
+        public string LastReactionText { get; set; } = "";
+        public string LastPlayerReplyText { get; set; } = "";
+        public string LastNpcFollowUpText { get; set; } = "";
+        public bool LastReactionWasRemoval { get; set; }
+    }
+
+    internal sealed class HatReactionMemoryDraft
+    {
+        public string HatId { get; set; } = "";
+        public string HatName { get; set; } = "";
+        public bool WasRemoval { get; set; }
+        public string NpcOpeningLine { get; set; } = "";
+        public string PlayerReply { get; set; } = "";
+        public string NpcFollowUp { get; set; } = "";
     }
 
     internal sealed class HatMemoryComparison
@@ -253,6 +471,7 @@ namespace OutfitReactions.Ai
         public string CurrentHatName { get; set; } = "";
         public bool CurrentlyHatless { get; set; }
         public string PreviousHatId { get; set; } = "";
+        public string PreviousHatName { get; set; } = "";
         public int TimesSeenBefore { get; set; }
         public string FirstSeenSeason { get; set; } = "";
         public int FirstSeenDay { get; set; }
@@ -260,5 +479,9 @@ namespace OutfitReactions.Ai
         public string LastSeenSeason { get; set; } = "";
         public int LastSeenDay { get; set; }
         public int LastSeenYear { get; set; }
+        public string LastReactionText { get; set; } = "";
+        public string LastPlayerReplyText { get; set; } = "";
+        public string LastNpcFollowUpText { get; set; } = "";
+        public bool LastReactionWasRemoval { get; set; }
     }
 }
