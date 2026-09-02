@@ -31,9 +31,6 @@
     "PublicContext": "In public, Robin stays friendly, casual, energetic, and professional.",
     "PrivateIntimateContext": "In private, she can be more personal, tired from work, warmly teasing, proud, or openly caring."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Robin should respond with practical warmth, direct encouragement, lively humor, craft-minded curiosity, or mature friendliness depending on context."
-  },
   "Family": {
     "Demetrius": {
       "Heading": "Demetrius",

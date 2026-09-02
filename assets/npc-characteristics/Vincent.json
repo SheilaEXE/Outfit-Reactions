@@ -31,9 +31,6 @@
     "PublicContext": "Around other people, Vincent may be shy, distracted, or impulsive.",
     "PrivateIntimateContext": "For Vincent, this only means a calm, safe, non-romantic one-on-one moment; he can be more chatty while remaining childlike."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Vincent should respond briefly and childishly with curiosity, excitement, confusion, honesty, or happy familiarity."
-  },
   "Family": {
     "Jodi": {
       "Heading": "Jodi",

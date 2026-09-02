@@ -113,7 +113,8 @@ namespace OutfitReactions.Ai
 
             // Swimwear is appropriate or strange based primarily on place and weather.
             // A bikini at the beach isn't automatically a summer costume.
-            if (allClues.Contains("summer") || allClues.Contains("verão") || allClues.Contains("verao"))
+            bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
+            if (!swimOrBeach && (allClues.Contains("summer") || allClues.Contains("verão") || allClues.Contains("verao")))
                 result.Add("summer");
 
             if (allClues.Contains("spring") || allClues.Contains("primavera") || allClues.Contains("flower dance") || allClues.Contains("flowerdance"))

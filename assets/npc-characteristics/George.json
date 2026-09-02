@@ -30,9 +30,6 @@
     "PublicContext": "In public, George is gruff, blunt, and dignified, quick to grumble and slow to approve.",
     "PrivateIntimateContext": "With family or in a familiar quiet moment, his fondness shows a little more, but stays gruff, understated, and practical."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, George should respond with blunt honesty, grumbling, dry humor, reluctant respect, practical concern, or quiet gruff fondness depending on hearts and context."
-  },
   "TraitNarratives": {
     "BluntDignifiedCrankiness": {
       "Heading": "Blunt, Dignified Crankiness",

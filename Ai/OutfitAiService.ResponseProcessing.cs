@@ -90,6 +90,16 @@ namespace OutfitReactions.Ai
                 return false;
             }
 
+            string themeAnchorIssue = DialogueValidator.ValidateSemanticThemeAnchor(
+                cleaned,
+                parsed.ThemeAnchor,
+                RequiresSemanticThemeAnchor(context) && !parsed.NeedsClarification);
+            if (!string.IsNullOrWhiteSpace(themeAnchorIssue))
+            {
+                issue = themeAnchorIssue;
+                return false;
+            }
+
             string validationIssue = DialogueValidator.ValidateGeneratedDialogueText(cleaned, context, config, ai);
             if (!string.IsNullOrWhiteSpace(validationIssue))
             {
@@ -151,6 +161,16 @@ namespace OutfitReactions.Ai
             if (string.IsNullOrWhiteSpace(cleaned))
             {
                 issue = "response did not contain a usable dialogue text";
+                return false;
+            }
+
+            string themeAnchorIssue = DialogueValidator.ValidateSemanticThemeAnchor(
+                cleaned,
+                parsed.ThemeAnchor,
+                RequiresSemanticThemeAnchor(context) && !parsed.NeedsClarification);
+            if (!string.IsNullOrWhiteSpace(themeAnchorIssue))
+            {
+                issue = themeAnchorIssue;
                 return false;
             }
 

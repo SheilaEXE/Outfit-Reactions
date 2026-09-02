@@ -89,6 +89,7 @@ namespace OutfitReactions.Ai
         public bool IsNpcPersonalLocation { get; set; }
         public bool IsBeachOrIsland { get; set; }
         public bool IsFarmHouse { get; set; }
+        public bool IsFarm { get; set; }
         public string DayPart { get; set; } = "";
         public string FestivalContext { get; set; } = "";
         public string FarmerBirthdayContext { get; set; } = "";
@@ -110,6 +111,9 @@ namespace OutfitReactions.Ai
         public bool HasSpecialHatReactionContext => !string.IsNullOrWhiteSpace(SpecialHatReactionContext);
         public string SpecialItemReactionContext { get; set; } = "";
         public bool HasSpecialItemReactionContext => !string.IsNullOrWhiteSpace(SpecialItemReactionContext);
+        public string SpecialItemEntryId { get; set; } = "";
+        public bool IsMayorShortsSpecialItem => string.Equals(SpecialItemEntryId, "MayorsPurpleShorts", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(SpecialItemEntryId, "MayorsPurpleShortsHat", StringComparison.OrdinalIgnoreCase);
         public bool SpecialItemWasJustRemoved { get; set; }
         public bool SpecialItemOnlyMode { get; set; }
         // True when SpecialItemOnlyMode is active AND the player chose "Combined" in the config,
@@ -131,6 +135,9 @@ namespace OutfitReactions.Ai
         // action. Keep the reaction classified as Outfit, but preserve this fact so the prompt
         // treats both pieces as one combined look instead of silently dropping the accessory.
         public bool SavedOutfitIncludesMeaningfulAccessory { get; set; }
+        public string SavedOutfitAccessoryHint { get; set; } = "";
+        public bool AccessoryWasRemovedDuringOutfitChange { get; set; }
+        public string RemovedAccessoryHint { get; set; } = "";
         // True when the NPC was caught peeking at the farmer while walking (the player looked at them
         // mid-stare) and then the player approached them. Lets the reaction acknowledge being caught.
         public bool WasCaughtPeeking { get; set; }
@@ -193,6 +200,12 @@ namespace OutfitReactions.Ai
         public List<string> Portraits { get; set; } = new();
 
         public bool NeedsClarification { get; set; } = false;
+
+        /// <summary>
+        /// Optional exact excerpt from Text that carries the saved outfit's semantic theme.
+        /// It is used only for internal validation of themed outfit + large accessory combinations.
+        /// </summary>
+        public string ThemeAnchor { get; set; } = "";
     }
 
 

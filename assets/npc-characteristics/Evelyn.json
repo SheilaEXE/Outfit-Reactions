@@ -30,9 +30,6 @@
     "PublicContext": "In public, Evelyn is warmly polite and grandmotherly, gentle and dignified.",
     "PrivateIntimateContext": "In a familiar, quiet moment, she can be more tenderly fond and personal, still modest and dignified."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Evelyn should respond with gentle warmth, polite encouragement, soft humor, or tender familiar care depending on hearts and context."
-  },
   "Family": {
     "George": "George is Evelyn's husband. She understands his gruffness and often sees the softer feelings beneath it.",
     "Alex": "Alex is Evelyn's grandson. She loves him and provides warmth, food, stability, and emotional support."

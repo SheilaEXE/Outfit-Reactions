@@ -29,9 +29,6 @@
     "PublicContext": "In public, Gus is friendly, hospitable, and respectful. Avoid overly personal or intimate comments by default.",
     "PrivateIntimateContext": "In private, he can be warmer and more personally caring, but still steady and grounded."
   },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Gus should answer with warm hospitality, grounded encouragement, gentle humor, practical kindness, or fond familiarity depending on hearts and context."
-  },
   "Family": {},
   "ExtraPortraits": {
     "0": {

@@ -41,6 +41,8 @@ namespace OutfitReactions.Ai
             builder.AppendLine("NPC: " + context.NpcDisplayName);
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
             builder.AppendLine(BuildRelationshipDepthGuidance(context));
+            AppendFollowUpSituationalContext(builder, context);
+            AppendNaturalTimeContextForPrompt(builder, context);
             if (!string.IsNullOrWhiteSpace(context?.ConversationTranscript))
             {
                 builder.AppendLine("Full conversation so far for this outfit reaction (oldest first, last line is the farmer's newest reply):");
@@ -116,6 +118,7 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Relationship: " + context.RelationshipStatus + ", hearts: " + context.RelationshipHearts + ", spouse: " + context.IsSpouse);
             CharacterPromptBuilder.AppendPlayerAddressAndGenderRule(builder, context, PromptStyle);
             CharacterPromptBuilder.AppendWornItemDeixisRule(builder, context);
+            AppendFollowUpSituationalContext(builder, context);
             if (!string.IsNullOrWhiteSpace(context?.ConversationTranscript))
             {
                 builder.AppendLine("Full conversation so far for this outfit reaction (oldest first, last line is the farmer's newest reply):");
@@ -136,7 +139,8 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("If the previous NPC line was uncertain, treat the farmer's reply as their explanation of what the small accessory/change actually was. React to that explanation naturally.");
             builder.AppendLine("Location: " + StringUtils.FirstNonEmpty(context.DetailedLocationName, context.LocationName));
             builder.AppendLine("Season: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage));
-            builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")"));
+            builder.AppendLine("Weather: " + context.Weather + ".");
+            AppendNaturalTimeContextForPrompt(builder, context);
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FestivalContext))
                 builder.AppendLine("Festival: " + context.FestivalContext);
@@ -158,6 +162,25 @@ namespace OutfitReactions.Ai
             builder.AppendLine();
             builder.AppendLine("Return now exactly one compact JSON object. No other text.");
             return builder.ToString();
+        }
+
+        private static void AppendFollowUpSituationalContext(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null || context == null)
+                return;
+
+            string romanticHomeReveal = BuildRomanticHomeRevealingReactionRule(context, isFollowUp: true);
+            if (!string.IsNullOrWhiteSpace(romanticHomeReveal))
+                builder.AppendLine(romanticHomeReveal);
+
+            if (!string.IsNullOrWhiteSpace(context.SpecialItemReactionContext))
+            {
+                string specialContext = context.SpecialItemReactionContext;
+                int reactionHintIndex = specialContext.IndexOf("reaction hint:", StringComparison.OrdinalIgnoreCase);
+                if (reactionHintIndex >= 0)
+                    specialContext = specialContext[reactionHintIndex..];
+                builder.AppendLine("SPECIAL ITEM: " + CollapseForPrompt(specialContext, 650));
+            }
         }
 
         // ====================================================================

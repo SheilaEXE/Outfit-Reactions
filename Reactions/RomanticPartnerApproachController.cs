@@ -123,6 +123,11 @@ namespace OutfitReactions
                 return false;
             }
 
+            // Cross-mod ownership handshake: while this session exists, Outfit Reactions owns
+            // the partner's true stationary origin. Lots of Kisses may still capture/restore the
+            // kiss pose, but must not treat the temporary near-player waiting position as the
+            // NPC's permanent idle position.
+            npc.modData[ModEntry.RomanticApproachActiveModDataKey] = "1";
             LogDebug($"{npc.Name} started a romantic outfit approach (walking={session.WasWalking}, origin={session.OriginTile}).");
             return true;
         }
@@ -152,6 +157,9 @@ namespace OutfitReactions
         /// </summary>
         public void ObserveStationaryOrigin(NPC npc)
         {
+            if (npc != null && !sessions.ContainsKey(npc.Name))
+                npc.modData.Remove(ModEntry.RomanticApproachActiveModDataKey);
+
             if (npc == null
                 || npc.Sprite == null
                 || npc.currentLocation == null
@@ -246,6 +254,8 @@ namespace OutfitReactions
             {
                 if (session?.Npc == null)
                     continue;
+
+                session.Npc.modData.Remove(ModEntry.RomanticApproachActiveModDataKey);
 
                 bool ownedControllerActive = IsOwnedControllerActive(session);
                 if (ownedControllerActive)
@@ -585,6 +595,7 @@ namespace OutfitReactions
             if (session?.Npc == null)
                 return;
 
+            session.Npc.modData.Remove(ModEntry.RomanticApproachActiveModDataKey);
             RomanticPartnerApproachOutcome outcome = session.KeepPendingAfterRelease || session.Interacted
                 ? RomanticPartnerApproachOutcome.KeepPending
                 : RomanticPartnerApproachOutcome.CancelPending;

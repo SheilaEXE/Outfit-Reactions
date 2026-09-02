@@ -124,6 +124,8 @@ public sealed partial class ModEntry : Mod
 			return;
 		}
 		ResetClothesState(clearChangeFlag: true);
+		npcsReactedToPreviousNotice.Clear();
+		npcsReactedToPreviousNotice.UnionWith(npcsReactedToCurrentNotice);
 		npcsReactedToCurrentNotice.Clear();
 		loggedSpecialItemDebugKeys.Clear();
 		otherNpcClothesReactionSystem?.Reset();
@@ -133,7 +135,7 @@ public sealed partial class ModEntry : Mod
 		otherNpcClothesReactionSystem?.NotifyOutfitChanged();
 		if (DebugLog)
 		{
-			((Mod)this).Monitor.Log($"[FS] outfit change detected | total={changeInfo.CountChanges()} hair={changeInfo.ChangedHair} accessory={changeInfo.ChangedAccessory} hat={changeInfo.ChangedHat} vanillaHat={changeInfo.VanillaHatChanged} shirt={changeInfo.ChangedShirt} pants={changeInfo.ChangedPants} sleeves={changeInfo.ChangedSleeves} shoes={changeInfo.ChangedShoes} outfit={changeInfo.ChangedOutfit} newHair={changeInfo.NewHairId} newHat={changeInfo.NewHatId} newAccessory={changeInfo.NewAccessoryId}", (LogLevel)2);
+			((Mod)this).Monitor.Log($"[FS] outfit change detected | total={changeInfo.CountChanges()} hair={changeInfo.ChangedHair} accessory={changeInfo.ChangedAccessory} hat={changeInfo.ChangedHat} vanillaHat={changeInfo.VanillaHatChanged} shirt={changeInfo.ChangedShirt} pants={changeInfo.ChangedPants} sleeves={changeInfo.ChangedSleeves} shoes={changeInfo.ChangedShoes} outfit={changeInfo.ChangedOutfit} previousOutfit={changeInfo.PreviousOutfitId} newOutfit={changeInfo.NewOutfitId} newHair={changeInfo.NewHairId} newHat={changeInfo.NewHatId} newAccessory={changeInfo.NewAccessoryId}", (LogLevel)2);
 		}
 		if (changeInfo.ChangedAccessory && !AreVisionOnlyFashionSenseTriggersEnabled())
 		{
@@ -323,8 +325,25 @@ public sealed partial class ModEntry : Mod
 
 	private void RefreshCurrentSavedOutfitNoticeCandidate()
 	{
-		if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled || (changedClothes && lastFashionSenseChangeInfo != null && !lastFashionSenseChangeInfo.ChangedOutfit))
+		if (!Context.IsWorldReady || Game1.player == null || !Config.Enabled)
 		{
+			return;
+		}
+		if (changedClothes && lastFashionSenseChangeInfo != null && !lastFashionSenseChangeInfo.ChangedOutfit)
+		{
+			if (TryGetCurrentSavedFashionSenseOutfitId(out var settledOutfitId)
+				&& !string.IsNullOrWhiteSpace(settledOutfitId)
+				&& !string.IsNullOrWhiteSpace(lastFashionSenseChangeInfo.PreviousOutfitId)
+				&& !string.Equals(lastFashionSenseChangeInfo.PreviousOutfitId, settledOutfitId, StringComparison.OrdinalIgnoreCase))
+			{
+				lastFashionSenseChangeInfo.ChangedOutfit = true;
+				lastFashionSenseChangeInfo.NewOutfitId = settledOutfitId;
+				lastEligibleSavedOutfitId = settledOutfitId;
+				if (DebugLog)
+				{
+					((Mod)this).Monitor.Log($"[FS] Promoted the pending visual change to a saved-outfit transition after Fashion Sense settled its outfit ID: '{lastFashionSenseChangeInfo.PreviousOutfitId}' -> '{settledOutfitId}'.", (LogLevel)2);
+				}
+			}
 			return;
 		}
 		if (!TryGetCurrentSavedFashionSenseOutfitId(out var outfitId))
@@ -401,7 +420,12 @@ public sealed partial class ModEntry : Mod
 
 	private bool NpcRemembersRemovedVanillaHat(NPC npc)
 	{
-		return npc != null && !string.IsNullOrWhiteSpace(hatMemoryService?.GetLastHatNameForNpc(((Character)npc).Name) ?? "");
+		if (npc == null)
+		{
+			return false;
+		}
+		HatMemorySnapshot memory = hatMemoryService?.GetLastHatMemoryForNpc(((Character)npc).Name);
+		return memory != null && (!string.IsNullOrWhiteSpace(memory.HatId) || !string.IsNullOrWhiteSpace(memory.HatName));
 	}
 
 	private FashionSenseChangeInfo TryBuildCurrentSavedOutfitNoticeChange()
@@ -497,6 +521,10 @@ public sealed partial class ModEntry : Mod
 			return false;
 		}
 		if (npcsReactedToCurrentNotice.Contains(((Character)npc).Name ?? ""))
+		{
+			return true;
+		}
+		if (npcsReactedToPreviousNotice.Contains(((Character)npc).Name ?? ""))
 		{
 			return true;
 		}
@@ -870,7 +898,7 @@ public sealed partial class ModEntry : Mod
 		bool flag9 = before.AccessoryColor != after.AccessoryColor || before.AccessorySecondaryColor != after.AccessorySecondaryColor || before.AccessoryTertiaryColor != after.AccessoryTertiaryColor;
 		bool flag10 = flag && !string.Equals(before.OutfitId, after.OutfitId, StringComparison.OrdinalIgnoreCase);
 		string changedAccessoryId = GetChangedAccessoryId(before, after, flag10);
-		bool flag11 = !string.IsNullOrWhiteSpace(BuildCurrentAccessoryMemoryValue(after));
+		bool flag11 = !string.IsNullOrWhiteSpace(changedAccessoryId);
 		return new FashionSenseChangeInfo
 		{
 			ChangedHair = (flag2 && (before.Hair != after.Hair || before.HairColor != after.HairColor)),
@@ -911,7 +939,8 @@ public sealed partial class ModEntry : Mod
 			NewPantsId = after.Pants,
 			NewSleevesId = after.Sleeves,
 			NewShoesId = after.Shoes,
-			NewOutfitId = after.OutfitId
+			NewOutfitId = after.OutfitId,
+			PreviousOutfitId = before.OutfitId
 		};
 	}
 
@@ -924,7 +953,12 @@ public sealed partial class ModEntry : Mod
 		string result = BuildCurrentAccessoryMemoryValue(after);
 		if (outfitChanged)
 		{
-			return result;
+			if (!string.IsNullOrWhiteSpace(result))
+			{
+				return result;
+			}
+			string previousAccessories = BuildCurrentAccessoryMemoryValue(before);
+			return string.IsNullOrWhiteSpace(previousAccessories) ? "" : ("removed " + previousAccessories);
 		}
 		string changedAccessorySlotDescription = GetChangedAccessorySlotDescription(before.Accessory, after.Accessory, before.AccessoryColor, after.AccessoryColor, "accessory");
 		if (!string.IsNullOrWhiteSpace(changedAccessorySlotDescription))

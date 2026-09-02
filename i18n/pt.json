@@ -44,6 +44,8 @@
   "gmcm.option.vanilla-special-item-mode.tooltip": "Escolhe como os aldeões reagem quando você usa um item especial vanilla (ex: Short Roxo do Prefeito). 'Apenas o item' faz eles reagirem exclusivamente ao item, ignorando o resto da roupa. 'Roupa + item' permite reagir ao item e como ele combina (ou contrasta) com o seu visual.",
   "gmcm.option.vanilla-special-item-mode.value.ItemOnly": "Apenas o item",
   "gmcm.option.vanilla-special-item-mode.value.Combined": "Roupa + item",
+  "gmcm.option.lewis-shorts-chase.name": "Cueca em Apuros!",
+  "gmcm.option.lewis-shorts-chase.tooltip": "Permite que Lewis corra atrás de você ao reconhecer a própria cueca. Se ele alcançar, vai confiscá-la sem cerimônia! Desative se quiser preservar essa peça preciosa — e o restinho da dignidade do prefeito.",
   "gmcm.option.outfit-notice-distance.name": "Distância para notar o visual",
   "gmcm.option.outfit-notice-distance.tooltip": "Distância máxima para qualquer NPC perceber a mudança de visual do jogador.",
   "gmcm.option.outfit-cancel-distance.name": "Distância para cancelar a reação",

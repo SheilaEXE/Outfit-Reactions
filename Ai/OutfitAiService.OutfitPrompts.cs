@@ -77,6 +77,7 @@ namespace OutfitReactions.Ai
             {
                 bool outfitNameIsTechnical = !string.IsNullOrWhiteSpace(context.OutfitName)
                     && OutfitNameLooksTechnical(context.OutfitName);
+                string readableSavedOutfitThemeClue = GetReadableSavedOutfitThemeClue(context);
                 if (outfitNameIsTechnical)
                     builder.AppendLine("Do not quote, repeat, translate, or mention the full technical saved outfit name literally. Use the readable theme meaning instead. If a readable part of the clue contains a recognizable reference or named theme, that reference may be mentioned naturally when it fits the NPC.");
                 else
@@ -84,7 +85,8 @@ namespace OutfitReactions.Ai
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemeContext) ?? "");
                 builder.Append(SanitizeThemeContextForPrompt(context.ThemePriorityInstruction) ?? "");
                 builder.AppendLine("Private saved outfit name, for theme/reference inference only: " + context.OutfitName);
-                builder.AppendLine("Readable theme/reference clue extracted from saved outfit name: " + context.SafeOutfitHint);
+                if (!string.IsNullOrWhiteSpace(readableSavedOutfitThemeClue))
+                    builder.AppendLine("Readable semantic theme/reference clue from the saved outfit: " + readableSavedOutfitThemeClue + ". Treat its ordinary meaning as evidence for the outfit's intended theme; express it naturally rather than reciting the saved name.");
                 AppendNoticedChangeContextForPrompt(builder, context, PromptStyle);
             }
 
@@ -125,7 +127,8 @@ namespace OutfitReactions.Ai
 
             // Location / time / season for this scene.
             AppendCompactLocationContext(builder, context);
-            builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ". Time: " + FormatTimeForPrompt(context.Time) + (string.IsNullOrWhiteSpace(context.DayPart) ? "" : " (" + context.DayPart + ")") + ".");
+            builder.AppendLine("Season: " + context.Season + ". Day of season: " + context.DayOfSeason + ". Year: " + context.Year + ". Weather: " + context.Weather + ".");
+            AppendNaturalTimeContextForPrompt(builder, context);
             AppendWeatherLocationRule(builder, context);
             if (!string.IsNullOrWhiteSpace(context.FarmerBirthdayContext))
                 builder.AppendLine("Farmer birthday context: " + context.FarmerBirthdayContext);
@@ -178,7 +181,11 @@ namespace OutfitReactions.Ai
             builder.AppendLine("Approximate final dialogue length target: about " + Math.Clamp(ai.MaxCharacters, 80, 400) + " visible characters. Treat this as a soft estimate, not a hard cutoff: prefer staying near it, but always finish the current thought naturally even if the dialogue goes over. Do not pad, ramble, or repeat yourself.");
             builder.AppendLine("Keep it casual and natural, like a passing real-life comment. It may be one sentence, several sentences, or a longer naturally paced comment if the character's voice and scene support it.");
             CharacterPromptBuilder.AppendPromptBlock(builder, PromptStyle?.DialoguePacingRule ?? PromptStyleService.FallbackDialoguePacingRule, context);
-            builder.AppendLine("Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. The text contains spoken dialogue, optional expressive cues, and #$b# breaks only: no metadata, explanations, markdown, or Stardew $portrait commands. Use portrait for the primary expression. If text has multiple #$b# boxes, portraits MUST contain exactly one valid key per box in order.");
+            bool requiresThemeAnchor = RequiresSemanticThemeAnchor(context);
+            builder.AppendLine(requiresThemeAnchor
+                ? "Return only one compact JSON object with keys text, portrait, portraits, needsClarification, and themeAnchor. The text contains spoken dialogue, optional expressive cues, and #$b# breaks only: no metadata, explanations, markdown, or Stardew $portrait commands. Use portrait for the primary expression. If text has multiple #$b# boxes, portraits MUST contain exactly one valid key per box in order."
+                : "Return only one compact JSON object with keys text, portrait, portraits, and needsClarification. The text contains spoken dialogue, optional expressive cues, and #$b# breaks only: no metadata, explanations, markdown, or Stardew $portrait commands. Use portrait for the primary expression. If text has multiple #$b# boxes, portraits MUST contain exactly one valid key per box in order.");
+            AppendSemanticThemeAnchorOutputRule(builder, context);
             builder.AppendLine("Available portrait keys (use only the keys, never their $commands):");
             if (profile.Portraits != null)
             {
@@ -240,7 +247,11 @@ namespace OutfitReactions.Ai
             StringBuilder builder = new();
             builder.AppendLine("LOCAL JSON MODE.");
             builder.AppendLine("Return exactly one compact JSON object and nothing else.");
-            builder.AppendLine("Required JSON keys: text, portrait, portraits, needsClarification. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order.");
+            bool requiresThemeAnchor = RequiresSemanticThemeAnchor(context);
+            builder.AppendLine(requiresThemeAnchor
+                ? "Required JSON keys: text, portrait, portraits, needsClarification, themeAnchor. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order."
+                : "Required JSON keys: text, portrait, portraits, needsClarification. Use portrait for the primary expression. For multiple #$b# boxes, portraits must contain exactly one valid key per box in order.");
+            AppendSemanticThemeAnchorOutputRule(builder, context);
             builder.AppendLine("Do NOT put Stardew portrait commands like $h, $s, $a, $l, $0, or $16 inside the text field. The text field must contain only spoken dialogue, optional expressive cues, and #$b# breaks.");
             builder.AppendLine("Do not add markdown, explanations, headings, analysis, context summaries, or extra options.");
             builder.AppendLine("Do not write lines starting with %. Do not suggest farmer replies.");
@@ -327,7 +338,8 @@ namespace OutfitReactions.Ai
             AppendCompactLocationContext(builder, context);
             builder.AppendLine("Season/day/year: " + context.Season + " " + context.DayOfSeason + ", year " + context.Year);
             builder.AppendLine("Authoritative current season only: " + FormatSeasonForPrompt(context.Season, context.TargetLanguage) + ". Outfit seasonal clues are not the current date.");
-            builder.AppendLine("Weather: " + context.Weather + ", time: " + FormatTimeForPrompt(context.Time) + ", day period: " + context.DayPart);
+            builder.AppendLine("Weather: " + context.Weather + ".");
+            AppendNaturalTimeContextForPrompt(builder, context);
             AppendWeatherLocationRule(builder, context);
             string contextNaturalization = includeOutfitContext ? BuildNaturalContextHint(context) : "";
             if (!string.IsNullOrWhiteSpace(contextNaturalization))
@@ -422,11 +434,18 @@ namespace OutfitReactions.Ai
                 builder.AppendLine("Private scene fact: the farmer is inside this marriage candidate's home or personal space. Phrase that naturally only if relevant.");
         }
 
-        private static string FormatTimeForPrompt(int time)
+        private static void AppendNaturalTimeContextForPrompt(StringBuilder builder, OutfitAiContext context)
         {
-            int hours = Math.Max(0, time) / 100;
-            int minutes = Math.Clamp(Math.Max(0, time) % 100, 0, 59);
-            return $"{hours:00}:{minutes:00}";
+            if (builder == null || context == null)
+                return;
+
+            string dayPart = (context.DayPart ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(dayPart))
+                builder.Append("Time context: ").Append(dayPart).Append(". ");
+            else
+                builder.Append("Time wording rule: ");
+
+            builder.AppendLine("Refer to the time period only when naturally relevant. Prefer natural phrases such as 'this early', 'for the rest of the morning', 'until late', or equivalents in the target language. Do not invent or state a numeric clock time or deadline as conversational flourish unless the farmer's own words or an authoritative festival/event context explicitly supplies that exact time.");
         }
 
         private static void AppendProfanityIntensityRule(StringBuilder builder, OutfitAiContext context, bool enabled)
@@ -507,10 +526,15 @@ namespace OutfitReactions.Ai
                 return "Relationship depth guidance: lower hearts should stay simpler and more reserved; higher hearts can be warmer, richer, more personal, more teasing, or more emotionally specific when it fits the NPC.";
 
             int hearts = Math.Max(0, context.RelationshipHearts);
-            if (context.IsSpouse)
+            string relationshipStatus = context.RelationshipStatus ?? "";
+            if (context.IsSpouse
+                || relationshipStatus.IndexOf("spouse", StringComparison.OrdinalIgnoreCase) >= 0
+                || relationshipStatus.IndexOf("married", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Relationship depth guidance: spouse-level closeness. The reaction may be warmer, more personal, more domestic, more affectionate, or more emotionally rich when it fits the NPC. Still keep their personality and boundaries.";
             if (hearts >= 8)
-                return "Relationship depth guidance: very close/high-heart relationship. The NPC can give a richer, more personal, more specific reaction; romance candidates may show shy warmth, teasing, fluster, or emotional impact if the outfit/context supports it.";
+                return IsRomanticPartnerContext(context)
+                    ? "Relationship depth guidance: very close romantic relationship. The NPC can give a richer, more personal, more specific reaction and may show shy warmth, teasing, fluster, or emotional impact if the outfit/context supports it."
+                    : "Relationship depth guidance: very close platonic friendship. The NPC can give a richer, more personal, more specific, familiar, or teasing reaction, but high hearts alone do not mean dating and must not create romantic or intimate behavior.";
             if (hearts >= 5)
                 return "Relationship depth guidance: solid friendship. The NPC can sound more familiar, specific, teasing, or warmly honest, but do not force romance.";
             if (hearts >= 2)
@@ -533,6 +557,80 @@ namespace OutfitReactions.Ai
         /// </summary>
         public static bool OutfitNameLooksTechnical(string value)
             => DialogueValidator.LooksLikeTechnicalOrOverSpecificOutfitName(value);
+
+        private static string GetReadableSavedOutfitThemeClue(OutfitAiContext context)
+        {
+            if (context == null)
+                return "";
+
+            string clue = (context.SafeOutfitHint ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(clue))
+            {
+                string savedName = (context.OutfitName ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(savedName) || OutfitNameLooksTechnical(savedName))
+                    return "";
+
+                clue = savedName;
+            }
+
+            string semanticPart = Regex.Replace(
+                clue,
+                @"(?i)\b(saved|save|salvo|salva|outfit|look|visual|roupa|clothes|clothing|conjunto|set)\b|\d+",
+                " ");
+            semanticPart = Regex.Replace(semanticPart, @"[^\p{L}\p{M}]+", " ").Trim();
+            return semanticPart.Length >= 3 ? clue : "";
+        }
+
+        private static bool RequiresSemanticThemeAnchor(OutfitAiContext context)
+        {
+            if (context == null
+                || !string.IsNullOrWhiteSpace(context.PlayerReply)
+                || string.IsNullOrWhiteSpace(GetReadableSavedOutfitThemeClue(context)))
+                return false;
+
+            if (context.IsOutfitChange && context.SavedOutfitIncludesMeaningfulAccessory)
+                return true;
+
+            if (!context.IsAccessoryChange)
+                return false;
+
+            string accessoryClues = string.Join(" ", new[]
+            {
+                context.SafeNoticedChangeHint,
+                context.NoticedChangeName,
+                context.SavedOutfitAccessoryHint
+            }).ToLowerInvariant();
+
+            string[] largeAccessoryTerms =
+            {
+                "wing", "wings", "asa", "asas", "angel", "anjo", "fairy", "fada",
+                "cape", "capa", "backpack", "mochila", "umbrella", "guarda-chuva",
+                "tail", "cauda", "horn", "horns", "chifre", "chifres", "halo",
+                "shield", "escudo", "weapon", "sword", "espada", "claw", "claws",
+                "garra", "garras", "spike", "spikes", "espinho", "espinhos"
+            };
+            return largeAccessoryTerms.Any(term => accessoryClues.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static void AppendSemanticThemeAnchorOutputRule(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null || !RequiresSemanticThemeAnchor(context))
+                return;
+
+            builder.AppendLine("THEME ANCHOR VALIDATION: themeAnchor is internal metadata and will not be shown to the player. Set it to a short 1-8 word EXACT excerpt copied from text that carries the readable saved-outfit theme or a natural allusion to that theme. It cannot be only a color, clothing word, or the accessory itself. This proves the spoken reaction related the large accessory to the semantic outfit theme without mechanically reciting the full saved name.");
+        }
+
+        private static string BuildSemanticThemeRetryPrompt(string originalPrompt, OutfitAiContext context, string badResponse, string issue)
+        {
+            StringBuilder builder = new(originalPrompt ?? "");
+            builder.AppendLine();
+            builder.AppendLine("CORRECTION REQUIRED: the previous output was rejected because " + issue + ".");
+            builder.AppendLine("Readable saved-outfit theme that must participate in the reaction: " + GetReadableSavedOutfitThemeClue(context) + ". Rewrite the spoken line so the large accessory is related to this theme concept or a natural thematic allusion. A color-only comparison is invalid.");
+            builder.AppendLine("Return themeAnchor as a short 1-8 word exact excerpt copied from the NEW text. The excerpt must carry the saved-outfit theme/allusion, not merely the accessory, clothing, or a color.");
+            builder.AppendLine("Rejected output, do not copy it: " + CollapseForPrompt(badResponse, 600));
+            builder.AppendLine("Now return only the corrected compact JSON object.");
+            return builder.ToString();
+        }
 
 
         private static string SanitizeThemeContextForPrompt(string text)
@@ -584,6 +682,7 @@ namespace OutfitReactions.Ai
         private static string BuildSoftPrivateRevealingReactionRule(OutfitAiContext context, string outfitKind)
         {
             int hearts = context != null ? Math.Max(0, context.RelationshipHearts) : 0;
+            bool romanticRelationship = IsRomanticPartnerContext(context);
             string place = context != null && context.IsNpcRoom
                 ? "the NPC's personal room"
                 : "a private/home interior connected to the NPC";
@@ -596,7 +695,9 @@ namespace OutfitReactions.Ai
                     : "Because this is sleepwear/private clothing, it may feel more personal than an ordinary outfit when the relationship and personality support it.";
 
             string heartTone = hearts >= 8
-                ? "At 8+ hearts, the reaction can be richer, more personal, warmer, shyer, more impressed, or more emotionally loaded if that fits the NPC. A romance candidate may blush, stumble, tease, or become visibly affected, but do not force the same fluster pattern on everyone."
+                ? romanticRelationship
+                    ? "At 8+ hearts in this explicit romantic relationship, the reaction can be richer, more personal, warmer, shyer, more impressed, or more emotionally loaded if that fits the NPC. They may blush, stumble, tease, or become visibly affected, but do not force the same fluster pattern on everyone."
+                    : "At 8+ hearts, this is a very close platonic friendship unless the relationship status explicitly says otherwise. The NPC may be familiar, candid, amused, impressed, or teasing, but do not infer attraction, dating, or intimacy from hearts alone."
                 : hearts >= 5
                     ? "At 5-7 hearts, the NPC can be more familiar and may become awkward, amused, gently teasing, surprised, or a little shy depending on personality."
                     : hearts >= 2
@@ -685,13 +786,11 @@ namespace OutfitReactions.Ai
             if (context == null)
                 return "";
 
-            string allClues = string.Join(" ", new[]
-            {
-                context.OutfitName,
-                context.SafeOutfitHint,
-                context.DialogueKey,
-                SanitizeThemeContextForPrompt(context.ThemeContext)
-            }).ToLowerInvariant();
+            string romanticHomeReveal = BuildRomanticHomeRevealingReactionRule(context, isFollowUp: false);
+            if (!string.IsNullOrWhiteSpace(romanticHomeReveal))
+                return romanticHomeReveal;
+
+            string allClues = BuildSituationalOutfitClues(context);
 
             bool sleepOrIntimate = LooksLikeSleepwearOrIntimate(allClues);
             bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
@@ -717,6 +816,65 @@ namespace OutfitReactions.Ai
                 return "Context guidance: the farmer is wearing " + outfitWord + " in a non-private place where others may see. A romantic partner may show concern, protectiveness, jealousy, awkward humor, or fluster if that fits their personality and heart level, but do not force a single reaction pattern.";
 
             return "Context guidance: " + outfitWord + " is not an ordinary everyday outfit in this place. React naturally to the situation — surprise, comedy, concern, bluntness, teasing, or warmth according to the NPC and relationship level. Do not treat it like a normal fashion review.";
+        }
+
+        private static string BuildRomanticHomeRevealingReactionRule(OutfitAiContext context, bool isFollowUp)
+        {
+            if (context == null || context.SpecialItemOnlyMode || (!context.IsFarmHouse && !context.IsFarm) || !IsRomanticPartnerContext(context))
+                return "";
+
+            string allClues = BuildSituationalOutfitClues(context);
+            bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
+            bool sleepOrIntimate = LooksLikeSleepwearOrIntimate(allClues);
+            if (!swimOrBeach && !sleepOrIntimate)
+                return "";
+
+            string outfitKind = swimOrBeach ? "swimwear/revealing clothing" : "intimate/revealing clothing";
+            string place = context.IsFarmHouse ? "at home" : "outside on the farm";
+            string season = NormalizeSeasonKey(context.Season);
+            string weather = (context.Weather ?? "").ToLowerInvariant();
+            bool adverseOutdoorWeather = context.IsFarm && (weather.Contains("rain") || weather.Contains("storm") || weather.Contains("snow") || weather.Contains("blizzard") || weather.Contains("sleet") || weather.Contains("hail"));
+            bool coldConcernFits = season == "fall" || season == "winter" || adverseOutdoorWeather;
+            string rule = coldConcernFits
+                ? "ROMANTIC FARM REVEAL: the farmer is wearing " + outfitKind + " " + place + " with a romantic partner. Show clear in-character attraction or fluster; fall/winter chill or current adverse-weather concern may accompany it, but must not replace the attraction. Swimwear is not automatically a summer theme."
+                : "ROMANTIC FARM REVEAL: the farmer is wearing " + outfitKind + " " + place + " with a romantic partner. Show clear in-character attraction or fluster, not indifference or a practical-only response. Swimwear is not automatically a summer theme; do not call it out of season, mention cold, or offer a coat.";
+
+            if (isFollowUp)
+                rule += " If the farmer asks whether the partner likes the look on them, answer that directly.";
+
+            return rule;
+        }
+
+        private static bool IsRomanticPartnerContext(OutfitAiContext context)
+        {
+            if (context == null)
+                return false;
+
+            string relationship = (context.RelationshipStatus ?? "").ToLowerInvariant();
+            return context.IsSpouse
+                || relationship == "spouse"
+                || relationship == "dating"
+                || relationship.Contains("married")
+                || relationship.Contains("boyfriend")
+                || relationship.Contains("girlfriend")
+                || relationship.Contains("namor");
+        }
+
+        private static string BuildSituationalOutfitClues(OutfitAiContext context)
+        {
+            if (context == null)
+                return "";
+
+            return string.Join(" ", new[]
+            {
+                context.OutfitName,
+                context.SafeOutfitHint,
+                context.NoticedChangeName,
+                context.SafeNoticedChangeHint,
+                context.DialogueKey,
+                context.FashionSenseVisualSummary,
+                SanitizeThemeContextForPrompt(context.ThemeContext)
+            }).ToLowerInvariant();
         }
 
         private static string BuildCompactSceneGroundingInstruction(OutfitAiContext context)
@@ -751,6 +909,7 @@ namespace OutfitReactions.Ai
                 return;
 
             string changeType = string.IsNullOrWhiteSpace(context.NoticedChangeType) ? "Outfit" : context.NoticedChangeType.Trim();
+            string savedOutfitThemeClue = GetReadableSavedOutfitThemeClue(context);
             builder.AppendLine("Private noticed visual change type: " + changeType + ". Use it to choose the compliment focus; do not say this technical label.");
 
             if (!string.IsNullOrWhiteSpace(context.SafeNoticedChangeHint))
@@ -767,16 +926,35 @@ namespace OutfitReactions.Ai
                     builder.AppendLine("Accessory removal rule: the changed accessory clue describes something the farmer just REMOVED, so it is no longer being worn. IMPORTANT: this NPC never saw the farmer wearing that accessory, so they have NO memory of it. Do NOT reference 'the accessory from before', 'that cute thing you had', or any past version of the look, and do not imply you remember a previous combination. React only to how the farmer looks RIGHT NOW, as if seeing them for the first time today.");
             }
 
-            if (context.IsAccessoryChange && context.NpcWitnessedPreviousAccessory && !string.IsNullOrWhiteSpace(context.SafeOutfitHint))
-                builder.AppendLine("Current saved outfit/theme clue still being worn: " + context.SafeOutfitHint + ". For this accessory reaction, compare the changed accessory with this existing outfit/theme when it creates a funny, strange, cute, ugly, dramatic, or impossible combination. Do not ignore either side of the combo. If the accessory was removed, compare the current outfit-without-that-accessory to the previous combination.");
-            else if (context.IsAccessoryChange && !string.IsNullOrWhiteSpace(context.SafeOutfitHint))
-                builder.AppendLine("Current saved outfit/theme clue still being worn: " + context.SafeOutfitHint + ". For this accessory reaction, you may comment on how the changed accessory works with this existing outfit/theme when the combination is funny, strange, cute, ugly, or dramatic. Do not reference any previous/removed version you did not witness.");
+            if (context.IsAccessoryChange && context.NpcWitnessedPreviousAccessory && !string.IsNullOrWhiteSpace(savedOutfitThemeClue))
+                builder.AppendLine("Current recognizable saved-outfit theme still being worn: " + savedOutfitThemeClue + ". For this accessory reaction, compare the changed accessory with the semantic theme when it creates a funny, strange, cute, ugly, dramatic, or impossible combination. A comparison based only on clothing colors does NOT count as using the theme. Use the theme itself or a natural allusion to its meaning, without mechanically reciting the saved name. Do not ignore either side of the combo. If the accessory was removed, compare the current outfit-without-that-accessory to the previous combination.");
+            else if (context.IsAccessoryChange && !string.IsNullOrWhiteSpace(savedOutfitThemeClue))
+                builder.AppendLine("Current recognizable saved-outfit theme still being worn: " + savedOutfitThemeClue + ". Inspect the attached image when available: if the changed accessory is clearly large or visually prominent, the reaction MUST relate it to the semantic outfit theme instead of discussing either piece alone. Merely comparing the accessory with a clothing color does NOT satisfy this rule; use the theme concept itself or a natural allusion to its meaning. The combination may reinforce the theme, transform it, contrast with it, or clash; do not force a negative or strange reaction when the pieces work together. If the accessory is small or unclear in the image, use a readable specific accessory clue when available, but never infer details from a generic ID. Do not reference any previous/removed version you did not witness.");
 
             if (context.IsHatChange && !string.IsNullOrWhiteSpace(context.SafeOutfitHint))
                 builder.AppendLine("Current saved outfit/theme clue still being worn: " + context.SafeOutfitHint + ". For this headwear reaction, you may compare the head item with the existing outfit/theme when the combination is funny, strange, cute, ugly, dramatic, or mismatched.");
 
             if (context.IsOutfitChange && context.SavedOutfitIncludesMeaningfulAccessory)
-                builder.AppendLine("SAVED-OUTFIT COMBINATION RULE: this complete saved outfit was applied together with a meaningful visible accessory. Treat the recognizable outfit/theme and that clearly visible accessory as one combined look. The reaction must not ignore the accessory or discuss the clothes alone: notice naturally whether the accessory reinforces, transforms, contradicts, or humorously clashes with the outfit theme. Use the attached image and equipped-visual support to understand the combination. If its exact identity is uncertain, describe only the broad visible effect instead of inventing details. Do not force attention onto tiny, makeup-like, or visually unclear pieces.");
+            {
+                builder.AppendLine("SAVED-OUTFIT COMBINATION RULE: this complete saved outfit was applied while an accessory is equipped. Inspect the attached image when available. If the accessory is clearly large or visually prominent, the reaction MUST treat it and the recognizable outfit/theme as one combined look rather than discussing the clothes alone. Notice naturally whether it reinforces the theme, transforms it, contrasts with it, or humorously clashes; do not force a negative or strange reaction when the pieces work together. If the accessory is smaller or unclear in the image, a readable specific accessory clue may still be used. If only a generic ID is available and the accessory is not visually clear, do not invent its identity or force it into the reaction. Makeup-like pieces remain excluded.");
+                if (!string.IsNullOrWhiteSpace(savedOutfitThemeClue))
+                    builder.AppendLine("Recognizable saved-outfit theme for this combination: " + savedOutfitThemeClue + ". Use the theme concept or a natural allusion to it; mentioning only its color does not count as relating the accessory to the theme.");
+                if (!string.IsNullOrWhiteSpace(context.SavedOutfitAccessoryHint))
+                    builder.AppendLine("Readable specific equipped-accessory clue: " + context.SavedOutfitAccessoryHint + ". Use only its ordinary meaning; never mention IDs, filenames, packs, or technical labels.");
+            }
+
+			if (context.IsOutfitChange && context.AccessoryWasRemovedDuringOutfitChange)
+			{
+				if (context.NpcWitnessedPreviousAccessory)
+				{
+					string removedClue = string.IsNullOrWhiteSpace(context.RemovedAccessoryHint) ? "" : (" A readable clue for the removed accessory is: " + context.RemovedAccessoryHint + ".");
+					builder.AppendLine("SAVED-OUTFIT TRANSITION: the farmer changed from one genuinely saved outfit to a different saved outfit, and a previously visible accessory was removed during that same change. The NEW current outfit is the main reveal." + removedClue + " React as if noticing this in real time: the NPC may briefly begin with the accessory being gone, then naturally pause, self-interrupt, or pivot when the full new look catches their attention. Keep the shift spontaneous and personality-specific; do not copy a fixed formula, do not force 'wow', and do not sound like a detached before-versus-after fashion ranking.");
+				}
+				else
+				{
+					builder.AppendLine("SAVED-OUTFIT TRANSITION: a different saved outfit is now worn, but this NPC did not witness the previous accessory. Do not mention anything being removed or compare against the unseen prior look; react naturally to the NEW current outfit only.");
+				}
+			}
 
             if (context.IsOutfitChange)
                 CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SavedOutfitFocusGuidance ?? PromptStyleService.FallbackSavedOutfitFocusGuidance, context);
@@ -817,6 +995,9 @@ namespace OutfitReactions.Ai
                 CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialItemRemovedRule ?? PromptStyleService.FallbackSpecialItemRemovedRule, context, tokens);
             else
                 CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialItemVisibleRule ?? PromptStyleService.FallbackSpecialItemVisibleRule, context, tokens);
+
+            if (context.IsMayorShortsSpecialItem)
+                builder.AppendLine("MAYOR'S SHORTS TONE BOUNDARY: personal/intimate describes ownership, privacy, embarrassment, and scandal only. This is an absurd special-item reaction, never a seductive or revealing-outfit scene. Even a romantic partner must not express attraction, desire, arousal, flirtation, or admiration for the farmer wearing these shorts. Use awkward embarrassment, disbelief, scandalized humor, disgust, concern, or shock according to personality. Blushing is allowed only as embarrassment or secondhand shame, never attraction. Do not choose a romantic, flirty, or aroused portrait for this reaction.");
 
             if (context.HasSpecialItemMemoryHint)
             {
@@ -863,13 +1044,10 @@ namespace OutfitReactions.Ai
             if (context == null)
                 return "";
 
-            string allClues = string.Join(" ", new[]
-            {
-                context.OutfitName,
-                context.SafeOutfitHint,
-                context.DialogueKey,
-                SanitizeThemeContextForPrompt(context.ThemeContext)
-            }).ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(BuildRomanticHomeRevealingReactionRule(context, isFollowUp: false)))
+                return "";
+
+            string allClues = BuildSituationalOutfitClues(context);
 
             bool swimOrBeach = LooksLikeSwimwearOrBeachwear(allClues);
             bool sleepOrIntimate = LooksLikeSleepwearOrIntimate(allClues);

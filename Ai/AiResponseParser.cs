@@ -167,10 +167,11 @@ namespace OutfitReactions.Ai
                 string portrait = GetFirstStringProperty(doc.RootElement, "portrait", "portraitKey", "expression", "expressao", "expressão", "emotion", "retrato");
                 List<string> portraits = GetFirstStringArrayProperty(doc.RootElement, "portraits", "portraitKeys", "expressions", "expressoes", "expressões", "retratos");
                 bool needsClarification = GetFirstBoolProperty(doc.RootElement, "needsClarification", "needs_clarification", "clarificationNeeded", "clarification", "needClarification");
+                string themeAnchor = GetFirstStringProperty(doc.RootElement, "themeAnchor", "theme_anchor", "thematicAnchor", "themeExcerpt");
                 if (string.IsNullOrWhiteSpace(text) && string.IsNullOrWhiteSpace(portrait) && (portraits == null || portraits.Count == 0))
                     return null;
 
-                return new AiComplimentResult { Text = text, Portrait = portrait, Portraits = portraits ?? new List<string>(), NeedsClarification = needsClarification };
+                return new AiComplimentResult { Text = text, Portrait = portrait, Portraits = portraits ?? new List<string>(), NeedsClarification = needsClarification, ThemeAnchor = themeAnchor };
             }
             catch
             {
@@ -199,6 +200,7 @@ namespace OutfitReactions.Ai
                 string recoveredText = TryExtractLooseStringProperty(candidate, "text", "dialogue", "dialogo", "diálogo", "fala", "line", "response", "compliment", "elogio", "texto");
                 string portrait = TryExtractLooseStringProperty(candidate, "portrait", "portraitKey", "expression", "expressao", "expressão", "emotion", "retrato");
                 bool needsClarification = TryExtractLooseBoolProperty(candidate, "needsClarification", "needs_clarification", "clarificationNeeded", "clarification", "needClarification");
+                string themeAnchor = TryExtractLooseStringProperty(candidate, "themeAnchor", "theme_anchor", "thematicAnchor", "themeExcerpt");
 
                 if (!string.IsNullOrWhiteSpace(recoveredText) || !string.IsNullOrWhiteSpace(portrait))
                     return new AiComplimentResult
@@ -206,7 +208,8 @@ namespace OutfitReactions.Ai
                         Text = recoveredText,
                         Portrait = portrait,
                         Portraits = new List<string>(),
-                        NeedsClarification = needsClarification
+                        NeedsClarification = needsClarification,
+                        ThemeAnchor = themeAnchor
                     };
             }
 

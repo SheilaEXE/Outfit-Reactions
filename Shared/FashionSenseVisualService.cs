@@ -20,7 +20,7 @@ namespace OutfitReactions.Ai
             this.getApi = getApi;
         }
 
-        public bool TryBuildVisualSummary(Farmer farmer, string currentOutfitId, out string summary, out string reason, bool suppressHairAndGenericHeadwearForSavedOutfit = false, bool visibleVanillaHatEquipped = true)
+        public bool TryBuildVisualSummary(Farmer farmer, string currentOutfitId, out string summary, out string reason, bool suppressHairAndGenericHeadwearForSavedOutfit = false, bool visibleVanillaHatEquipped = true, bool includeInternalIdHints = true)
         {
             summary = "";
             reason = "unknown reason";
@@ -61,12 +61,16 @@ namespace OutfitReactions.Ai
                 string outfitId = StringUtils.FirstNonEmpty(currentOutfitId, TryGetCurrentOutfitId(api));
                 bool hasSavedOutfit = !string.IsNullOrWhiteSpace(outfitId);
                 if (hasSavedOutfit)
-                    pieces.Add("saved outfit clue: " + HumanizeFashionSenseId(outfitId));
+                {
+                    pieces.Add(includeInternalIdHints
+                        ? "saved outfit clue: " + HumanizeFashionSenseId(outfitId)
+                        : "a saved outfit is equipped; identify its visual theme only from the attached image");
+                }
 
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Hair, "hair", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Hair, "hair", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
 
                 int piecesBeforeHat = pieces.Count;
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Hat, "hat/headwear", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Hat, "hat/headwear", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
                 bool addedHeadwear = pieces.Count > piecesBeforeHat;
 
                 // If the farmer has a themed saved outfit (e.g. "Rabbit Outfit") but NO head piece
@@ -76,12 +80,12 @@ namespace OutfitReactions.Ai
                 if (hasSavedOutfit && !addedHeadwear)
                     pieces.Add("head/headwear: NONE equipped (no hat, ears, horns, antennae, or themed head piece is being worn right now, even if the outfit name suggests one)");
 
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Accessory, "visible accessory/extra visual item (may be wings, cape, umbrella, backpack, bow, earrings, or hair accessory; makeup is ignored)", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.AccessorySecondary, "secondary visible accessory/extra visual item", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.AccessoryTertiary, "tertiary visible accessory/extra visual item", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Shirt, "shirt/top", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Sleeves, "sleeves", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
-                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Pants, "pants/bottom", pieces, suppressHairAndGenericHeadwearForSavedOutfit);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Accessory, "visible accessory/extra visual item (may be wings, cape, umbrella, backpack, bow, earrings, or hair accessory; makeup is ignored)", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.AccessorySecondary, "secondary visible accessory/extra visual item", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.AccessoryTertiary, "tertiary visible accessory/extra visual item", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Shirt, "shirt/top", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Sleeves, "sleeves", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
+                AddAppearanceClue(api, farmer, IFashionSenseApi.Type.Pants, "pants/bottom", pieces, suppressHairAndGenericHeadwearForSavedOutfit, includeInternalIdHints);
                 // Shoes are intentionally NOT included: the mod never comments on footwear.
 
                 if (pieces.Count <= 0)
@@ -145,7 +149,7 @@ namespace OutfitReactions.Ai
             return "";
         }
 
-        private static void AddAppearanceClue(IFashionSenseApi api, Farmer farmer, IFashionSenseApi.Type type, string label, List<string> pieces, bool suppressHairAndGenericHeadwearForSavedOutfit = false)
+        private static void AddAppearanceClue(IFashionSenseApi api, Farmer farmer, IFashionSenseApi.Type type, string label, List<string> pieces, bool suppressHairAndGenericHeadwearForSavedOutfit = false, bool includeInternalIdHints = true)
         {
             string id = TryGetAppearanceId(api, farmer, type);
             if (string.IsNullOrWhiteSpace(id))
@@ -158,6 +162,21 @@ namespace OutfitReactions.Ai
             string color = TryGetAppearanceColorDescription(api, farmer, type);
             bool isHair = type == IFashionSenseApi.Type.Hair;
             bool isHat = type == IFashionSenseApi.Type.Hat;
+
+            if (!includeInternalIdHints)
+            {
+                if (isHair && suppressHairAndGenericHeadwearForSavedOutfit)
+                    return;
+
+                if (isHat && suppressHairAndGenericHeadwearForSavedOutfit && IsUnhelpfulInternalAppearanceId(id))
+                    return;
+
+                string imageOnlyClue = label + ": equipped; identify its visible form/theme only from the attached image";
+                if (!isHair && !isHat && !string.IsNullOrWhiteSpace(color))
+                    imageOnlyClue += ", API color clue " + color;
+                pieces.Add(imageOnlyClue);
+                return;
+            }
 
             if (isHair)
             {

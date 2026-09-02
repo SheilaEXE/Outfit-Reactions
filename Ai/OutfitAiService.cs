@@ -179,9 +179,33 @@ namespace OutfitReactions.Ai
 
                 if (!TryBuildValidatedDialogue(profile, context, ai, raw, out dialogue, out string validationIssue))
                 {
-                    if (TryBuildLenientDialogue(profile, context, ai, raw, out dialogue, out string lenientIssue))
+                    if (DialogueValidator.IsSemanticThemeAnchorIssue(validationIssue))
                     {
-                        monitor.Log(" Provider response did not pass the strict quality checks (" + validationIssue + "), but retry is disabled. Accepting the first usable AI line instead.", LogLevel.Warn);
+                        monitor.Log(" Provider response ignored the readable saved-outfit theme in a large-accessory combination (" + validationIssue + "). Retrying once with the universal theme-anchor correction.", LogLevel.Warn);
+                        string retryPrompt = BuildSemanticThemeRetryPrompt(prompt, context, raw, validationIssue);
+                        string retryRaw = aiClient.GenerateRawAsync(ai, retryPrompt, context.VisionImage, cancellationToken).GetAwaiter().GetResult();
+                        if (string.IsNullOrWhiteSpace(retryRaw))
+                        {
+                            monitor.Log(" Theme-anchor retry returned an empty response.", LogLevel.Warn);
+                            return false;
+                        }
+
+                        if (!TryBuildValidatedDialogue(profile, context, ai, retryRaw, out dialogue, out string retryIssue))
+                        {
+                            if (TryBuildLenientDialogue(profile, context, ai, retryRaw, out dialogue, out string retryLenientIssue))
+                            {
+                                monitor.Log(" Theme-anchor retry passed the required semantic-theme check but needed lenient formatting/style handling (" + retryIssue + ").", LogLevel.Warn);
+                            }
+                            else
+                            {
+                                monitor.Log(" Theme-anchor retry was not usable (" + retryIssue + "; lenient parse: " + retryLenientIssue + ").", LogLevel.Warn);
+                                return false;
+                            }
+                        }
+                    }
+                    else if (TryBuildLenientDialogue(profile, context, ai, raw, out dialogue, out string lenientIssue))
+                    {
+                        monitor.Log(" Provider response did not pass the strict quality checks (" + validationIssue + "), but general retry is disabled. Accepting the first usable AI line instead.", LogLevel.Warn);
                     }
                     else
                     {

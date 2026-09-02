@@ -57,17 +57,18 @@ namespace OutfitReactions.Ai
         /// Blobfish Mask was hideous), without needing to state its name. Returns "" if the removed
         /// hat has no special entry (a plain hat needs no special framing on removal).
         /// </summary>
-        public string BuildContextForRemovedHat(string removedHatName, string targetLanguage)
+        public string BuildContextForRemovedHat(string removedHatId, string removedHatName, string targetLanguage)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(removedHatName))
+                if (string.IsNullOrWhiteSpace(removedHatId) && string.IsNullOrWhiteSpace(removedHatName))
                     return "";
 
-                if (!TryFindHatEntry(removedHatName, removedHatName, "", "", out string entryId, out SpecialHatReactionEntry entry))
+                if (!TryFindHatEntry(removedHatName, removedHatName, removedHatId, removedHatId, out string entryId, out SpecialHatReactionEntry entry))
                     return "";
 
-                string baseContext = BuildPromptContext(entryId, entry, removedHatName, removedHatName, targetLanguage);
+                string knownName = string.IsNullOrWhiteSpace(removedHatName) ? entry.DisplayName : removedHatName;
+                string baseContext = BuildPromptContext(entryId, entry, knownName, knownName, targetLanguage);
                 if (string.IsNullOrWhiteSpace(baseContext))
                     return "";
 
@@ -75,14 +76,15 @@ namespace OutfitReactions.Ai
                          || string.Equals(targetLanguage, "pt-BR", StringComparison.OrdinalIgnoreCase);
 
                 // Reframe the special-hat info as memory of a hat that is no longer worn, and tell
-                // the AI to use that opinion when reacting to the removal — without naming the hat.
+                // the AI to use that opinion when reacting to the removal. It should identify the
+                // remembered hat naturally instead of falling back to a generic "you took it off".
                 string frame = isPt
                     ? " CONTEXTO DA REMOÇÃO: as informações acima descrevem o chapéu que o jogador ACABOU DE TIRAR (não está mais usando). "
                       + "Use essa opinião/impressão ao reagir à remoção (por exemplo, alívio se era horrível, ou pena se você gostava), "
-                      + "mas NÃO precisa dizer o nome do chapéu nem descrevê-lo em detalhe — apenas deixe a reação refletir o que você achava dele."
+                      + "e deixe claro de maneira natural qual chapéu marcante você reconheceu. Não recite o nome como uma etiqueta nem invente detalhes."
                     : " REMOVAL CONTEXT: the information above describes the hat the farmer JUST TOOK OFF (no longer worn). "
                       + "Use that opinion/impression when reacting to the removal (e.g. relief if it was hideous, or mild disappointment if you liked it), "
-                      + "but you do NOT need to say the hat's name or describe it in detail — just let your reaction reflect how you felt about it.";
+                      + "and make it naturally clear which distinctive hat you recognized. Do not recite its name like a label or invent details.";
 
                 return baseContext + frame;
             }
@@ -114,7 +116,7 @@ namespace OutfitReactions.Ai
 
                 foreach (string id in candidate.MatchIds)
                 {
-                    if (EqualsExact(id, qualifiedItemId) || EqualsExact(id, itemId))
+                    if (HatIdsMatch(id, qualifiedItemId) || HatIdsMatch(id, itemId))
                     {
                         entryId = pair.Key;
                         entry = candidate;
@@ -147,11 +149,20 @@ namespace OutfitReactions.Ai
             return false;
         }
 
-        private static bool EqualsExact(string expected, string actual)
+        private static bool HatIdsMatch(string expected, string actual)
         {
-            return !string.IsNullOrWhiteSpace(expected)
-                && !string.IsNullOrWhiteSpace(actual)
-                && expected.Trim().Equals(actual.Trim(), StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(actual))
+                return false;
+
+            static string NormalizeId(string value)
+            {
+                string normalized = value.Trim();
+                return normalized.StartsWith("(H)", StringComparison.OrdinalIgnoreCase)
+                    ? normalized.Substring(3)
+                    : normalized;
+            }
+
+            return NormalizeId(expected).Equals(NormalizeId(actual), StringComparison.OrdinalIgnoreCase);
         }
 
         private SpecialHatReactionDefinitions LoadDefinitions()

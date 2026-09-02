@@ -44,6 +44,8 @@
   "gmcm.option.vanilla-special-item-mode.tooltip": "Choose how villagers react when you wear a special vanilla item (e.g. Mayor's Purple Shorts). 'Item only' makes them react exclusively to the item, ignoring the rest of the outfit. 'Outfit + item' lets them react to both the item and how it fits (or clashes) with your current look.",
   "gmcm.option.vanilla-special-item-mode.value.ItemOnly": "Item only",
   "gmcm.option.vanilla-special-item-mode.value.Combined": "Outfit + item",
+  "gmcm.option.lewis-shorts-chase.name": "Shorts in Trouble!",
+  "gmcm.option.lewis-shorts-chase.tooltip": "Allows Lewis to chase you after recognizing his own shorts. If he catches you, he'll confiscate them on the spot! Disable this if you'd rather protect this precious garment—and what remains of the mayor's dignity.",
   "gmcm.option.outfit-notice-distance.name": "Distance to notice appearance",
   "gmcm.option.outfit-notice-distance.tooltip": "Maximum distance for any NPC (including spouse) to notice the player's appearance change.",
   "gmcm.option.outfit-cancel-distance.name": "Distance to cancel reaction",

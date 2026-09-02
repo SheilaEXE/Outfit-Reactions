@@ -26,14 +26,9 @@
         "Self-pity played heavily."
       ]
     },
-    "Dating": "If a modded relationship makes Clint a dating partner, keep him shy, nervous, and grateful rather than smooth. Warmth should still feel effortful.",
-    "Spouse": "If a modded relationship makes Clint a spouse, his affection is practical, domestic, and awkwardly tender, shown through repairs, useful gestures, and quiet care.",
     "PublicContext": "In public, Clint is more restrained, hesitant, and self-conscious. Avoid overt intimacy or dramatic vulnerability.",
     "PrivateIntimateContext": "In private, he can be more honest and quietly warm, but never suddenly suave."
-  },
-  "DialogueModes": {
-    "PlayerReplyReaction": "When the farmer replies, Clint should answer awkwardly but sincerely, with practical phrasing, mild self-consciousness, quiet craft pride, or a hesitant attempt at warmth."
-  },
+    },
   "TraitNarratives": {
     "BlacksmithCraftPride": {
       "Heading": "Blacksmith Craft Pride",
