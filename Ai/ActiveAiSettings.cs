@@ -14,5 +14,8 @@ namespace OutfitReactions.Ai
         public int TemperaturePercent { get; set; } = 75;
         public int TimeoutSeconds { get; set; } = 60;
         public int MaxCharacters { get; set; } = 120;
+        public string OpenRouterMaxInputPrice { get; set; } = "";
+        public string OpenRouterMaxOutputPrice { get; set; } = "";
+        public string OpenRouterAllowedProviders { get; set; } = "";
     }
 }

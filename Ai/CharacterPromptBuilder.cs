@@ -229,6 +229,12 @@ namespace OutfitReactions.Ai
 
         private static void AppendRelationshipSection(StringBuilder builder, CharacterAiProfile profile, OutfitAiContext context)
         {
+            if (context?.HasMetPlayer != true)
+            {
+                builder.AppendLine("Relationship tone: Stranger. Before this outfit-reaction exchange, this NPC and the farmer had never been introduced or spoken. Treat the exchange as a first encounter: the NPC may react to the visible appearance, but must not use the farmer's name or imply familiarity, shared history, affection, teasing based on closeness, or prior personal knowledge.");
+                return;
+            }
+
             if (profile?.RelationshipScaling == null || profile.RelationshipScaling.Count <= 0)
                 return;
 
@@ -670,7 +676,8 @@ namespace OutfitReactions.Ai
             if (builder == null)
                 return;
 
-            string playerName = (context?.PlayerName ?? "").Trim();
+            bool hasMetPlayer = context?.HasMetPlayer == true;
+            string playerName = hasMetPlayer ? (context?.PlayerName ?? "").Trim() : "";
             string gender = NormalizePlayerGenderForPrompt(context?.PlayerGender);
             string targetLanguage = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim();
             string genderSpecificCaution = gender == "female"
@@ -687,7 +694,10 @@ namespace OutfitReactions.Ai
                 ["GenderSpecificCaution"] = genderSpecificCaution
             };
 
-            AppendPromptBlock(builder, !string.IsNullOrWhiteSpace(playerName)
+            if (!hasMetPlayer)
+                builder.AppendLine("STRANGER ADDRESS RULE: before this outfit-reaction exchange, this NPC had never met or spoken to the farmer. Treat the current exchange as their first encounter. Do not use the farmer's name or imply pre-existing familiarity, friendship, intimacy, shared experiences, or prior personal knowledge. A brief visual observation, cautious question, polite remark, blunt comment, or curious reaction is allowed when it fits the NPC.");
+
+            AppendPromptBlock(builder, hasMetPlayer && !string.IsNullOrWhiteSpace(playerName)
                 ? promptStyle?.PlayerKnownAddressRule ?? PromptStyleService.FallbackPlayerKnownAddressRule
                 : promptStyle?.PlayerUnknownAddressRule ?? PromptStyleService.FallbackPlayerUnknownAddressRule, context, tokens);
             AppendPromptBlock(builder, promptStyle?.PlayerGenderRule ?? PromptStyleService.FallbackPlayerGenderRule, context, tokens);
@@ -723,6 +733,7 @@ namespace OutfitReactions.Ai
                 ["TargetLanguage"] = string.IsNullOrWhiteSpace(context?.TargetLanguage) ? "the target language" : context.TargetLanguage.Trim(),
                 ["RelationshipStatus"] = context?.RelationshipStatus ?? "",
                 ["RelationshipHearts"] = (context?.RelationshipHearts ?? 0).ToString(),
+                ["HasMetPlayer"] = (context?.HasMetPlayer ?? false).ToString(),
                 ["IsSpouse"] = (context?.IsSpouse ?? false).ToString(),
                 ["NoticedChangeType"] = context?.NoticedChangeType ?? "",
                 ["OutfitName"] = context?.OutfitName ?? "",

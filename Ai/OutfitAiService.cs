@@ -8,12 +8,14 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using OutfitReactions;
+using OutfitReactions.Ai.Providers;
 
 namespace OutfitReactions.Ai
 {
     internal sealed partial class OutfitAiService
     {
         internal const string AccessoryClarificationMarker = "{{OUTFIT_COMPLIMENTS_ACCESSORY_CLARIFICATION}}";
+        private const string ConnectionTestPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAzSURBVFhH7c4hAQAwCABBohKNaGsyPAHAnHjz6iLr/ctiju0AAAAAAAAAAAAAAAAAAAAaAxd8pvgqryMAAAAASUVORK5CYII=";
 
         private readonly IMonitor monitor;
         private readonly Func<ModConfig> getConfig;
@@ -77,8 +79,19 @@ namespace OutfitReactions.Ai
             ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(config);
             string provider = string.IsNullOrWhiteSpace(ai.Provider) ? "Unknown" : ai.Provider.Trim();
             string model = string.IsNullOrWhiteSpace(ai.Model) ? "(empty model)" : ai.Model.Trim();
+            bool testVision = config.ShouldSendImageToActiveModel()
+                && AiProviderRegistry.Get(ai.Provider).SupportsVision;
+            OutfitVisionImage testVisionImage = testVision
+                ? new OutfitVisionImage
+                {
+                    MimeType = "image/png",
+                    Base64Data = ConnectionTestPngBase64,
+                    Width = 32,
+                    Height = 32
+                }
+                : null;
 
-            monitor.Log($" Testing AI connection from: {provider}/{model}.", LogLevel.Info);
+            monitor.Log($" Testing AI connection from: {provider}/{model} (visual input: {testVision}).", LogLevel.Info);
 
             _ = Task.Run(async () =>
             {
@@ -104,31 +117,55 @@ namespace OutfitReactions.Ai
                         Endpoint = ai.Endpoint,
                         TemperaturePercent = 0,
                         TimeoutSeconds = Math.Clamp(ai.TimeoutSeconds, 3, 120),
-                        MaxCharacters = 120
+                        MaxCharacters = 120,
+                        OpenRouterMaxInputPrice = ai.OpenRouterMaxInputPrice,
+                        OpenRouterMaxOutputPrice = ai.OpenRouterMaxOutputPrice,
+                        OpenRouterAllowedProviders = ai.OpenRouterAllowedProviders
                     };
 
                     string prompt = ActiveAiSettingsResolver.IsLocal(testAi)
                         ? "Connection test. Return exactly one line beginning with '- ' and no explanation: - Connection successful."
                         : "Connection test. Return exactly one compact JSON object only with this exact shape: {\"text\":\"Connection successful.\",\"portrait\":\"\"}";
 
-                    string raw = await aiClient.GenerateRawAsync(testAi, prompt);
+                    string raw = await aiClient.GenerateRawAsync(testAi, prompt, testVisionImage);
                     if (string.IsNullOrWhiteSpace(raw))
                     {
                         monitor.Log($" AI connection test reached {provider}/{model}, but the provider returned an empty response.", LogLevel.Info);
                         return;
                     }
 
-                    monitor.Log($" AI connection OK: {provider}/{model} returned a response.", LogLevel.Info);
+                    string visualSuffix = testVision ? " with visual input and the configured routing limits" : " with the configured routing limits";
+                    monitor.Log($" AI connection OK: {provider}/{model} returned a response{visualSuffix}.", LogLevel.Info);
                 }
                 catch (TaskCanceledException)
                 {
                     monitor.Log($" AI connection test timed out after {Math.Clamp(ai.TimeoutSeconds, 3, 120)}s for {provider}/{model}.", LogLevel.Info);
+                }
+                catch (InvalidOperationException ex) when (IsOpenRouterVisualPriceRoutingFailure(provider, testVision, ex))
+                {
+                    monitor.Log(
+                        $" AI connection test reached {provider}/{model}, but no visual route is available within the configured input/output price ceilings. "
+                        + "The mod did not set an image-price ceiling. Increase the text-token ceilings or choose another visual model/provider.",
+                        LogLevel.Info);
                 }
                 catch (Exception ex)
                 {
                     monitor.Log($" AI connection test failed for {provider}/{model}: {ex.Message}", LogLevel.Info);
                 }
             });
+        }
+
+        private static bool IsOpenRouterVisualPriceRoutingFailure(string provider, bool testedVision, InvalidOperationException exception)
+        {
+            if (!testedVision
+                || !string.Equals(provider, "OpenRouter", StringComparison.OrdinalIgnoreCase)
+                || exception == null)
+            {
+                return false;
+            }
+
+            string message = exception.Message ?? "";
+            return message.IndexOf("No endpoints found that satisfy the max price", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public bool TryGenerateCompliment(OutfitAiContext context, out string dialogue, CancellationToken cancellationToken = default)
@@ -228,6 +265,14 @@ namespace OutfitReactions.Ai
                     return false;
                 int seconds = ActiveAiSettingsResolver.Resolve(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate outfit compliment: request timed out/canceled after {seconds}s. Try increasing the AI timeout or using a faster model.", LogLevel.Warn);
+                return false;
+            }
+            catch (InvalidOperationException ex) when (IsOpenRouterVisualPriceRoutingFailure(ai.Provider, context.HasVisionImage, ex))
+            {
+                monitor.Log(
+                    " Failed to generate outfit compliment: no OpenRouter visual route is available within the configured input/output price ceilings. "
+                    + "The mod did not set an image-price ceiling; the outfit remains eligible for another attempt.",
+                    LogLevel.Warn);
                 return false;
             }
             catch (Exception ex)
@@ -374,6 +419,14 @@ namespace OutfitReactions.Ai
                     return false;
                 int seconds = ActiveAiSettingsResolver.Resolve(getConfig?.Invoke()).TimeoutSeconds;
                 monitor.Log($" Failed to generate player-reply follow-up: request timed out/canceled after {seconds}s.", LogLevel.Warn);
+                return false;
+            }
+            catch (InvalidOperationException ex) when (IsOpenRouterVisualPriceRoutingFailure(ai.Provider, context.HasVisionImage, ex))
+            {
+                monitor.Log(
+                    " Failed to generate player-reply follow-up: no OpenRouter visual route is available within the configured input/output price ceilings. "
+                    + "The mod did not set an image-price ceiling.",
+                    LogLevel.Warn);
                 return false;
             }
             catch (Exception ex)

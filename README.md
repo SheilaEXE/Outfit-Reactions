@@ -36,6 +36,7 @@ Created by **NatrollEXE**.
 The mod can be configured through Generic Mod Config Menu, including:
 
 * AI profiles with provider, model, API key, and custom endpoint settings.
+* Optional OpenRouter input/output price ceilings and allowed-provider lists per profile. Enter provider slugs separated by commas; requests use only those providers within the chosen USD-per-million-token ceilings, and fail if none qualify. An empty list allows any provider within the ceilings. Legacy blocked-provider lists are discarded, not converted into allowed lists.
 * Reaction modes for vanilla hats and special items, either combined with the full outfit or focused only on the special item.
 * Visual analysis (vision) for models that support it.
 * Additional reaction frequency and behavior settings.

@@ -15,6 +15,7 @@ namespace OutfitReactions
         public int OriginalFrame { get; set; }
         public bool OriginalFlip { get; set; }
         public int OriginalMovementPause { get; set; }
+        public bool OriginalFreezeMotion { get; set; }
         public int OriginalAddedSpeed { get; set; }
         public List<FarmerSprite.AnimationFrame> OriginalAnimation { get; set; }
         public bool HasOriginalVisualState { get; set; }

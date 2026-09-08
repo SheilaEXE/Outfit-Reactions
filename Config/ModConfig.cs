@@ -88,6 +88,26 @@ namespace OutfitReactions
         public string AiVisionModeSlot3 { get; set; } = "Auto";
         public string AiVisionModeSlot4 { get; set; } = "Auto";
         public string AiVisionModeSlot5 { get; set; } = "Auto";
+        // Optional OpenRouter price ceilings in USD per million tokens. These stay attached
+        // to each reusable profile and are ignored when that profile uses another provider.
+        // Empty or zero disables the corresponding ceiling.
+        public string OpenRouterMaxInputPriceSlot1 { get; set; } = "";
+        public string OpenRouterMaxInputPriceSlot2 { get; set; } = "";
+        public string OpenRouterMaxInputPriceSlot3 { get; set; } = "";
+        public string OpenRouterMaxInputPriceSlot4 { get; set; } = "";
+        public string OpenRouterMaxInputPriceSlot5 { get; set; } = "";
+        public string OpenRouterMaxOutputPriceSlot1 { get; set; } = "";
+        public string OpenRouterMaxOutputPriceSlot2 { get; set; } = "";
+        public string OpenRouterMaxOutputPriceSlot3 { get; set; } = "";
+        public string OpenRouterMaxOutputPriceSlot4 { get; set; } = "";
+        public string OpenRouterMaxOutputPriceSlot5 { get; set; } = "";
+        // Comma-separated OpenRouter provider allowlist per profile. Empty allows any provider.
+        // New property names intentionally discard legacy ignored lists; never reinterpret a ban as permission.
+        public string OpenRouterAllowedProvidersSlot1 { get; set; } = "";
+        public string OpenRouterAllowedProvidersSlot2 { get; set; } = "";
+        public string OpenRouterAllowedProvidersSlot3 { get; set; } = "";
+        public string OpenRouterAllowedProvidersSlot4 { get; set; } = "";
+        public string OpenRouterAllowedProvidersSlot5 { get; set; } = "";
 
         public string DeepSeekAiModel { get; set; } = "";
         public string DeepSeekAiApiKey { get; set; } = "";
@@ -481,6 +501,56 @@ namespace OutfitReactions
             }
 
             return NormalizeProvider(GetSlotProvider(1));
+        }
+
+        public int GetActiveAiProfileSlot()
+        {
+            for (int slot = 1; slot <= 5; slot++)
+            {
+                if (IsSlotEnabled(slot))
+                    return slot;
+            }
+
+            return 1;
+        }
+
+        public string GetOpenRouterMaxInputPrice(int slot)
+        {
+            return slot switch
+            {
+                1 => OpenRouterMaxInputPriceSlot1,
+                2 => OpenRouterMaxInputPriceSlot2,
+                3 => OpenRouterMaxInputPriceSlot3,
+                4 => OpenRouterMaxInputPriceSlot4,
+                5 => OpenRouterMaxInputPriceSlot5,
+                _ => ""
+            };
+        }
+
+        public string GetOpenRouterMaxOutputPrice(int slot)
+        {
+            return slot switch
+            {
+                1 => OpenRouterMaxOutputPriceSlot1,
+                2 => OpenRouterMaxOutputPriceSlot2,
+                3 => OpenRouterMaxOutputPriceSlot3,
+                4 => OpenRouterMaxOutputPriceSlot4,
+                5 => OpenRouterMaxOutputPriceSlot5,
+                _ => ""
+            };
+        }
+
+        public string GetOpenRouterAllowedProviders(int slot)
+        {
+            return slot switch
+            {
+                1 => OpenRouterAllowedProvidersSlot1,
+                2 => OpenRouterAllowedProvidersSlot2,
+                3 => OpenRouterAllowedProvidersSlot3,
+                4 => OpenRouterAllowedProvidersSlot4,
+                5 => OpenRouterAllowedProvidersSlot5,
+                _ => ""
+            };
         }
 
         private string GetSlotVisionMode(int slot)
