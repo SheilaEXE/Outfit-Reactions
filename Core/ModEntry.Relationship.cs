@@ -71,21 +71,24 @@ public sealed partial class ModEntry : Mod
 		return null;
 	}
 
-	private (string Status, int Hearts) GetRelationshipDialogueContext(NPC npc)
+	private (string Status, int Hearts, bool HasMetPlayer) GetRelationshipDialogueContext(NPC npc)
 	{
-		string item = "Friend";
+		string item = "Stranger";
 		int item2 = 0;
 		if (npc == null || Game1.player == null)
 		{
-			return (Status: item, Hearts: item2);
+			return (Status: item, Hearts: item2, HasMetPlayer: false);
 		}
 		Friendship val = null;
+		bool hasMetPlayer = false;
 		Friendship val2 = default(Friendship);
 		if (Game1.player.friendshipData != null && ((NetDictionary<string, Friendship, NetRef<Friendship>, SerializableDictionary<string, Friendship>, NetStringDictionary<Friendship, NetRef<Friendship>>>)(object)Game1.player.friendshipData).TryGetValue(((Character)npc).Name, out val2))
 		{
 			val = val2;
 			if (val != null)
 			{
+				hasMetPlayer = true;
+				item = "Friend";
 				item2 = Math.Max(0, Math.Min(14, val.Points / 250));
 			}
 		}
@@ -98,7 +101,7 @@ public sealed partial class ModEntry : Mod
 		{
 			item = "Dating";
 		}
-		return (Status: item, Hearts: item2);
+		return (Status: item, Hearts: item2, HasMetPlayer: hasMetPlayer);
 	}
 
 	private bool IsDatingOrEngagedFriendship(Friendship friendship)

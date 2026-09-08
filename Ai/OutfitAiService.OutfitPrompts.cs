@@ -525,6 +525,9 @@ namespace OutfitReactions.Ai
             if (context == null)
                 return "Relationship depth guidance: lower hearts should stay simpler and more reserved; higher hearts can be warmer, richer, more personal, more teasing, or more emotionally specific when it fits the NPC.";
 
+            if (!context.HasMetPlayer)
+                return "Relationship depth guidance: they did not know each other before this outfit-reaction exchange. The NPC may react to what is visibly in front of them, but must not use the farmer's name or behave as if they already knew them. Keep the exchange suitable for a first encounter and avoid pre-existing familiarity, intimacy, shared history, or personal assumptions.";
+
             int hearts = Math.Max(0, context.RelationshipHearts);
             string relationshipStatus = context.RelationshipStatus ?? "";
             if (context.IsSpouse

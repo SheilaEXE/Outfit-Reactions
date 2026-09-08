@@ -173,7 +173,10 @@ namespace OutfitReactions
                         caughtPending.WasCaughtPeeking = true;
 
                     npc.doEmote(random.Next(2) == 0 ? 28 : 16);
-                    npc.movementPause = 0;
+                    // Let NPC.update expire the pause and clear its paired freezeMotion flag.
+                    // Setting this to zero bypasses vanilla's unfreeze branch.
+                    if (npc.movementPause <= 6)
+                        npc.movementPause = 1;
                 }
             }
         }

@@ -356,6 +356,7 @@ namespace OutfitReactions
 
             PendingPrompt pending = CreatePendingPrompt(npc);
             pending.CameFromPeeking = true;
+            pending.WasMovingWhenNoticed = true;
             pending.NoticeDelayTimer = 0;
 
             reactedNpcsThisOutfit.Add(npc.Name);
@@ -1075,6 +1076,7 @@ namespace OutfitReactions
                 OriginalFrame = npc?.Sprite?.CurrentFrame ?? 0,
                 OriginalFlip = npc?.flip ?? false,
                 OriginalMovementPause = npc == null ? 0 : (int)npc.movementPause,
+                OriginalFreezeMotion = ReadFreezeMotion(npc),
                 OriginalAddedSpeed = npc == null ? 0 : (int)npc.addedSpeed,
                 OriginalAnimation = animation,
                 HasOriginalVisualState = npc != null,
@@ -1164,12 +1166,16 @@ namespace OutfitReactions
 
             if (pending.NoticePauseActive)
             {
-                specialActionController.Capture(npc, pending);
+                if (!pending.WasMovingWhenNoticed)
+                    specialActionController.Capture(npc, pending);
 
                 if (npc.movementPause < 6)
                     npc.movementPause = 6;
 
-                npc.Sprite?.StopAnimation();
+                // Capture() already pauses a special schedule animation only after it has
+                // saved a restorable snapshot. Do not stop an animation unconditionally:
+                // schedule actions like Sebastian's lake behavior may not expose a special
+                // frame, and would otherwise be interrupted with nothing to restore later.
                 bool facedPlayer = pending.IsRomanticPartner
                     ? FaceRomanticPartnerTowardPlayer(npc)
                     : FacePlayerIfSafe(npc);
@@ -1349,12 +1355,14 @@ namespace OutfitReactions
 
             if (!shouldFinish)
             {
-                specialActionController.Capture(npc, pending);
+                if (!pending.WasMovingWhenNoticed)
+                    specialActionController.Capture(npc, pending);
 
                 if (npc.movementPause < 6)
                     npc.movementPause = 6;
 
-                npc.Sprite?.StopAnimation();
+                // See the equivalent notice hold above. A failed capture must leave the
+                // schedule's animation alone, or the NPC can remain out of its original pose.
                 if (pending.IsRomanticPartner)
                     FaceRomanticPartnerTowardPlayer(npc);
                 else
@@ -1365,12 +1373,25 @@ namespace OutfitReactions
             bool restoredSpecialAction = specialActionController.TryRestore(npc, pending, force: true);
             if (!restoredSpecialAction)
             {
-                npc.movementPause = 0;
+                // NPC.update clears freezeMotion only when a positive movementPause expires.
+                // Clearing the timer ourselves must also release our freeze, not external holds.
+                if (npc.movementPause <= 6 && !pending.OriginalFreezeMotion)
+                {
+                    npc.movementPause = 1; // expire through NPC.update, including its unfreeze branch
+                }
                 FaceDirectionIfSafe(npc, pending.OriginalFacingDirection);
             }
 
+            if (ModEntry.DebugLog)
+                monitor?.Log($"[NPC OUTFIT] Released {npc.Name} after reaction: walkingAtNotice={pending.WasMovingWhenNoticed}, specialRestored={restoredSpecialAction}, pause={npc.movementPause}, frozenBeforeVanillaUpdate={ReadFreezeMotion(npc)}, controllerPresent={npc.controller != null}.", LogLevel.Info);
+
             pending.PostDialogueLingerActive = false;
             pending.WaitingForPostDialogueRestore = false;
+        }
+
+        private static bool ReadFreezeMotion(NPC npc)
+        {
+            return npc != null && (HarmonyLib.AccessTools.Field(typeof(Character), "freezeMotion")?.GetValue(npc) as bool? ?? false);
         }
 
         private void CaptureQueuedDialoguesBeforeOutfit(NPC npc, PendingPrompt pending)

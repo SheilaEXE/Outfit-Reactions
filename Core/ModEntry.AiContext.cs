@@ -119,9 +119,10 @@ public sealed partial class ModEntry : Mod
 		string playerName = (((player != null) ? ((Character)player).Name : null) ?? "").Trim();
 		string playerGender = (Game1.player.IsMale ? "male" : "female");
 		string currentGameLanguageForPrompt = GetCurrentGameLanguageForPrompt();
-		(string Status, int Hearts) relationshipDialogueContext = GetRelationshipDialogueContext(npc);
+		(string Status, int Hearts, bool HasMetPlayer) relationshipDialogueContext = GetRelationshipDialogueContext(npc);
 		string item = relationshipDialogueContext.Status;
 		int item2 = relationshipDialogueContext.Hearts;
+		bool hasMetPlayer = relationshipDialogueContext.HasMetPlayer;
 		string dialogueKey = fashionSenseDialogueKey;
 		if (!string.IsNullOrWhiteSpace(fashionSenseDialogueKey))
 		{
@@ -208,9 +209,10 @@ public sealed partial class ModEntry : Mod
 			Time = timeOfDay,
 			DayOfSeason = Game1.dayOfMonth,
 			Year = Game1.year,
-			PlayerName = playerName,
+			PlayerName = hasMetPlayer ? playerName : "",
 			PlayerGender = playerGender,
 			TargetLanguage = currentGameLanguageForPrompt,
+			HasMetPlayer = hasMetPlayer,
 			RelationshipStatus = item,
 			RelationshipHearts = item2,
 			VisionImage = visionImage,

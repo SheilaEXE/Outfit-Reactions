@@ -6,12 +6,16 @@ namespace OutfitReactions;
 
 /// <summary>
 /// Controls which NPC profiles may participate in AI-generated outfit reactions.
-/// Keep the public and personal builds identical except for <see cref="AllowAnyProfile"/>.
+/// Public builds remain restricted unless the local build explicitly defines
+/// <c>OUTFIT_REACTIONS_UNRESTRICTED</c>.
 /// </summary>
 internal static class NpcCompatibilityPolicy
 {
-    // Public build: false. The private personal branch changes only this value to true.
+#if OUTFIT_REACTIONS_UNRESTRICTED
+    private static readonly bool AllowAnyProfile = true;
+#else
     private static readonly bool AllowAnyProfile = false;
+#endif
 
     private static readonly HashSet<string> SupportedNpcNames = new(StringComparer.OrdinalIgnoreCase)
     {

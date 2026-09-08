@@ -49,6 +49,8 @@ namespace OutfitReactions.Ai
 
         private static ActiveAiSettings Create(ModConfig config, string provider, int temperaturePercent, int timeoutSeconds, int maxCharacters)
         {
+            int activeSlot = config.GetActiveAiProfileSlot();
+            bool isOpenRouter = provider.Equals("OpenRouter", StringComparison.OrdinalIgnoreCase);
             return new ActiveAiSettings
             {
                 Provider = provider,
@@ -57,7 +59,10 @@ namespace OutfitReactions.Ai
                 Endpoint = config.GetResolvedAiEndpointForProvider(provider),
                 TemperaturePercent = temperaturePercent,
                 TimeoutSeconds = timeoutSeconds,
-                MaxCharacters = maxCharacters
+                MaxCharacters = maxCharacters,
+                OpenRouterMaxInputPrice = isOpenRouter ? config.GetOpenRouterMaxInputPrice(activeSlot) : "",
+                OpenRouterMaxOutputPrice = isOpenRouter ? config.GetOpenRouterMaxOutputPrice(activeSlot) : "",
+                OpenRouterAllowedProviders = isOpenRouter ? config.GetOpenRouterAllowedProviders(activeSlot) : ""
             };
         }
     }

@@ -14,10 +14,10 @@ namespace OutfitReactions
 
             mod.Config.ApplyAiDefaultsAndLimits();
 
-            (string Provider, string Model, string ApiKey, string Endpoint, int TimeoutSeconds) CaptureAiConnectionSettings()
+            (string Provider, string Model, string ApiKey, string Endpoint, int TimeoutSeconds, string MaxInputPrice, string MaxOutputPrice, string AllowedProviders) CaptureAiConnectionSettings()
             {
                 ActiveAiSettings ai = ActiveAiSettingsResolver.Resolve(mod.Config);
-                return (ai.Provider, ai.Model, ai.ApiKey, ai.Endpoint, ai.TimeoutSeconds);
+                return (ai.Provider, ai.Model, ai.ApiKey, ai.Endpoint, ai.TimeoutSeconds, ai.OpenRouterMaxInputPrice, ai.OpenRouterMaxOutputPrice, ai.OpenRouterAllowedProviders);
             }
 
             var savedAiConnectionSettings = CaptureAiConnectionSettings();
@@ -204,6 +204,48 @@ namespace OutfitReactions
                     case 3: mod.Config.AiVisionModeSlot3 = value; break;
                     case 4: mod.Config.AiVisionModeSlot4 = value; break;
                     case 5: mod.Config.AiVisionModeSlot5 = value; break;
+                }
+            }
+
+            string GetSlotOpenRouterMaxInputPrice(int slot) => mod.Config.GetOpenRouterMaxInputPrice(slot) ?? "";
+
+            void SetSlotOpenRouterMaxInputPrice(int slot, string value)
+            {
+                switch (slot)
+                {
+                    case 1: mod.Config.OpenRouterMaxInputPriceSlot1 = value; break;
+                    case 2: mod.Config.OpenRouterMaxInputPriceSlot2 = value; break;
+                    case 3: mod.Config.OpenRouterMaxInputPriceSlot3 = value; break;
+                    case 4: mod.Config.OpenRouterMaxInputPriceSlot4 = value; break;
+                    case 5: mod.Config.OpenRouterMaxInputPriceSlot5 = value; break;
+                }
+            }
+
+            string GetSlotOpenRouterMaxOutputPrice(int slot) => mod.Config.GetOpenRouterMaxOutputPrice(slot) ?? "";
+
+            void SetSlotOpenRouterMaxOutputPrice(int slot, string value)
+            {
+                switch (slot)
+                {
+                    case 1: mod.Config.OpenRouterMaxOutputPriceSlot1 = value; break;
+                    case 2: mod.Config.OpenRouterMaxOutputPriceSlot2 = value; break;
+                    case 3: mod.Config.OpenRouterMaxOutputPriceSlot3 = value; break;
+                    case 4: mod.Config.OpenRouterMaxOutputPriceSlot4 = value; break;
+                    case 5: mod.Config.OpenRouterMaxOutputPriceSlot5 = value; break;
+                }
+            }
+
+            string GetSlotOpenRouterAllowedProviders(int slot) => mod.Config.GetOpenRouterAllowedProviders(slot) ?? "";
+
+            void SetSlotOpenRouterAllowedProviders(int slot, string value)
+            {
+                switch (slot)
+                {
+                    case 1: mod.Config.OpenRouterAllowedProvidersSlot1 = value; break;
+                    case 2: mod.Config.OpenRouterAllowedProvidersSlot2 = value; break;
+                    case 3: mod.Config.OpenRouterAllowedProvidersSlot3 = value; break;
+                    case 4: mod.Config.OpenRouterAllowedProvidersSlot4 = value; break;
+                    case 5: mod.Config.OpenRouterAllowedProvidersSlot5 = value; break;
                 }
             }
 
@@ -490,6 +532,30 @@ namespace OutfitReactions
                     setValue: value => SetSlotVisionMode(capturedSlot, value),
                     allowedValues: new[] { "Auto", "On", "Off" },
                     formatAllowedValue: FormatVisionMode
+                );
+
+                configMenu.AddTextOption(
+                    mod: mod.ModManifest,
+                    name: () => T("gmcm.option.openrouter-max-input-price.name"),
+                    tooltip: () => T("gmcm.option.openrouter-max-input-price.tooltip"),
+                    getValue: () => GetSlotOpenRouterMaxInputPrice(capturedSlot),
+                    setValue: value => SetSlotOpenRouterMaxInputPrice(capturedSlot, value)
+                );
+
+                configMenu.AddTextOption(
+                    mod: mod.ModManifest,
+                    name: () => T("gmcm.option.openrouter-max-output-price.name"),
+                    tooltip: () => T("gmcm.option.openrouter-max-output-price.tooltip"),
+                    getValue: () => GetSlotOpenRouterMaxOutputPrice(capturedSlot),
+                    setValue: value => SetSlotOpenRouterMaxOutputPrice(capturedSlot, value)
+                );
+
+                configMenu.AddTextOption(
+                    mod: mod.ModManifest,
+                    name: () => T("gmcm.option.openrouter-allowed-providers.name"),
+                    tooltip: () => T("gmcm.option.openrouter-allowed-providers.tooltip"),
+                    getValue: () => GetSlotOpenRouterAllowedProviders(capturedSlot),
+                    setValue: value => SetSlotOpenRouterAllowedProviders(capturedSlot, value)
                 );
             }
 

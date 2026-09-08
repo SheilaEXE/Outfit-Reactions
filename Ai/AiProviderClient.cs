@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -87,10 +89,13 @@ namespace OutfitReactions.Ai
                 modelLower.Contains("-pro") || modelLower.Contains("pro-") || modelLower.EndsWith("pro") ||
                 modelLower.Contains("r1") || modelLower.Contains("thinking") ||
                 modelLower.Contains("o1") || modelLower.Contains("o3") || modelLower.Contains("o4");
+            if (provider is OpenRouterProvider openRouterForBudget && openRouterForBudget.UsesMinimumReasoning(ai.Model))
+                looksLikeReasoningModel = true;
 
             int maxTokens = CalculateQualityOutputTokenBudget(visibleTarget, looksLikeReasoningModel);
             monitor.Log($" AI output budget: {maxTokens} tokens for {ai.Provider}/{ai.Model} (visible target {visibleTarget}, reasoning-like={looksLikeReasoningModel}).", LogLevel.Trace);
             string requestJson;
+            Dictionary<string, object> chatBody = null;
             if (useResponsesApi)
             {
                 object input = prompt;
@@ -153,7 +158,7 @@ namespace OutfitReactions.Ai
                     new { role = "user", content = userContent }
                 };
 
-                Dictionary<string, object> chatBody = new(StringComparer.OrdinalIgnoreCase)
+                chatBody = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["model"] = ai.Model,
                     ["messages"] = messages,
@@ -164,12 +169,45 @@ namespace OutfitReactions.Ai
 
                 // Only the selected provider adds its supported reasoning or JSON options.
                 provider.ConfigureRequestBody(chatBody, ai.Model);
+                ConfigureOpenRouterRouting(chatBody, ai, provider);
                 // Local/OpenAI-compatible servers are intentionally left in plain text mode.
                 // Many local models follow a simple dash-line-style "- dialogue" line more reliably than JSON mode.
 
                 requestJson = JsonSerializer.Serialize(chatBody);
             }
 
+            (bool IsSuccess, int StatusCode, string Body) result = await SendOpenAiCompatibleRequestAsync(endpoint, requestJson, ai, provider, token);
+            if (!result.IsSuccess
+                && chatBody != null
+                && provider is OpenRouterProvider openRouter
+                && !openRouter.UsesMinimumReasoning(ai.Model)
+                && IsMandatoryReasoningError(result.Body))
+            {
+                openRouter.MarkReasoningMandatory(ai.Model);
+                openRouter.ConfigureRequestBody(chatBody, ai.Model);
+                chatBody["max_tokens"] = CalculateQualityOutputTokenBudget(visibleTarget, reasoningLikeModel: true);
+                requestJson = JsonSerializer.Serialize(chatBody);
+                monitor.Log($" OpenRouter model {ai.Model} requires reasoning. Retrying once with the minimum supported reasoning effort.", LogLevel.Trace);
+                result = await SendOpenAiCompatibleRequestAsync(endpoint, requestJson, ai, provider, token);
+            }
+
+            if (!result.IsSuccess)
+            {
+                string errorDetail = TryGetOpenAiCompatibleErrorMessage(result.Body);
+                string detailSuffix = string.IsNullOrWhiteSpace(errorDetail) ? "" : $": {errorDetail}";
+                throw new InvalidOperationException($"{provider.Id} HTTP {result.StatusCode}{detailSuffix}.");
+            }
+
+            return ExtractOpenAiCompatibleText(result.Body);
+        }
+
+        private static async Task<(bool IsSuccess, int StatusCode, string Body)> SendOpenAiCompatibleRequestAsync(
+            string endpoint,
+            string requestJson,
+            ActiveAiSettings ai,
+            IAiProvider provider,
+            CancellationToken token)
+        {
             using HttpRequestMessage request = new(HttpMethod.Post, endpoint);
             request.Content = new StringContent(requestJson, Encoding.UTF8, "application/json");
             if (!string.IsNullOrWhiteSpace(ai.ApiKey))
@@ -177,11 +215,93 @@ namespace OutfitReactions.Ai
             provider.ConfigureRequestHeaders(request);
 
             using HttpResponseMessage response = await Http.SendAsync(request, token);
-            string json = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"{provider.Id} HTTP {(int)response.StatusCode}.");
+            string body = await response.Content.ReadAsStringAsync();
+            return (response.IsSuccessStatusCode, (int)response.StatusCode, body);
+        }
 
-            return ExtractOpenAiCompatibleText(json);
+        private static bool IsMandatoryReasoningError(string json)
+        {
+            string message = TryGetOpenAiCompatibleErrorMessage(json);
+            return message.IndexOf("reasoning", StringComparison.OrdinalIgnoreCase) >= 0
+                && message.IndexOf("mandatory", StringComparison.OrdinalIgnoreCase) >= 0
+                && (message.IndexOf("cannot be disabled", StringComparison.OrdinalIgnoreCase) >= 0
+                    || message.IndexOf("can't be disabled", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static string TryGetOpenAiCompatibleErrorMessage(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return "";
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("error", out JsonElement error)
+                    || !error.TryGetProperty("message", out JsonElement message)
+                    || message.ValueKind != JsonValueKind.String)
+                {
+                    return "";
+                }
+
+                string sanitized = string.Join(" ", (message.GetString() ?? "")
+                    .Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+                return sanitized.Length <= 400 ? sanitized : sanitized.Substring(0, 400) + "...";
+            }
+            catch (JsonException)
+            {
+                return "";
+            }
+        }
+
+        private static void ConfigureOpenRouterRouting(Dictionary<string, object> body, ActiveAiSettings ai, IAiProvider provider)
+        {
+            if (body == null || ai == null || !string.Equals(provider?.Id, "OpenRouter", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Dictionary<string, object> maxPrice = new(StringComparer.OrdinalIgnoreCase);
+            AddOpenRouterPriceLimit(maxPrice, "prompt", ai.OpenRouterMaxInputPrice, "input");
+            AddOpenRouterPriceLimit(maxPrice, "completion", ai.OpenRouterMaxOutputPrice, "output");
+            string[] allowedProviders = ParseOpenRouterProviderSlugs(ai.OpenRouterAllowedProviders);
+            if (maxPrice.Count == 0 && allowedProviders.Length == 0)
+                return;
+
+            Dictionary<string, object> routing = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sort"] = "price"
+            };
+            if (maxPrice.Count > 0)
+                routing["max_price"] = maxPrice;
+            if (allowedProviders.Length > 0)
+                routing["only"] = allowedProviders;
+
+            body["provider"] = routing;
+        }
+
+        private static string[] ParseOpenRouterProviderSlugs(string configuredValue)
+        {
+            return (configuredValue ?? "")
+                .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => value.Trim())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static void AddOpenRouterPriceLimit(Dictionary<string, object> maxPrice, string apiField, string configuredValue, string label)
+        {
+            string raw = (configuredValue ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(raw) || raw == "0")
+                return;
+
+            string normalized = raw.Replace(',', '.');
+            if (!decimal.TryParse(normalized, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value)
+                || value < 0)
+            {
+                throw new InvalidOperationException($"Invalid OpenRouter {label} price ceiling '{raw}'. Enter a non-negative USD price per million tokens, such as 0.075, or leave it blank.");
+            }
+
+            if (value > 0)
+                maxPrice[apiField] = value;
         }
 
         private async Task<string> GenerateAnthropicAsync(ActiveAiSettings ai, string prompt, System.Threading.CancellationToken token, OutfitVisionImage visionImage = null)
