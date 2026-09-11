@@ -1,5 +1,12 @@
 {
   "gmcm.section.general": "General",
+  "gmcm.option.player-personality-key.name": "Farmer description key",
+  "gmcm.option.player-personality-key.tooltip": "Choose a key to open the farmer self-description window. The description is saved separately for each farmer and added as context to outfit reactions. Leave unbound to disable the shortcut.",
+  "player-personality.title": "Describe your farmer (personality, appearance, mannerisms):",
+  "player-personality.save": "Save",
+  "player-personality.cancel": "Cancel",
+  "player-personality.saved": "Farmer description saved.",
+  "player-personality.cleared": "Farmer description cleared.",
   "gmcm.section.profile": "Profile {{number}}",
   "gmcm.section.distance": "General distance and approach settings",
   "gmcm.option.enabled.name": "Enable mod",

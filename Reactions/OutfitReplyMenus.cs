@@ -15,6 +15,7 @@ namespace OutfitReactions
         private readonly string cancelLabel;
         private readonly Action<string> submit;
         private readonly Action cancel;
+        private readonly int textLimit;
         private readonly TextBox textBox;
         private readonly ClickableTextureComponent sendButton;
         private readonly ClickableTextureComponent cancelButton;
@@ -33,7 +34,7 @@ namespace OutfitReactions
         private double backspaceHeldTimer = 0;
         private double backspaceRepeatTimer = 0;
 
-        public OutfitPlayerReplyTextInputMenu(string title, string sendLabel, string cancelLabel, Action<string> submit, Action cancel)
+        public OutfitPlayerReplyTextInputMenu(string title, string sendLabel, string cancelLabel, Action<string> submit, Action cancel, string initialText = "", int textLimit = 800)
             : base((Game1.uiViewport.Width - Math.Min(1200, Game1.uiViewport.Width - 96)) / 2, Math.Max(48, Game1.uiViewport.Height - 520), Math.Min(1200, Game1.uiViewport.Width - 96), 420, true)
         {
             this.title = title ?? "Write your reply:";
@@ -53,7 +54,11 @@ namespace OutfitReactions
                 Selected = true,
                 Text = ""
             };
-            textBox.textLimit = 800;
+            this.textLimit = Math.Max(1, textLimit);
+            textBox.textLimit = this.textLimit;
+            inputText = (initialText ?? "").Length <= this.textLimit
+                ? initialText ?? ""
+                : (initialText ?? "").Substring(0, this.textLimit);
 
             int buttonY = yPositionOnScreen + height - 88;
             sendButton = new ClickableTextureComponent(
@@ -110,6 +115,13 @@ namespace OutfitReactions
             cancel?.Invoke();
         }
 
+        protected override void cleanupBeforeExit()
+        {
+            if (Game1.keyboardDispatcher.Subscriber == textBox)
+                Game1.keyboardDispatcher.Subscriber = null;
+            base.cleanupBeforeExit();
+        }
+
         public override void receiveKeyPress(Keys key)
         {
             if (key == Keys.Escape)
@@ -123,7 +135,10 @@ namespace OutfitReactions
             {
                 // Shift+Enter adds a newline; plain Enter submits.
                 if (Game1.oldKBState.IsKeyDown(Keys.LeftShift) || Game1.oldKBState.IsKeyDown(Keys.RightShift))
-                    inputText += "\n";
+                {
+                    if (inputText.Length < textLimit)
+                        inputText += "\n";
+                }
                 else
                 {
                     Game1.playSound("smallSelect");
@@ -168,7 +183,9 @@ namespace OutfitReactions
             string boxText = textBox.Text ?? "";
             if (boxText.Length > 0)
             {
-                inputText += boxText;
+                int available = Math.Max(0, textLimit - inputText.Length);
+                if (available > 0)
+                    inputText += boxText.Length <= available ? boxText : boxText.Substring(0, available);
                 textBox.Text = "";
             }
 

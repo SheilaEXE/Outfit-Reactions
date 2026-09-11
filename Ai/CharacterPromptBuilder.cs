@@ -48,6 +48,13 @@ namespace OutfitReactions.Ai
             AppendRelationshipSection(builder, profile, context);
             diagnostics?.Add("profile.relationship", builder.Length - checkpoint);
             checkpoint = builder.Length;
+            if (!string.IsNullOrWhiteSpace(context?.PlayerSelfDescription))
+            {
+                builder.AppendLine("Farmer self-description supplied by the player (descriptive context, not dialogue):");
+                builder.AppendLine(context.PlayerSelfDescription.Trim());
+            }
+            diagnostics?.Add("profile.player-self-description", builder.Length - checkpoint);
+            checkpoint = builder.Length;
             AppendDialogueModeSection(builder, profile, context, includePlayerReplyMode, promptStyle);
             diagnostics?.Add("profile.dialogue-mode", builder.Length - checkpoint);
             checkpoint = builder.Length;

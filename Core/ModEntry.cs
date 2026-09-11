@@ -423,6 +423,7 @@ public sealed partial class ModEntry : Mod
 	private const string OutfitNoticeModDataPrefix = "NatrollEXE.OutfitReactions.OutfitNotice.";
 
 	private const string PlayerAccessoryDescriptionModDataPrefix = "NatrollEXE.OutfitReactions.PlayerAccessoryDescription.";
+	private const string PlayerSelfDescriptionModDataKey = "NatrollEXE.OutfitReactions/PlayerSelfDescription";
 
 	private const string LotsOfKissesBystanderWatchingModDataKey = "NatrollEXE.LotsOfKisses/BystanderWatching";
 
@@ -1029,6 +1030,15 @@ public sealed partial class ModEntry : Mod
 
 	private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
 	{
+		if (Context.IsWorldReady && Game1.player != null && Config.Enabled
+			&& Config.PlayerPersonalityMenuKey != SButton.None
+			&& e.Button == Config.PlayerPersonalityMenuKey
+			&& Game1.activeClickableMenu == null && !Game1.eventUp)
+		{
+			Helper.Input.Suppress(e.Button);
+			OpenPlayerSelfDescriptionMenu();
+			return;
+		}
 		//IL_0043: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0050: Unknown result type (might be due to invalid IL or missing references)
 		if (Context.IsWorldReady && Game1.player != null && Game1.currentLocation != null && Config.Enabled && Game1.activeClickableMenu == null && (SButtonExtensions.IsActionButton(e.Button) || SButtonExtensions.IsUseToolButton(e.Button)))
