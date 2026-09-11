@@ -1,5 +1,6 @@
 using System;
 using OutfitReactions.Ai.Providers;
+using StardewModdingAPI;
 
 namespace OutfitReactions
 {
@@ -8,6 +9,7 @@ namespace OutfitReactions
         private const string DefaultGeminiModel = "gemini-3.1-flash-lite";
 
         public bool Enabled { get; set; } = true;
+        public SButton PlayerPersonalityMenuKey { get; set; } = SButton.None;
 
         // --- Voice samples (MVP) ---------------------------------------------
         // When enabled, the mod reads a few of the NPC's REAL in-game dialogue lines

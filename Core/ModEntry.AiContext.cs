@@ -211,6 +211,7 @@ public sealed partial class ModEntry : Mod
 			Year = Game1.year,
 			PlayerName = hasMetPlayer ? playerName : "",
 			PlayerGender = playerGender,
+			PlayerSelfDescription = GetPlayerSelfDescription(),
 			TargetLanguage = currentGameLanguageForPrompt,
 			HasMetPlayer = hasMetPlayer,
 			RelationshipStatus = item,

@@ -1,5 +1,12 @@
 {
   "gmcm.section.general": "Geral",
+  "gmcm.option.player-personality-key.name": "Tecla da descrição da fazendeira",
+  "gmcm.option.player-personality-key.tooltip": "Escolha uma tecla para abrir a janela de descrição da fazendeira. O texto é salvo separadamente para cada personagem e usado como contexto nas reações aos visuais. Deixe sem tecla para desativar o atalho.",
+  "player-personality.title": "Descreva sua fazendeira (personalidade, aparência e manias):",
+  "player-personality.save": "Salvar",
+  "player-personality.cancel": "Cancelar",
+  "player-personality.saved": "Descrição da fazendeira salva.",
+  "player-personality.cleared": "Descrição da fazendeira apagada.",
   "gmcm.section.profile": "Perfil {{number}}",
   "gmcm.section.distance": "Configurações gerais de distância e aproximação",
   "gmcm.option.enabled.name": "Ativar mod",

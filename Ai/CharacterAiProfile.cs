@@ -100,6 +100,7 @@ namespace OutfitReactions.Ai
         public int Year { get; set; }
         public string PlayerName { get; set; } = "";
         public string PlayerGender { get; set; } = "";
+        public string PlayerSelfDescription { get; set; } = "";
         public string TargetLanguage { get; set; } = "";
         public bool HasMetPlayer { get; set; }
         public string RelationshipStatus { get; set; } = "";

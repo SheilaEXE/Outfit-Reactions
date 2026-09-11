@@ -401,6 +401,14 @@ namespace OutfitReactions
                 () => T("gmcm.section.general")
             );
 
+            configMenu.AddKeybind(
+                mod: mod.ModManifest,
+                name: () => T("gmcm.option.player-personality-key.name"),
+                tooltip: () => T("gmcm.option.player-personality-key.tooltip"),
+                getValue: () => mod.Config.PlayerPersonalityMenuKey,
+                setValue: value => mod.Config.PlayerPersonalityMenuKey = value
+            );
+
             configMenu.AddBoolOption(
                 mod: mod.ModManifest,
                 name: () => T("gmcm.option.enabled.name"),
