@@ -4,7 +4,7 @@ A **Stardew Valley** mod that makes NPCs dynamically comment on your character's
 
 Created by **NatrollEXE**.
 
-> **Outfit Reactions does not replace or remove dialogue from the base game or other mods.** It only adds an extra outfit reaction when the mod's conditions are met; any dialogue the NPC would normally have remains available.
+> **Outfit Reactions only adds optional reactions to the player's clothes and appearance.** It never replaces, rewrites, or removes dialogue from the base game or from other mods; every conversation the NPC would normally have remains available. Handwritten dialogue is the result of authors investing their time, care, and creativity into bringing these characters to life, and that work deserves to be preserved. Outfit Reactions is designed to sit alongside those conversations with a small extra moment about your current look, never to take their place.
 
 ---
 
@@ -61,7 +61,7 @@ Outfit Reactions is still being actively improved, but it has already reached a 
 
 The mod supports its included base-game NPC profiles, while compatibility with custom NPCs is currently limited to **Stardew Valley Expanded** through the official Outfit Reactions SVE profile pack.
 
-Other custom NPC mods are intentionally not supported. Many mod authors do not want their characters, writing, or other creative work involved with AI-generated content. To respect their wishes, Outfit Reactions does not automatically generate reactions for NPCs from other mods. This is an intentional restriction, not a compatibility bug. Support for another custom NPC mod would only be considered with clear permission from its author.
+Other custom NPC mods are intentionally not supported. Many mod authors do not want their characters, writing, or other creative work involved with AI-generated content. In the same spirit of respect for the time and heart authors put into their characters, Outfit Reactions does not automatically generate reactions for NPCs from other mods. This is an intentional restriction, not a compatibility bug. Support for another custom NPC mod would only be considered with clear permission from its author.
 
 ## 🧩 Creating Custom Content
 
