@@ -13,7 +13,6 @@ Created by **NatrollEXE**.
 * **AI-powered reactions**: spouses and nearby NPCs react to your current outfit using AI, generating unique lines whenever you change clothes.
 * **Vanilla and modded clothing support**: content packs can add focused reactions for hats, shirts, pants, and shoes from the base game, or other mods.
 * **Outfit memory**: NPCs remember outfits and special items they have seen before, reacting with familiarity instead of repeating a first-time reaction.
-* **Custom content packs** can customize characteristics for supported NPCs (`assets/npc-characteristics`) without requiring Content Patcher.
 * **Configurable through Generic Mod Config Menu** (optional), with combined or special-item-focused reaction modes, multiple AI profiles, and more.
 
 ## 📋 Requirements
