@@ -167,12 +167,20 @@ public sealed partial class ModEntry : Mod
 		}
 		string vanillaHatMemoryHint = BuildVanillaHatMemoryContext(npc, flag8);
 		string specialHatReactionContext = (flag9 ? (specialHatReactionService?.BuildContextForRemovedHat(removedHatId, text, currentGameLanguageForPrompt) ?? "") : ((!(!flag8 && flag7)) ? "" : (specialHatReactionService?.BuildContextForCurrentVanillaHat(Game1.player, currentGameLanguageForPrompt) ?? "")));
+		bool vanillaShirtChanged = effectiveFashionSenseChangeInfoForNpc?.VanillaShirtChanged == true;
+		bool vanillaShirtRemoved = effectiveFashionSenseChangeInfoForNpc?.VanillaShirtRemoved == true;
+		bool includeVisibleVanillaShirt = (vanillaShirtChanged && !vanillaShirtRemoved)
+			|| (hasVanillaHatNotice && vanillaHatCombinedMode);
+		string vanillaShirtContext = includeVisibleVanillaShirt && !string.IsNullOrWhiteSpace(GetCurrentVanillaShirtName())
+			? vanillaShirtContextService?.BuildContextForCurrentVanillaShirt(Game1.player) ?? ""
+			: "";
 		string specialItemReactionContext = ((!flag10) ? "" : (notice?.ReactionContext ?? ""));
 		if (flag10 && !string.IsNullOrWhiteSpace(specialItemReactionContext))
 		{
 			// A content-pack/special-item definition has higher priority than the built-in
 			// vanilla-hat catalog, so never send two competing reaction descriptions.
 			specialHatReactionContext = "";
+			vanillaShirtContext = "";
 		}
 		bool flag11 = flag10 && (notice?.WasRemoved ?? false);
 		string text3 = ((!flag10) ? "" : (notice?.MemoryHint ?? ""));
@@ -222,6 +230,7 @@ public sealed partial class ModEntry : Mod
 			VanillaHatFraming = vanillaHatFraming,
 			NpcWitnessedPreviousAccessory = DidNpcWitnessPreviousLook(npc),
 			SpecialHatReactionContext = specialHatReactionContext,
+			VanillaShirtContext = vanillaShirtContext,
 			SpecialItemReactionContext = specialItemReactionContext,
 			SpecialItemEntryId = flag10 ? (notice?.EntryId ?? "") : "",
 			SpecialItemWasJustRemoved = flag11,

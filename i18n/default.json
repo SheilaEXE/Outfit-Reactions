@@ -50,7 +50,7 @@
   "gmcm.option.debug-logging.name": "Enable debug logging",
   "gmcm.option.debug-logging.tooltip": "Show detailed operational logs (reaction flow, AI requests, NPC notices) in the SMAPI console. Leave off for a clean console; turn on only when troubleshooting.",
   "gmcm.option.vanilla-hat-mode.name": "Vanilla hat reaction",
-  "gmcm.option.vanilla-hat-mode.tooltip": "Choose how villagers react when you wear a vanilla (non-Fashion Sense) hat. 'Outfit + hat' reacts to your whole look together with the hat. 'Hat only' makes them react exclusively to the hat, ignoring the rest of the outfit - which can produce funnier, more focused reactions.",
+  "gmcm.option.vanilla-hat-mode.tooltip": "Choose how villagers react when you wear a vanilla (non-Fashion Sense) hat. 'Outfit + hat' also considers the visible vanilla shirt and Fashion Sense look, when present. 'Hat only' ignores the rest of the outfit.",
   "gmcm.option.vanilla-hat-mode.value.Combined": "Outfit + hat",
   "gmcm.option.vanilla-hat-mode.value.HatOnly": "Hat only",
   "gmcm.option.vanilla-special-item-mode.name": "Special item reaction",

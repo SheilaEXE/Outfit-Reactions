@@ -392,6 +392,8 @@ public sealed partial class ModEntry : Mod
 
 	private SpecialHatReactionService specialHatReactionService;
 
+	private VanillaShirtContextService vanillaShirtContextService;
+
 	private SpecialItemReactionService specialItemReactionService;
 
 	private bool changedClothes = false;
@@ -705,6 +707,7 @@ public sealed partial class ModEntry : Mod
 		fashionSenseVisualService = new FashionSenseVisualService(((Mod)this).Monitor, () => fsApi);
 		tileMarkerVisionIntegration = new TileMarkerVisionIntegration(helper, ((Mod)this).Monitor, ((Mod)this).ModManifest);
 		specialHatReactionService = new SpecialHatReactionService(helper, ((Mod)this).Monitor);
+		vanillaShirtContextService = new VanillaShirtContextService(((Mod)this).Monitor);
 		specialItemReactionService = new SpecialItemReactionService(helper, ((Mod)this).Monitor);
 		lewisShortsChaseController = new LewisShortsChaseController(((Mod)this).Monitor, helper.Translation, () => Config.EnableLewisShortsChase, GetEquippedLewisShortsSlot, ConfiscateEquippedLewisShorts, GetLewisShortsChaseDialogueKey, MarkCurrentOutfitAsNoticed);
 		otherNpcClothesReactionSystem = new OtherNpcClothesReactionSystem(((Mod)this).Monitor, () => Config, TryQueueOtherNpcOutfitDialogue, RefreshOtherNpcOutfitPrompt, ClearOutfitPrompt, HasNoticeableCurrentFashionSenseAppearance, CanNpcNoticeCurrentOutfitNotice, MarkCurrentOutfitAsNoticed, CanNpcReactToCurrentOutfitNotice, HasNpcSeenCurrentVisualBefore, IsRomanticOutfitPartner, () => IsActiveFestivalEventForOutfitReaction() || ShouldDeferAutomaticOutfitReaction(logDecision: false), (location, x, y) => tileMarkerVisionIntegration?.IsVisionIgnoredTile(location, x, y) == true, (npc, pending) => lewisShortsChaseController?.TryBeginAfterReaction(npc, pending) == true);

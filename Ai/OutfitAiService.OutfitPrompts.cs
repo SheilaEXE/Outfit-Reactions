@@ -121,6 +121,8 @@ namespace OutfitReactions.Ai
             if (!context.SpecialItemOnlyMode)
             {
                 AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
+                if (includeOutfitContext)
+                    AppendVanillaShirtContextForPrompt(builder, context);
                 AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
             }
             int outfitAndVisionEnd = builder.Length;
@@ -333,6 +335,8 @@ namespace OutfitReactions.Ai
             if (!context.SpecialItemOnlyMode)
             {
                 AppendSpecialHatReactionForPrompt(builder, context, PromptStyle);
+                if (includeOutfitContext)
+                    AppendVanillaShirtContextForPrompt(builder, context);
                 AppendVanillaHatMemoryForPrompt(builder, context, PromptStyle);
             }
             AppendCompactLocationContext(builder, context);
@@ -1025,6 +1029,15 @@ namespace OutfitReactions.Ai
                 ["SpecialHatData"] = CollapseForPrompt(context.SpecialHatReactionContext, 1400)
             };
             CharacterPromptBuilder.AppendPromptBlock(builder, promptStyle?.SpecialVanillaHatRule ?? PromptStyleService.FallbackSpecialVanillaHatRule, context, tokens);
+        }
+
+        private static void AppendVanillaShirtContextForPrompt(StringBuilder builder, OutfitAiContext context)
+        {
+            if (builder == null || context == null || !context.HasVanillaShirtContext)
+                return;
+
+            builder.AppendLine("VANILLA SHIRT FACTS (descriptive context only, not a required opinion): "
+                + CollapseForPrompt(context.VanillaShirtContext, 1000));
         }
 
         private static void AppendVanillaHatMemoryForPrompt(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)

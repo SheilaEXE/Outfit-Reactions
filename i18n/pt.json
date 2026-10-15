@@ -50,7 +50,7 @@
   "gmcm.option.debug-logging.name": "Ativar logs de depuração",
   "gmcm.option.debug-logging.tooltip": "Mostra logs operacionais detalhados no console do SMAPI. Deixe desligado para um console limpo; ligue só ao investigar problemas.",
   "gmcm.option.vanilla-hat-mode.name": "Reação a chapéu vanilla",
-  "gmcm.option.vanilla-hat-mode.tooltip": "Escolhe como os aldeões reagem quando você usa um chapéu vanilla (não-Fashion Sense). 'Roupa + chapéu' reage ao seu visual inteiro junto com o chapéu. 'Apenas o chapéu' faz eles reagirem exclusivamente ao chapéu, ignorando o resto da roupa.",
+  "gmcm.option.vanilla-hat-mode.tooltip": "Escolhe como os aldeões reagem quando você usa um chapéu vanilla (não-Fashion Sense). 'Roupa + chapéu' considera também a camisa vanilla visível e o visual do Fashion Sense, quando houver. 'Apenas o chapéu' ignora o resto da roupa.",
   "gmcm.option.vanilla-hat-mode.value.Combined": "Roupa + chapéu",
   "gmcm.option.vanilla-hat-mode.value.HatOnly": "Apenas o chapéu",
   "gmcm.option.vanilla-special-item-mode.name": "Reação a item especial",
