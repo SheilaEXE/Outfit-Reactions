@@ -41,7 +41,7 @@ The mod can be configured through Generic Mod Config Menu, including:
 * Visual analysis (vision) for models that support it.
 * Additional reaction frequency and behavior settings.
 
-> **Dialogue quality depends on the AI model you choose.** Outfit Reactions provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
+> **Dialogue quality depends on the AI model you choose.** My mod provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
 
 ## Ignoring transparent vision obstacles
 
