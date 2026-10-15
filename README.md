@@ -57,7 +57,7 @@ them. Outfit Reactions continues working normally when Tile Marker is not instal
 
 ## 🚧 Development Status and Custom NPC Compatibility
 
-Outfit Reactions is still being actively improved, but it has already reached a stable and enjoyable enough stage to be used normally. New improvements, refinements, and fixes may continue to be added as the mod develops.
+This mod is still being actively improved, but it has already reached a stable and enjoyable enough stage to be used normally. New improvements, refinements, and fixes may continue to be added as the mod develops.
 
 The mod supports its included base-game NPC profiles, while compatibility with custom NPCs is currently limited to **Stardew Valley Expanded** through the official Outfit Reactions SVE profile pack.
 
