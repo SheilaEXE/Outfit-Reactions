@@ -43,17 +43,6 @@ The mod can be configured through Generic Mod Config Menu, including:
 
 > **Dialogue quality depends on the AI model you choose.** My mod provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
 
-## Ignoring transparent vision obstacles
-
-With the optional Tile Marker framework installed, open its editor and choose **Outfit Reactions:
-transparent vision obstacles**. Mark counters, tables, chairs, decorative objects, or custom-map
-tiles that block movement but should still allow an NPC to see the farmer's appearance. These
-marks affect only Outfit Reactions' line-of-sight check; they do not change collision or maps.
-
-Tile Marker stores this category separately from other mods. If Lots of Kisses is also installed,
-enable **Merge compatible categories** in Tile Marker's GMCM to let both mods use the union of
-their vision markings. Turning the option off restores the separate selections without deleting
-them. Outfit Reactions continues working normally when Tile Marker is not installed.
 
 ## 🚧 Development Status and Custom NPC Compatibility
 
