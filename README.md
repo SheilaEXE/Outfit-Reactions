@@ -2,8 +2,6 @@
 
 A **Stardew Valley** mod that makes NPCs dynamically comment on your character's clothes whenever you change your look, designed exclusively for [Fashion Sense](https://www.nexusmods.com/stardewvalley/mods/9969).
 
-Created by **NatrollEXE**.
-
 > **Outfit Reactions only adds optional reactions to the player's clothes and appearance.** It never replaces, rewrites, or removes dialogue from the base game or from other mods; every conversation the NPC would normally have remains available. Handwritten dialogue is the result of authors investing their time, care, and creativity into bringing these characters to life, and that work deserves to be preserved. Outfit Reactions is designed to sit alongside those conversations with a small extra moment about your current look, never to take their place.
 
 ---
