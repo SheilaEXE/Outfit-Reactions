@@ -32,7 +32,7 @@ namespace OutfitReactions.Ai
         // This compact built-in form keeps the unique honesty/focus rules. Theme recognition,
         // occasion mismatch and opening variety are already covered by HOW TO REACT.
         private const string CompactNaturalReactionStyle =
-            "React to the farmer's {Change} through the NPC's established personality and relationship. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they create a meaningful human reaction, never as a forced closing justification. For head items, respect the equipped/support data: a headband, tiara, bow, clip, flower, pin, or crown is not automatically a hat.";
+            "This is an honest reaction, not a required compliment. React to the farmer's {Change} through the NPC's established personality and relationship. Admiration, amusement, shock, fear, disgust, criticism, concern, confusion, and indifference are all valid when they fit the look and this NPC; do not automatically reframe a bizarre or unpleasant look as clever or admirable. If an item evokes refuse, grime, or decay, the NPC may react to an implied bad smell even without explicit odor data, but never force that detail. {OutfitFocusRule}Use location, season, weather, time, and privacy only when they create a meaningful human reaction, never as a forced closing justification. For head items, respect the equipped/support data: a headband, tiara, bow, clip, flower, pin, or crown is not automatically a hat.";
 
         public static string DefaultNaturalReactionStyle => CompactNaturalReactionStyle;
 

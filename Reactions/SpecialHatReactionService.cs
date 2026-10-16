@@ -8,9 +8,9 @@ using System.Linq;
 namespace OutfitReactions.Ai
 {
     /// <summary>
-    /// Supplies neutral, factual context for every vanilla hat directly from the game's item data.
-    /// The NPC profile, relationship, and scene decide the reaction; this service never assigns an
-    /// emotional priority, category, or suggested opinion to the hat.
+    /// Supplies neutral, factual context for vanilla hats directly from the game's item data.
+    /// The ??? mask alone retains its fourth-wall-free familiarity clue. The NPC profile,
+    /// relationship, and scene still decide the tone of the reaction.
     /// </summary>
     internal sealed class SpecialHatReactionService
     {
@@ -109,10 +109,20 @@ namespace OutfitReactions.Ai
             if (!string.IsNullOrWhiteSpace(cleanDescription))
                 facts.Add("official in-game description: " + cleanDescription);
 
+            if (!wasRemoved && IsQuestionMarkMask(itemId, qualifiedItemId))
+                facts.Add("special clue for this mask only: its face feels inexplicably familiar to this NPC, as though they have seen it somewhere but cannot place where. Express that recognition naturally in this NPC's own voice. This is familiarity with the face, not prior acquaintance with the farmer. Never identify the face as ConcernedApe, Eric Barone, a developer, or the game's creator, and do not break the fourth wall");
+
             if (wasRemoved)
                 facts.Add("current state: the farmer is now bare-headed; these facts describe the hat that is no longer being worn");
 
             return string.Join("; ", facts.Where(fact => !string.IsNullOrWhiteSpace(fact)));
+        }
+
+        private static bool IsQuestionMarkMask(string itemId, string qualifiedItemId)
+        {
+            return string.Equals(itemId?.Trim(), "92", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(itemId?.Trim(), "(H)92", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(qualifiedItemId?.Trim(), "(H)92", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FirstNonEmpty(params string[] values)

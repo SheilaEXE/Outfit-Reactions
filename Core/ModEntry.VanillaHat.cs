@@ -192,7 +192,11 @@ public sealed partial class ModEntry : Mod
 		}
 
 		bool isHatFocusedNotice = ShouldRecordCurrentNoticeAsVanillaHatOnlyReaction(npc)
-			|| effectiveChange.VanillaHatChanged;
+			|| effectiveChange.VanillaHatChanged
+			|| (effectiveChange.VanillaShirtChanged
+				&& !effectiveChange.VanillaShirtRemoved
+				&& !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId())
+				&& ModConfigMenu.NormalizeVanillaHatReactionMode(Config?.VanillaHatReactionMode) == "Combined");
 		if (!isHatFocusedNotice)
 		{
 			return false;

@@ -230,6 +230,15 @@ public sealed partial class ModEntry : Mod
 		{
 			return "Hat";
 		}
+		// A vanilla shirt changed under a visible vanilla hat: in combined mode this
+		// is a new look, even when the hat itself did not change again.
+		if (changeInfo.VanillaShirtChanged
+			&& !changeInfo.VanillaShirtRemoved
+			&& !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId())
+			&& ModConfigMenu.NormalizeVanillaHatReactionMode(Config?.VanillaHatReactionMode) == "Combined")
+		{
+			return "Clothes";
+		}
 		if (changeInfo.ChangedHat && !FashionSenseVisualService.IsUnhelpfulInternalAppearanceId(changeInfo.NewHatId) && (flag || ItemNameRevealsShape(changeInfo.NewHatId)))
 		{
 			return "Hat";

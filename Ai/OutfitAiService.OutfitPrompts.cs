@@ -1038,6 +1038,8 @@ namespace OutfitReactions.Ai
 
             builder.AppendLine("VANILLA SHIRT FACTS (descriptive context only, not a required opinion): "
                 + CollapseForPrompt(context.VanillaShirtContext, 1000));
+            if (context.VanillaHatShirtCombination)
+                builder.AppendLine("VANILLA HAT + SHIRT AS A LOOK: If the two pieces clearly express one recognizable concept, react to that whole costume/look first, using a natural collective description instead of listing the hat and shirt separately. Mention an individual piece only if it matters to this NPC's thought. If they do not share a clear concept, react to their pairing or contrast without inventing a theme. The NPC's personality decides the opinion and tone.");
         }
 
         private static void AppendVanillaHatMemoryForPrompt(StringBuilder builder, OutfitAiContext context, PromptStyleService promptStyle)

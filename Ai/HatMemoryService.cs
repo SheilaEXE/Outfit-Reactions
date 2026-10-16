@@ -14,7 +14,7 @@ namespace OutfitReactions.Ai
     internal sealed class HatMemoryService
     {
         private const string SaveKey = "VanillaHatMemories";
-        private const int CurrentSchemaVersion = 3;
+        private const int CurrentSchemaVersion = 4;
         private const int MaxStoredNpcDialogueCharacters = 1200;
         private const int MaxStoredPlayerReplyCharacters = 800;
 
@@ -180,7 +180,13 @@ namespace OutfitReactions.Ai
                 LastReactionText = entry?.LastReactionText ?? "",
                 LastPlayerReplyText = entry?.LastPlayerReplyText ?? "",
                 LastNpcFollowUpText = entry?.LastNpcFollowUpText ?? "",
-                LastReactionWasRemoval = entry?.LastReactionWasRemoval ?? false
+                LastReactionWasRemoval = entry?.LastReactionWasRemoval ?? false,
+                FirstWearingReactionText = FirstWearingText(entry),
+                FirstWearingPlayerReplyText = FirstWearingPlayerReply(entry),
+                FirstWearingNpcFollowUpText = FirstWearingNpcFollowUp(entry),
+                LastRemovalReactionText = LastRemovalText(entry),
+                LastRemovalPlayerReplyText = LastRemovalPlayerReply(entry),
+                LastRemovalNpcFollowUpText = LastRemovalNpcFollowUp(entry)
             };
         }
 
@@ -306,12 +312,38 @@ namespace OutfitReactions.Ai
                 if (!string.IsNullOrWhiteSpace(draft.HatName))
                     entry.HatName = draft.HatName;
 
+                // Preserve the older single-exchange format before replacing its last reaction.
+                if (string.IsNullOrWhiteSpace(entry.FirstWearingReactionText) && !entry.LastReactionWasRemoval)
+                {
+                    entry.FirstWearingReactionText = entry.LastReactionText;
+                    entry.FirstWearingPlayerReplyText = entry.LastPlayerReplyText;
+                    entry.FirstWearingNpcFollowUpText = entry.LastNpcFollowUpText;
+                }
+                if (string.IsNullOrWhiteSpace(entry.LastRemovalReactionText) && entry.LastReactionWasRemoval)
+                {
+                    entry.LastRemovalReactionText = entry.LastReactionText;
+                    entry.LastRemovalPlayerReplyText = entry.LastPlayerReplyText;
+                    entry.LastRemovalNpcFollowUpText = entry.LastNpcFollowUpText;
+                }
+
                 // Atomic replacement: empty reply/follow-up fields intentionally clear the prior
                 // exchange when the player chose to leave after this new opening reaction.
                 entry.LastReactionText = draft.NpcOpeningLine;
                 entry.LastPlayerReplyText = draft.PlayerReply;
                 entry.LastNpcFollowUpText = draft.NpcFollowUp;
                 entry.LastReactionWasRemoval = draft.WasRemoval;
+                if (draft.WasRemoval)
+                {
+                    entry.LastRemovalReactionText = draft.NpcOpeningLine;
+                    entry.LastRemovalPlayerReplyText = draft.PlayerReply;
+                    entry.LastRemovalNpcFollowUpText = draft.NpcFollowUp;
+                }
+                else if (string.IsNullOrWhiteSpace(entry.FirstWearingReactionText))
+                {
+                    entry.FirstWearingReactionText = draft.NpcOpeningLine;
+                    entry.FirstWearingPlayerReplyText = draft.PlayerReply;
+                    entry.FirstWearingNpcFollowUpText = draft.NpcFollowUp;
+                }
                 if (OutfitReactions.ModEntry.DebugLog)
                 {
                     monitor?.Log($"[HAT MEMORY] Committed completed hat exchange for {npcName} and '{draft.HatId}' (removal={draft.WasRemoval}, playerReply={!string.IsNullOrWhiteSpace(draft.PlayerReply)}, npcFollowUp={!string.IsNullOrWhiteSpace(draft.NpcFollowUp)}).", LogLevel.Info);
@@ -364,7 +396,7 @@ namespace OutfitReactions.Ai
                 if (string.IsNullOrWhiteSpace(memory.PreviousHatId))
                     return null;
                 string identity = BuildHatIdentity(memory.PreviousHatName, memory.PreviousHatId);
-                string priorReaction = BuildPriorReactionHint(memory.LastReactionText, memory.LastPlayerReplyText, memory.LastNpcFollowUpText, memory.LastReactionWasRemoval);
+                string priorReaction = BuildReactionHistoryHint(memory);
                 return "HAT MEMORY: the farmer is now bare-headed after removing the exact hat " + identity + ". "
                      + "React to that specific removal. When its identity or your earlier opinion gives you a recognizable detail, "
                      + "make clear which hat you remember instead of reducing the response to a generic comment about seeing the farmer's face. "
@@ -381,7 +413,7 @@ namespace OutfitReactions.Ai
                 ? "you have seen the farmer in this hat once before"
                 : $"you have seen the farmer in this hat {times} times before";
             string firstNote = string.IsNullOrWhiteSpace(firstSeen) ? "" : $" (first seen on {firstSeen})";
-            string previousReaction = BuildPriorReactionHint(memory.LastReactionText, memory.LastPlayerReplyText, memory.LastNpcFollowUpText, memory.LastReactionWasRemoval);
+            string previousReaction = BuildReactionHistoryHint(memory);
             return $"HAT MEMORY: {freq}{firstNote}. "
                  + "Show that you recognize this hat through familiarity, teasing, or another response that fits your personality. "
                  + "Do NOT react as if seeing this hat for the first time. "
@@ -397,20 +429,86 @@ namespace OutfitReactions.Ai
             return $"with stable item ID '{stableId}' (the ID must never be spoken aloud)";
         }
 
-        private static string BuildPriorReactionHint(string reactionText, string playerReply, string npcFollowUp, bool wasRemoval)
+        private static string FirstWearingText(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.FirstWearingReactionText)
+                ? entry.FirstWearingReactionText
+                : (entry.LastReactionWasRemoval ? "" : entry.LastReactionText ?? "");
+        }
+
+        private static string FirstWearingPlayerReply(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.FirstWearingReactionText)
+                ? entry.FirstWearingPlayerReplyText ?? ""
+                : (entry.LastReactionWasRemoval ? "" : entry.LastPlayerReplyText ?? "");
+        }
+
+        private static string FirstWearingNpcFollowUp(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.FirstWearingReactionText)
+                ? entry.FirstWearingNpcFollowUpText ?? ""
+                : (entry.LastReactionWasRemoval ? "" : entry.LastNpcFollowUpText ?? "");
+        }
+
+        private static string LastRemovalText(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.LastRemovalReactionText)
+                ? entry.LastRemovalReactionText
+                : (entry.LastReactionWasRemoval ? entry.LastReactionText ?? "" : "");
+        }
+
+        private static string LastRemovalPlayerReply(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.LastRemovalReactionText)
+                ? entry.LastRemovalPlayerReplyText ?? ""
+                : (entry.LastReactionWasRemoval ? entry.LastPlayerReplyText ?? "" : "");
+        }
+
+        private static string LastRemovalNpcFollowUp(HatMemoryEntry entry)
+        {
+            if (entry == null)
+                return "";
+            return !string.IsNullOrWhiteSpace(entry.LastRemovalReactionText)
+                ? entry.LastRemovalNpcFollowUpText ?? ""
+                : (entry.LastReactionWasRemoval ? entry.LastNpcFollowUpText ?? "" : "");
+        }
+
+        private static string BuildReactionHistoryHint(HatMemoryComparison memory)
+        {
+            string firstWearing = BuildExchangeHint("When you first saw the farmer wearing this hat", memory.FirstWearingReactionText,
+                memory.FirstWearingPlayerReplyText, memory.FirstWearingNpcFollowUpText);
+            string lastRemoval = BuildExchangeHint("When the farmer last removed this hat", memory.LastRemovalReactionText,
+                memory.LastRemovalPlayerReplyText, memory.LastRemovalNpcFollowUpText);
+            if (string.IsNullOrWhiteSpace(firstWearing) && string.IsNullOrWhiteSpace(lastRemoval))
+                return "";
+
+            return "Your completed exchanges about this exact hat were:\n" + firstWearing + lastRemoval
+                 + "Treat factual clarifications from the farmer as reliable continuity, including whether the item was cleaned, altered, borrowed, made, or worn for a stated reason. "
+                 + "Preserve the opinions and established facts behind the available exchanges, but write a fresh natural reaction; do not quote, closely paraphrase, or mechanically continue their wording.";
+        }
+
+        private static string BuildExchangeHint(string situation, string reactionText, string playerReply, string npcFollowUp)
         {
             if (string.IsNullOrWhiteSpace(reactionText))
                 return "";
 
-            string situation = wasRemoval ? "when the farmer last removed it" : "when the farmer last wore it";
-            string memory = $"Your most recent completed exchange about this exact hat, {situation}, was:\nNPC: {reactionText}";
+            string memory = situation + ":\nNPC: " + reactionText;
             if (!string.IsNullOrWhiteSpace(playerReply))
                 memory += $"\nFarmer: {playerReply}";
             if (!string.IsNullOrWhiteSpace(npcFollowUp))
                 memory += $"\nNPC: {npcFollowUp}";
 
-            return memory + "\nTreat factual clarifications from the farmer as reliable continuity, including whether the item was cleaned, altered, borrowed, made, or worn for a stated reason. "
-                 + "Preserve the opinions and established facts behind the exchange, but write a fresh natural reaction; do not quote, closely paraphrase, or mechanically continue its wording.";
+            return memory + "\n";
         }
 
         private static string FormatDate(string season, int day, int year)
@@ -423,7 +521,7 @@ namespace OutfitReactions.Ai
 
     internal sealed class HatMemoryData
     {
-        public int Version { get; set; } = 3;
+        public int Version { get; set; } = 4;
         public Dictionary<string, Dictionary<string, HatMemoryEntry>> Memories { get; set; }
         public Dictionary<string, string> LastHatPerNpc { get; set; }
     }
@@ -443,6 +541,12 @@ namespace OutfitReactions.Ai
         public string LastPlayerReplyText { get; set; } = "";
         public string LastNpcFollowUpText { get; set; } = "";
         public bool LastReactionWasRemoval { get; set; }
+        public string FirstWearingReactionText { get; set; } = "";
+        public string FirstWearingPlayerReplyText { get; set; } = "";
+        public string FirstWearingNpcFollowUpText { get; set; } = "";
+        public string LastRemovalReactionText { get; set; } = "";
+        public string LastRemovalPlayerReplyText { get; set; } = "";
+        public string LastRemovalNpcFollowUpText { get; set; } = "";
     }
 
     internal sealed class HatMemorySnapshot
@@ -483,5 +587,11 @@ namespace OutfitReactions.Ai
         public string LastPlayerReplyText { get; set; } = "";
         public string LastNpcFollowUpText { get; set; } = "";
         public bool LastReactionWasRemoval { get; set; }
+        public string FirstWearingReactionText { get; set; } = "";
+        public string FirstWearingPlayerReplyText { get; set; } = "";
+        public string FirstWearingNpcFollowUpText { get; set; } = "";
+        public string LastRemovalReactionText { get; set; } = "";
+        public string LastRemovalPlayerReplyText { get; set; } = "";
+        public string LastRemovalNpcFollowUpText { get; set; } = "";
     }
 }

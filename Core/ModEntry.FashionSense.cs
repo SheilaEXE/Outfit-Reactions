@@ -493,7 +493,7 @@ public sealed partial class ModEntry : Mod
 		FashionSenseChangeInfo effectiveFashionSenseChangeInfoForNpc = GetEffectiveFashionSenseChangeInfoForNpc(npc);
 		if (TryResolveSpecialItemNoticeForNpc(npc, effectiveFashionSenseChangeInfoForNpc, requireNpcMemoryForRemoval: false, out var notice) && notice != null && notice.IsValid)
 		{
-			return HasSpecialItemMemory(npc, notice);
+			return false;
 		}
 		if (IsSavedOutfitNoticeChange(effectiveFashionSenseChangeInfoForNpc) && outfitMemoryService != null)
 		{
@@ -504,12 +504,6 @@ public sealed partial class ModEntry : Mod
 				OutfitMemoryComparison memory = outfitMemoryService.GetMemory(((Character)npc).Name, currentSavedFashionSenseOutfitIdForAi, current);
 				return memory != null && memory.TimesSeenBefore > 0;
 			}
-		}
-		string visibleVanillaHatId = GetVisibleVanillaHatId();
-		if (!string.IsNullOrWhiteSpace(visibleVanillaHatId) && hatMemoryService != null)
-		{
-			HatMemoryComparison memory2 = hatMemoryService.GetMemory(((Character)npc).Name, visibleVanillaHatId, GetCurrentVanillaHatName());
-			return memory2 != null && memory2.TimesSeenBefore > 0;
 		}
 		return false;
 	}
@@ -626,6 +620,14 @@ public sealed partial class ModEntry : Mod
 			{
 				RecordOutfitMemory(npc, currentSavedFashionSenseOutfitIdForAi2);
 			}
+		}
+		else if (effectiveFashionSenseChangeInfoForNpc.VanillaShirtChanged
+			&& !effectiveFashionSenseChangeInfoForNpc.VanillaShirtRemoved
+			&& !string.IsNullOrWhiteSpace(GetVisibleVanillaHatId()))
+		{
+			// A shirt change can replace the hat notice before an NPC speaks. If they
+			// reacted while the vanilla hat was visible, remember it for a later removal.
+			RecordVanillaHatMemory(npc);
 		}
 	}
 

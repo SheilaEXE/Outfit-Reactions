@@ -7,7 +7,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>OutfitReactions</AssemblyName>
     <RootNamespace>OutfitReactions</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.0.0-beta.1</Version>
 
     <!-- A gente usa um deploy próprio abaixo, para criar a subpasta certa. -->
     <EnableModDeploy>false</EnableModDeploy>

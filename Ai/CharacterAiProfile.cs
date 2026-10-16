@@ -113,6 +113,7 @@ namespace OutfitReactions.Ai
         public bool HasSpecialHatReactionContext => !string.IsNullOrWhiteSpace(SpecialHatReactionContext);
         public string VanillaShirtContext { get; set; } = "";
         public bool HasVanillaShirtContext => !string.IsNullOrWhiteSpace(VanillaShirtContext);
+        public bool VanillaHatShirtCombination { get; set; }
         public string SpecialItemReactionContext { get; set; } = "";
         public bool HasSpecialItemReactionContext => !string.IsNullOrWhiteSpace(SpecialItemReactionContext);
         public string SpecialItemEntryId { get; set; } = "";

@@ -231,6 +231,7 @@ public sealed partial class ModEntry : Mod
 			NpcWitnessedPreviousAccessory = DidNpcWitnessPreviousLook(npc),
 			SpecialHatReactionContext = specialHatReactionContext,
 			VanillaShirtContext = vanillaShirtContext,
+			VanillaHatShirtCombination = flag7 && vanillaHatCombinedMode && !string.IsNullOrWhiteSpace(vanillaShirtContext),
 			SpecialItemReactionContext = specialItemReactionContext,
 			SpecialItemEntryId = flag10 ? (notice?.EntryId ?? "") : "",
 			SpecialItemWasJustRemoved = flag11,
