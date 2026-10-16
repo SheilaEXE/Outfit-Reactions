@@ -39,7 +39,7 @@ The mod can be configured through Generic Mod Config Menu, including:
   * **Highly recommended:** Use a vision-capable AI model. This mod can capture images of your farmer so the model can see what you're actually wearing and use those details in its reaction. Text-only models can still work, but they miss that visual context.
 * Additional reaction frequency and behavior settings.
 
-> **Dialogue quality depends on the AI model you choose.** My mod provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
+> **Dialogue quality depends on the AI model you choose.** My mod provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details.
 
 
 ## 🚧 Development Status and Custom NPC Compatibility
