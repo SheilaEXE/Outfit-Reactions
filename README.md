@@ -36,6 +36,7 @@ The mod can be configured through Generic Mod Config Menu, including:
 * Optional OpenRouter input/output price ceilings and allowed-provider lists per profile. Enter provider slugs separated by commas; requests use only those providers within the chosen USD-per-million-token ceilings, and fail if none qualify. An empty list allows any provider within the ceilings. Legacy blocked-provider lists are discarded, not converted into allowed lists.
 * Reaction modes for vanilla hats and special items, either combined with the full outfit or focused only on the special item.
 * Visual analysis (vision) for models that support it.
+  * **Highly recommended:** Use a vision-capable AI model. Outfit Reactions can capture images of your farmer so the model can see what you're actually wearing and use those details in its reaction. Text-only models can still work, but they miss that visual context.
 * Additional reaction frequency and behavior settings.
 
 > **Dialogue quality depends on the AI model you choose.** My mod provides detailed character profiles, visual context, and writing rules, but the model is ultimately responsible for following them. More capable models generally produce more natural, varied, context-aware, and character-accurate reactions, while smaller or cheaper models may be more repetitive or miss subtle details. Results and API costs vary by provider and model.
